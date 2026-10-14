@@ -1287,6 +1287,8 @@ pub struct App {
     pub(crate) title_click: Option<(Win, std::time::Instant, (f32, f32))>,
     /// Last channel-rack press (action, time), for double clicks on slots and mixer boxes (§8, §12).
     rack_click: Option<(Action, std::time::Instant)>,
+    /// Last browser project press: path-based so changing rows cannot open a different file.
+    pub(crate) browser_click: Option<(PathBuf, std::time::Instant)>,
     /// Last press on the CPU panel, for its double click (the Plugin performance monitor).
     cpu_click: Option<std::time::Instant>,
     pub hint: Cow<'static, str>,
@@ -1550,6 +1552,7 @@ impl App {
             step_chord: crate::step_edit::Chord::default(),
             title_click: None,
             rack_click: None,
+            browser_click: None,
             cpu_click: None,
             hint: Cow::Borrowed(""),
             tip_rest: std::time::Instant::now(),

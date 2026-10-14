@@ -30,6 +30,7 @@ impl App {
         let s = &mut self.state;
         match *a {
             Action::BrowserTab(i) => {
+                self.browser_click = None;
                 s.browser_tab = i;
                 s.browser_scroll = 0.0;
             }
@@ -61,6 +62,12 @@ impl App {
             }
             Action::BrowserRow(i) => {
                 let Some(row) = view::rows(s).into_iter().nth(i) else { return true };
+                let project = project_path(&row.item);
+                let now = std::time::Instant::now();
+                let double = project.as_ref().is_some_and(|path| {
+                    self.browser_click.as_ref().is_some_and(|(last, time)| last == path && now.duration_since(*time).as_millis() < 400)
+                });
+                self.browser_click = if double { None } else { project.map(|path| (path, now)) };
                 select(s, &row.key);
                 // The plugin browser: a second press on the same plugin adds it, as its row menu's Add does.
                 if s.browser_tab == view::PLUGIN_TAB {
@@ -93,6 +100,10 @@ impl App {
                     }
                     Item::History(e) => s.message = crate::history::go_to(s, e),
                     _ => {}
+                }
+                if double {
+                    self.drop_file(project_path(&row.item).unwrap());
+                    return true;
                 }
                 if let Item::Sample(path) = &row.item {
                     self.preview_sample(path);
@@ -223,6 +234,16 @@ impl App {
         let shift = self.shift;
         let focus = self.state.browser_search_focus;
         let over = self.over_browser() || focus;
+        if over && !focus && !ctrl && !alt && matches!(key, Key::Named(NamedKey::Enter)) {
+            let project = view::rows(&self.state).into_iter()
+                .find(|row| self.state.browser_sel.as_ref() == Some(&row.key))
+                .and_then(|row| project_path(&row.item));
+            if let Some(path) = project {
+                self.browser_click = None;
+                self.drop_file(path);
+                return true;
+            }
+        }
         let cmd = match key {
             Key::Named(NamedKey::F2) if !self.state.browser_search.is_empty() => Some(BCmd::Find(-1)),
             Key::Named(NamedKey::F3) if !self.state.browser_search.is_empty() => Some(BCmd::Find(1)),
@@ -653,8 +674,61 @@ fn folders_file() -> Option<std::path::PathBuf> {
 }
 
 fn read_folders() -> Vec<(std::path::PathBuf, String)> {
-    let Some(text) = folders_file().and_then(|p| std::fs::read_to_string(p).ok()) else { return Vec::new() };
-    crate::search_folders::parse_file(&text)
+    let Some(file) = folders_file() else { return Vec::new() };
+    match std::fs::read_to_string(file) {
+        Ok(text) => crate::search_folders::parse_file(&text),
+        // No list kept yet: FL Studio's Projects folder when there is one. A kept list, even an empty one, wins.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            initial_folders(None, documents_dir().as_deref()).into_iter().map(|f| (f, String::new())).collect()
+        }
+        Err(_) => Vec::new(),
+    }
+}
+
+fn project_path(item: &Item) -> Option<std::path::PathBuf> {
+    let Item::File(path) = item else { return None };
+    let path = std::path::PathBuf::from(path);
+    path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("flp")).then_some(path)
+}
+
+fn initial_folders(saved: Option<&str>, documents: Option<&std::path::Path>) -> Vec<std::path::PathBuf> {
+    if let Some(text) = saved {
+        return text.lines().map(str::trim).filter(|l| !l.is_empty()).map(std::path::PathBuf::from).collect();
+    }
+    documents.map(|dir| dir.join("Image-Line").join("FL Studio").join("Projects"))
+        .filter(|path| path.is_dir()).into_iter().collect()
+}
+
+/// Ask Windows for Documents so OneDrive and other redirected folders work.
+#[cfg(windows)]
+fn documents_dir() -> Option<std::path::PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_APARTMENTTHREADED};
+    use windows_sys::Win32::UI::Shell::{SHGetKnownFolderPath, FOLDERID_Documents};
+    unsafe {
+        let initialized = CoInitializeEx(std::ptr::null(), COINIT_APARTMENTTHREADED as u32);
+        let mut path = std::ptr::null_mut();
+        let result = SHGetKnownFolderPath(&FOLDERID_Documents, 0, std::ptr::null_mut(), &mut path);
+        let folder = if result >= 0 && !path.is_null() {
+            let mut length = 0;
+            while *path.add(length) != 0 {
+                length += 1;
+            }
+            Some(std::path::PathBuf::from(std::ffi::OsString::from_wide(std::slice::from_raw_parts(path, length))))
+        } else {
+            None
+        };
+        CoTaskMemFree(path.cast());
+        if initialized >= 0 {
+            CoUninitialize();
+        }
+        folder
+    }
+}
+
+#[cfg(not(windows))]
+fn documents_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join("Documents"))
 }
 
 pub(crate) fn load_folders() -> Vec<std::path::PathBuf> {
@@ -707,6 +781,75 @@ impl Jump {
             Jump::Section(name) => view::section_key(name).map(|_| j),
             _ => Some(j),
         }
+    }
+}
+
+#[cfg(test)]
+mod project_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn browser_initial_projects_follow_documents_and_saved_choices() {
+        let documents = std::env::temp_dir().join(format!("os_browser_documents_{}", std::process::id()));
+        let projects = documents.join("Image-Line/FL Studio/Projects");
+        std::fs::create_dir_all(&projects).unwrap();
+        assert_eq!(initial_folders(None, Some(&documents)), vec![projects.clone()]);
+        assert!(initial_folders(Some(""), Some(&documents)).is_empty(), "removing all folders remains saved");
+        let custom = documents.join("My projects");
+        assert_eq!(initial_folders(Some(&format!("{}\r\n", custom.display())), Some(&documents)), vec![custom]);
+        assert!(initial_folders(None, Some(&documents.join("Missing"))).is_empty());
+        std::fs::remove_dir(&projects).unwrap();
+        std::fs::remove_dir(projects.parent().unwrap()).unwrap();
+        std::fs::remove_dir(documents.join("Image-Line")).unwrap();
+        std::fs::remove_dir(documents).unwrap();
+    }
+
+    #[test]
+    fn browser_projects_open_on_double_click_and_enter() {
+        use winit::keyboard::{Key, NamedKey};
+        let dir = std::env::temp_dir().join(format!("os_browser_projects_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let first = dir.join("First.FLP");
+        let second = dir.join("Second.flp");
+        let mut source = App::new(None);
+        source.state.project.info.title = Some("Browser project".into());
+        source.save_to(first.clone());
+        source.save_to(second.clone());
+        let mut app = App::new(None);
+        app.add_browser_folder(dir.clone());
+        let index = |app: &App, path: &PathBuf| view::rows(&app.state).iter()
+            .position(|row| row.path.as_ref() == Some(path)).unwrap();
+        app.browser_act(&Action::BrowserRow(index(&app, &first)));
+        assert!(app.state.path.is_none(), "one click only selects");
+        app.browser_act(&Action::BrowserRow(index(&app, &first)));
+        assert_eq!(app.state.path.as_ref(), Some(&first));
+        assert_eq!(app.state.project.info.title.as_deref(), Some("Browser project"));
+        app.browser_act(&Action::BrowserRow(index(&app, &second)));
+        assert_eq!(app.state.path.as_ref(), Some(&first), "a different row is not a double click");
+        app.mouse = (10.0, view::LIST_Y + 10.0);
+        assert!(app.browser_key(&Key::Named(NamedKey::Enter), false, false));
+        assert_eq!(app.state.path.as_ref(), Some(&second));
+        std::fs::remove_file(first).unwrap();
+        std::fs::remove_file(second).unwrap();
+        std::fs::remove_dir(dir).unwrap();
+    }
+
+    #[test]
+    fn browser_text_files_cannot_open_as_projects() {
+        assert!(project_path(&Item::File("readme.txt".into())).is_none());
+        assert!(project_path(&Item::Sample("audio.wav".into())).is_none());
+        assert_eq!(project_path(&Item::File("Track.FLP".into())), Some(PathBuf::from("Track.FLP")));
+    }
+
+    #[test]
+    #[ignore = "reads the native user's Documents location; does not modify it"]
+    fn browser_native_documents_discovery() {
+        let documents = documents_dir().expect("Documents location");
+        println!("Documents: {}", documents.display());
+        let folders = initial_folders(None, Some(&documents));
+        assert!(!folders.is_empty(), "FL Studio Projects folder must exist for this native check");
+        println!("Projects: {}", folders[0].display());
     }
 }
 
