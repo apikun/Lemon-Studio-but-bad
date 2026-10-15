@@ -92,6 +92,20 @@ pub fn scan_in_child(path: &Path, format: Format) -> Scanned {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        if let Some(h) = std::env::var_os("HOME") {
+            let user_lib = PathBuf::from(h).join(".local/lib");
+            if user_lib.is_dir() {
+                let mut current = std::env::var_os("LD_LIBRARY_PATH").unwrap_or_default();
+                if !current.is_empty() {
+                    current.push(":");
+                }
+                current.push(user_lib);
+                cmd.env("LD_LIBRARY_PATH", current);
+            }
+        }
+    }
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => return Scanned::failed(Status::Error, format!("the scanner did not start: {e}")),
