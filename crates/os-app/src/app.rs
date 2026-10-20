@@ -3297,6 +3297,194 @@ impl App {
         self.invalidate();
     }
 
+    /// Hierarchical Smart Escape cascade:
+    /// Level 1: Transient overlays, popups, menus, settings, in-place editors, searches.
+    /// Level 2: Active filters, badges, and note/clip/channel selections.
+    /// Level 3: Frontmost floating plugin windows (hosted or drawn).
+    /// Level 4: Sub-windows (Mixer, Piano Roll, Perf, Tapper) when frontmost.
+    /// Level 5: Background/unfocused floating plugin windows.
+    /// Level 6: Channel Rack back to main arrangement workspace.
+    /// Returns true if an action was taken / key consumed.
+    pub fn smart_escape(&mut self) -> bool {
+        // --- LEVEL 1: Popups, Dialogs, Menus, In-place Editors, Settings, Searches ---
+        if self.state.settings.open && self.state.settings.picker.is_some() {
+            self.picker_close();
+            self.invalidate();
+            return true;
+        }
+        if self.state.settings.folder_edit.is_some() {
+            self.state.settings.folder_edit = None;
+            self.invalidate();
+            return true;
+        }
+        if self.state.settings.info_edit.is_some() {
+            self.state.settings.info_edit = None;
+            self.invalidate();
+            return true;
+        }
+        if self.state.settings.name_edit.is_some() {
+            self.name_close();
+            self.invalidate();
+            return true;
+        }
+        if self.state.pat_ui.confirm {
+            self.state.pat_ui.confirm = false;
+            self.state.pat_ui.remember = false;
+            self.state.rack.pending_delete = None;
+            self.invalidate();
+            return true;
+        }
+        if self.state.pat_ui.name_box.is_some() {
+            self.state.pat_ui.name_box = None;
+            self.invalidate();
+            return true;
+        }
+        if self.state.pat_ui.menu_at.is_some() {
+            self.state.pat_ui.menu_at = None;
+            self.invalidate();
+            return true;
+        }
+        if self.state.playlist.edit.is_some() {
+            self.state.playlist.edit = None;
+            self.invalidate();
+            return true;
+        }
+        if self.state.playlist.popup.is_some() {
+            self.state.playlist.popup = None;
+            self.invalidate();
+            return true;
+        }
+        if self.state.rack.fill.is_some() {
+            self.state.rack.fill = None;
+            self.invalidate();
+            return true;
+        }
+        if self.state.plugdb.finding {
+            self.state.plugdb.finding = false;
+            self.state.plugdb.find.clear();
+            self.invalidate();
+            return true;
+        }
+        if self.state.perf.finding {
+            self.state.perf.finding = false;
+            self.state.perf.find.clear();
+            self.invalidate();
+            return true;
+        }
+        if self.state.browser_search_focus {
+            self.state.browser_search.clear();
+            self.state.browser_search_focus = false;
+            self.invalidate();
+            return true;
+        }
+        if self.state.menu_open.is_some() || self.state.menu_sub.is_some() {
+            self.state.menu_open = None;
+            self.state.menu_sub = None;
+            self.invalidate();
+            return true;
+        }
+        if self.state.settings.open {
+            self.state.settings.open = false;
+            self.invalidate();
+            return true;
+        }
+
+        // --- LEVEL 2: Filters, Badges & Selections ---
+        if self.state.piano.has_selection() {
+            self.state.piano.clear_selection();
+            self.invalidate();
+            return true;
+        }
+        if !self.state.playlist.sel.is_empty() || self.state.playlist.range.is_some() {
+            self.state.playlist.sel.clear();
+            self.state.playlist.range = None;
+            self.invalidate();
+            return true;
+        }
+        if self.state.rack.sel.len() > 1 {
+            self.state.rack.select_only(self.state.selected_channel);
+            self.invalidate();
+            return true;
+        }
+
+        // --- LEVEL 3: Frontmost Floating Plugin Windows ---
+        match self.state.z.last().copied() {
+            Some(Win::Hosted(row)) => {
+                self.plugins.close_if_open(row);
+                self.state.hide(Win::Hosted(row));
+                self.invalidate();
+                return true;
+            }
+            Some(Win::Plugin) => {
+                self.state.hide(Win::Plugin);
+                self.invalidate();
+                return true;
+            }
+            _ => {}
+        }
+
+        // --- LEVEL 4: Sub-windows (Mixer, Piano Roll, Perf, Tapper) when frontmost ---
+        match self.state.z.last().copied() {
+            Some(Win::Perf) => {
+                self.close_perf();
+                self.invalidate();
+                return true;
+            }
+            Some(Win::Tapper) => {
+                self.state.hide(Win::Tapper);
+                self.invalidate();
+                return true;
+            }
+            Some(Win::Mixer) => {
+                self.state.hide(Win::Mixer);
+                self.invalidate();
+                return true;
+            }
+            Some(Win::PianoRoll) => {
+                self.state.hide(Win::PianoRoll);
+                self.invalidate();
+                return true;
+            }
+            _ => {}
+        }
+
+        // --- LEVEL 5: Background / unfocused floating plugin windows ---
+        if let Some(&top_plugin) = self.state.z.iter().rev().find(|&&w| matches!(w, Win::Plugin | Win::Hosted(_))) {
+            match top_plugin {
+                Win::Hosted(row) => {
+                    self.plugins.close_if_open(row);
+                }
+                Win::Plugin => {
+                    self.state.hide(Win::Plugin);
+                }
+                _ => {}
+            }
+            self.state.hide(top_plugin);
+            self.invalidate();
+            return true;
+        }
+        if self.state.shown(Win::Plugin) {
+            self.state.hide(Win::Plugin);
+            self.invalidate();
+            return true;
+        }
+        let hosted_rows: Vec<usize> = self.plugins.hosted.keys().copied().collect();
+        if let Some(row) = hosted_rows.into_iter().last() {
+            self.plugins.close_if_open(row);
+            self.invalidate();
+            return true;
+        }
+
+        // --- LEVEL 6: Channel Rack back to main arrangement workspace ---
+        if self.state.z.last() == Some(&Win::ChannelRack) {
+            self.state.hide(Win::ChannelRack);
+            self.invalidate();
+            return true;
+        }
+
+        false
+    }
+
     /// VIEW > Close all windows (F12), Close all unfocused windows (Ctrl+F12), Close all plugin windows (Alt+F12)
     /// (spec: ui/close-windows.md). The browser is a panel and stays.
     pub(crate) fn close_windows(&mut self, what: CloseAll) {
@@ -7251,6 +7439,11 @@ impl App {
             }
             return self.undo_key(alt);
         }
+        if matches!(key, Key::Named(NamedKey::Escape)) && !ctrl && !alt {
+            if self.smart_escape() {
+                return;
+            }
+        }
         // The channel rack's keys while it is in front (spec: ui/channel-rack.md §20).
         let s = &self.state;
         if (s.z.last() == Some(&Win::ChannelRack) || s.rack.fill.is_some())
@@ -7312,13 +7505,8 @@ impl App {
             } else {
                 CloseAll::All
             }),
-            Key::Named(NamedKey::Escape) if self.state.settings.open && self.state.settings.picker.is_some() => self.picker_close(),
-            Key::Named(NamedKey::Escape) if self.state.settings.open => self.state.settings.open = false,
             Key::Named(NamedKey::Escape) => {
-                self.state.menu_open = None;
-                self.state.menu_sub = None;
-                self.state.playlist.popup = None;
-                self.state.piano.clear_selection();
+                self.smart_escape();
             }
             // Piano roll editing keys (spec: ui/piano-roll.md §8).
             // Ctrl+A also makes the whole pattern the time selection, as FL does (spec: ui/piano-keys.md §4 rule 4).
@@ -9701,6 +9889,67 @@ mod tests {
         a.sample_from_plugin(p.clone(), true);
         assert!(a.state.project.channels[row].sample_path.as_deref().is_some_and(|s| s.ends_with(".wav")));
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn smart_esc_navigation_cascade() {
+        use winit::keyboard::{Key, NamedKey};
+        let mut a = App::new(None);
+        a.state.project = test_project();
+
+        // 1. Level 1: Menu dismissal
+        a.state.menu_open = Some(0);
+        a.state.menu_sub = Some(1);
+        assert!(a.smart_escape());
+        assert!(a.state.menu_open.is_none());
+        assert!(a.state.menu_sub.is_none());
+
+        // 2. Level 1: Playlist popup dismissal
+        a.state.playlist.popup = Some(crate::playlist::Popup { x: 0.0, y: 0.0, items: vec![], sub: None, scroll: [0; 2] });
+        assert!(a.smart_escape());
+        assert!(a.state.playlist.popup.is_none());
+
+        // 4. Level 2: Piano Roll selection clearing
+        a.state.piano.select(1, 0, vec![0, 1]);
+        assert!(a.state.piano.has_selection());
+        assert!(a.smart_escape());
+        assert!(!a.state.piano.has_selection());
+
+        // 5. Level 2: Playlist selection clearing
+        a.state.playlist.sel = [0, 1].into_iter().collect();
+        assert!(a.smart_escape());
+        assert!(a.state.playlist.sel.is_empty());
+
+        // 6. Level 3: Frontmost floating plugin window closing
+        a.state.raise(Win::Plugin);
+        assert!(a.state.shown(Win::Plugin));
+        assert_eq!(a.state.z.last(), Some(&Win::Plugin));
+        assert!(a.smart_escape());
+        assert!(!a.state.shown(Win::Plugin));
+
+        // 7. Level 4: Piano roll dismissal back to channel rack / playlist
+        a.state.raise(Win::Playlist);
+        a.state.raise(Win::ChannelRack);
+        a.state.raise(Win::PianoRoll);
+        assert_eq!(a.state.z.last(), Some(&Win::PianoRoll));
+        assert!(a.smart_escape());
+        assert!(!a.state.shown(Win::PianoRoll));
+        assert_eq!(a.state.z.last(), Some(&Win::ChannelRack));
+
+        // 8. Level 6: Channel rack dismissal back to main playlist
+        assert!(a.smart_escape());
+        assert!(!a.state.shown(Win::ChannelRack));
+        assert_eq!(a.state.z.last(), Some(&Win::Playlist));
+
+        // 9. Playlist remains (main arrangement workspace intact)
+        assert!(!a.smart_escape());
+        assert!(a.state.shown(Win::Playlist));
+
+        // 10. Key event integration via app.key()
+        a.state.raise(Win::Mixer);
+        assert!(a.state.shown(Win::Mixer));
+        a.key(&Key::Named(NamedKey::Escape), false, false);
+        assert!(!a.state.shown(Win::Mixer));
     }
 
     /// Writes the toolbar with a live-looking signal to OS_MONITOR_SHOT (a look-and-feel check, not an assertion).
