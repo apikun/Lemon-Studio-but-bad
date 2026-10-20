@@ -21217,4 +21217,73 @@ mod tests {
         app.key(&Key::Named(NamedKey::Escape), false, false);
         assert!(!app.state.palette.open);
     }
+
+    #[test]
+    fn audio_clip_reverse_and_gain_manipulation() {
+        use crate::playlist::{self as pl, Cmd};
+        let mut app = App::new(None);
+        app.state.project = test_project();
+        let grid = Rect::new(0.0, 100.0, 1000.0, 600.0);
+        app.pl_grid = Some(grid);
+
+        let wav = std::env::temp_dir().join(format!("os-test-phase3-{}.wav", std::process::id()));
+        os_engine::wav::write_f32_stereo(&mut std::fs::File::create(&wav).unwrap(), 48000, &[0.4; 96000]).unwrap();
+        pl::add_audio_clip(&mut app.state, &wav.to_string_lossy(), 4, 384).expect("audio clip");
+        let ci = pl::clips(&app.state).len() - 1;
+        let c = pl::clips(&app.state)[ci];
+        let os_model::ClipSource::Channel(ch) = c.source else { panic!("audio clip source") };
+
+        // Test Instant Reverse (Shift+R / Cmd::ToggleReverse)
+        app.state.playlist.sel = vec![ci];
+        let res = pl::run(&mut app, Cmd::ToggleReverse);
+        assert!(res.is_some(), "toggled reverse returns success msg");
+        assert_ne!(
+            app.state.project.channels[usize::from(ch)].sound.fx.flags & os_model::SampleFx::REVERSE,
+            0,
+            "channel has reverse flag set"
+        );
+        // Toggle again to un-reverse
+        pl::run(&mut app, Cmd::ToggleReverse);
+        assert_eq!(
+            app.state.project.channels[usize::from(ch)].sound.fx.flags & os_model::SampleFx::REVERSE,
+            0,
+            "channel has reverse flag cleared"
+        );
+
+        // Test Handle::Gain and Double-Click Reset to 0.0 dB
+        let pg = pl::PGeom::new(&app.state, grid);
+        let body = pg.body(&pl::clips(&app.state)[ci]);
+        
+        // Handle hit detection for Gain
+        let handle = pl::handle_at(&app.state, &pg, ci, body.cx(), body.bottom() - 2.0);
+        assert_eq!(handle, Some(pl::Handle::Gain), "gain handle hit at bottom center");
+
+        // Set non-unity gain (e.g. +6 dB = ~2.0)
+        app.state.project.arrangement_mut().unwrap().clips[ci].set_gain(2.0);
+        assert!((pl::clips(&app.state)[ci].gain() - 2.0).abs() < 1e-4);
+
+        // First click on gain handle
+        app.mouse = (body.cx(), body.bottom() - 2.0);
+        pl::press_grid(&mut app, grid, false);
+        // Second click within 400ms triggers double-click reset
+        pl::press_grid(&mut app, grid, false);
+        assert_eq!(pl::clips(&app.state)[ci].gain(), 1.0, "double click reset gain to 1.0 (0.0 dB)");
+
+        // Test Handle::TensionIn Double-Click Reset to 0.00
+        app.state.playlist_bar_w = 400.0;
+        let pg = pl::PGeom::new(&app.state, grid);
+        let body = pg.body(&pl::clips(&app.state)[ci]);
+        app.state.project.arrangement_mut().unwrap().clips[ci].set_fade_in(Some((500.0, 0.85)));
+        let (fx_in, _) = pl::fade_xs(&app.state, &pg, &pl::clips(&app.state)[ci]);
+        let (mx, my) = pl::fade_mid(body, body.x, fx_in, 0.85, false);
+        let t_handle = pl::handle_at(&app.state, &pg, ci, mx, my);
+        assert_eq!(t_handle, Some(pl::Handle::TensionIn), "tension in handle hit");
+
+        app.mouse = (mx, my);
+        pl::press_grid(&mut app, grid, false);
+        pl::press_grid(&mut app, grid, false);
+        assert_eq!(pl::clips(&app.state)[ci].fade_in_tension(), 0.0, "double click reset tension to 0.0");
+
+        let _ = std::fs::remove_file(&wav);
+    }
 }
