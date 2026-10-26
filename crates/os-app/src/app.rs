@@ -923,6 +923,9 @@ pub struct State {
     pub perf: crate::perf::Perf,
     /// The Tempo tapper: where it is, the count of taps, the pad's flash.
     pub tapper: crate::tapper::TapperUi,
+    /// The hover tooltip's bubble while it is up (`crate::tooltip`): the hovered control's hint and where the
+    /// cursor rested. Runtime state; never saved.
+    pub tooltip: Option<crate::tooltip::Tip>,
     pub touch: crate::touch::TouchUi,
     /// The piano roll's Strum dialog: where it is, its settings and its preview session.
     pub strum: crate::strum::StrumUi,
@@ -1175,9 +1178,9 @@ pub struct App {
     /// Action under the cursor while the left button is held (pressed look of buttons).
     pub pressed: Option<Action>,
     /// A button pressed and not released yet (`acts_on_release`).
-    armed: Option<Action>,
+    pub(crate) armed: Option<Action>,
     /// A toolbar button right-pressed and not released yet: (its hit, what the release over it runs).
-    armed_right: Option<(Action, Action)>,
+    pub(crate) armed_right: Option<(Action, Action)>,
     hover_rect: Option<Rect>,
     damage: Damage,
     /// Typing keyboard (spec: ui/typing-keyboard.md): keys held now as (physical key, rack row,
@@ -1206,6 +1209,11 @@ pub struct App {
     /// Last press on the CPU panel, for its double click (the Plugin performance monitor).
     cpu_click: Option<std::time::Instant>,
     pub hint: Cow<'static, str>,
+    /// When the pointer last moved, pressed or keyed (`crate::tooltip`): the rest its bubble shows after.
+    pub(crate) tip_rest: std::time::Instant,
+    /// The pointer is over a control that gets a tooltip (not a menu row or a large background region), as the
+    /// last move found it (`crate::tooltip`).
+    pub(crate) tip_control: bool,
     pub mouse: (f32, f32),
     pub drag: Option<Drag>,
     /// A held click that has not moved yet (Click-and-hold & special gesture functions, `crate::hold`).
@@ -1366,6 +1374,7 @@ impl App {
                 tempo: 130.0,
                 tempo_digits: std::cell::Cell::new([f32::INFINITY; 3]),
                 message: None,
+                tooltip: None,
                 monitor: crate::monitor::Monitor::with_cfg(load_monitor_cfg()),
                 cpu: crate::cpu::Cpu::saved(),
                 perf: crate::perf::Perf::default(),
@@ -1432,6 +1441,8 @@ impl App {
             rack_click: None,
             cpu_click: None,
             hint: Cow::Borrowed(""),
+            tip_rest: std::time::Instant::now(),
+            tip_control: false,
             mouse: (-1.0, -1.0),
             drag: None,
             hold: None,
@@ -3675,6 +3686,7 @@ impl App {
         self.song_pos_tick(now);
         self.hold_tick(now);
         self.ease_tick(now);
+        self.tooltip_tick(now);
         self.cables_tick(now);
         self.marquee_tick(now);
         self.backup_tick(now);
@@ -4837,6 +4849,7 @@ impl App {
     /// Mouse moved; returns whether a repaint is needed.
     pub fn mouse_move(&mut self, x: f32, y: f32) -> bool {
         self.mouse = (x, y);
+        self.tooltip_pause();
         self.hold_moved(x, y);
         if let Some(d) = self.drag.clone() {
             match d {
@@ -5205,9 +5218,9 @@ impl App {
             }
             return true;
         }
-        let (hover, mut hint, rect) = match self.top_hit(x, y) {
-            Some(h) => (Some(h.action.clone()), h.hint.clone(), Some(h.rect)),
-            None => (None, Cow::Borrowed(""), None),
+        let (hover, mut hint, control, rect) = match self.top_hit(x, y) {
+            Some(h) => (Some(h.action.clone()), h.hint.clone(), h.menu == 0, Some(h.rect)),
+            None => (None, Cow::Borrowed(""), false, None),
         };
         if hover == Some(Action::Monitor) {
             // Reading under the cursor: frequency and level of the analyzer column.
@@ -5291,6 +5304,7 @@ impl App {
                 self.damage_band(HINT_RECT);
             }
         }
+        self.tip_control = control && hover.as_ref().is_some_and(hover_is_visible);
         self.hover = hover;
         self.hover_rect = rect;
         self.hint = hint;
@@ -5410,6 +5424,7 @@ impl App {
     pub fn mouse_down(&mut self) {
         self.invalidate();
         self.hold = None;
+        self.tooltip_pause();
         let (x, y) = self.mouse;
         let action = self.top_hit(x, y).map(|h| h.action.clone());
         // A press stops the views easing where they are drawn; a scroll bar's arrow steps on from where its ease is
@@ -6741,6 +6756,7 @@ impl App {
 
     pub fn key(&mut self, key: &winit::keyboard::Key, ctrl: bool, alt: bool) {
         self.invalidate();
+        self.tooltip_pause();
         // A dialog takes every key.
         if self.modal_open() {
             return self.dialog_key(key, ctrl, alt);
@@ -11210,6 +11226,56 @@ mod tests {
         app.mouse_down();
         app.mouse_up();
         frame(app, c, None);
+    }
+
+    /// Hover tooltips (crate::tooltip): a rest over a control shows its hint at the cursor, a move takes it back,
+    /// a press holds it off until a new rest, a menu row never gets one, and the bubble paints.
+    #[test]
+    fn hover_tooltip_rests_shows_and_hides() {
+        use crate::tooltip::{self, Tip};
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let mut app = App::new(None);
+        frame(&mut app, &mut c, None);
+
+        // Rest over the piano roll's toolbar button: half a second later its hint is the bubble.
+        let b = hit_rect(&app, &Action::ToggleWin(Win::PianoRoll));
+        app.mouse_move(b.cx(), b.cy());
+        app.tooltip_tick(std::time::Instant::now());
+        assert!(app.state.tooltip.is_none(), "the rest has only begun");
+        app.tooltip_tick(std::time::Instant::now() + tooltip::DELAY);
+        assert_eq!(
+            app.state.tooltip,
+            Some(Tip { name: "Piano roll / Maximize Piano roll (F7)".into(), caption: String::new(), at: (b.cx(), b.cy()) })
+        );
+        // It paints (over the windows but under the message boxes).
+        frame(&mut app, &mut c, None);
+
+        // Any move takes it back, and a new rest brings it up again.
+        app.mouse_move(b.cx() + 1.0, b.cy());
+        assert!(app.state.tooltip.is_none(), "the move took it");
+        app.tooltip_tick(std::time::Instant::now() + tooltip::DELAY);
+        assert!(app.state.tooltip.is_some());
+
+        // A press holds it off, and the rest starts over at it; past the new rest the bubble is back.
+        app.mouse_down();
+        app.tooltip_tick(std::time::Instant::now() + 2 * tooltip::DELAY);
+        assert!(app.state.tooltip.is_none(), "pressed: nothing");
+        app.mouse_up();
+        app.tooltip_tick(std::time::Instant::now() + tooltip::DELAY / 2);
+        assert!(app.state.tooltip.is_none(), "the rest starts over at the press");
+        app.tooltip_tick(std::time::Instant::now() + 2 * tooltip::DELAY);
+        assert!(app.state.tooltip.is_some(), "still over the control: it is back");
+
+        // A menu row never gets one: the menus and the hint bar speak for themselves.
+        let view = hit_rect(&app, &Action::Menu(views::menus::VIEW));
+        app.mouse_move(view.cx(), view.cy());
+        app.mouse_down();
+        app.mouse_up();
+        frame(&mut app, &mut c, None);
+        let row = app.hits.iter().find(|h| h.menu != 0 && !h.hint.is_empty()).expect("the dropdown's rows");
+        app.mouse_move(row.rect.cx(), row.rect.cy());
+        app.tooltip_tick(std::time::Instant::now() + tooltip::DELAY);
+        assert!(app.state.tooltip.is_none(), "a menu row has no bubble");
     }
 
     /// Settings window (spec: ui/settings.md): OPTIONS entries open their tab, tabs switch, checks and

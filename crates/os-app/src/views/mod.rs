@@ -278,6 +278,8 @@ pub fn paint(ui: &mut Ui, s: &State, f: &FrameInfo) -> usize {
     if let Some(b) = &s.link_box {
         remote_box::paint(ui, s, b);
     }
+    // The hover tooltip (crate::tooltip): over the windows and menus, under the message boxes.
+    crate::tooltip::paint(ui, s);
     // Message boxes and file dialogs go over everything (spec: ui/dialogs.md).
     dialog::paint(ui, s);
     if over_dialog {

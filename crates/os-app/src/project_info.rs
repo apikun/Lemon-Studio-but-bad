@@ -328,9 +328,12 @@ impl App {
     }
 
     /// Lemon Studio's main window came to the foreground (`on`) or left it: the working time counts only while it is in
-    /// front (`WorkClock`).
+    /// front (`WorkClock`), and a tooltip goes with the focus (the cursor may be over another program's window).
     pub fn main_focused(&mut self, on: bool) {
         self.state.credits.clock.focus(on, Instant::now());
+        if !on {
+            self.tooltip_pause();
+        }
     }
 
     /// Periodic (`App::tick`): the Info page shows the time spent by the minute; it repaints when that changes.
