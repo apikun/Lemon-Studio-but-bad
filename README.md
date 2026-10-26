@@ -80,7 +80,7 @@ Where Lemon Studio stands against what a complete DAW offers:
 | Playback engine | 🚧 | Renders ahead of the audio device so edits do not cause dropouts; voice limits, cut groups, glides, layer channels; one audio thread for now |
 | Automation | 🚧 | Clips for channel, mixer and plugin parameters with every curve shape; channel volume and pan moves record into a pattern; not yet recording into automation clips, or clip LFO |
 | Project files | 🚧 | Opens and saves projects from FL Studio 24.2 and later; older versions are on the roadmap. Keep backups |
-| Built-in instruments and effects | 🚧 | Instruments: Lemon Sampler (long samples can play straight from disk), Lemon Trio (three oscillators) and Citrus (a six-operator synth that plays Sytrus patches). Effects: Lemon Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion and Transient Processor. All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Lemon Limiter's sound, sidechain included |
+| Built-in instruments and effects | 🚧 | Instruments: Lemon Sampler (long samples can play straight from disk), Lemon Trio (three oscillators) and Citrus (a six-operator synth that plays Sytrus patches). Effects: Lemon Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion, Transient Processor, Press (FL's Maximus) and Pulp Filter (FL's Fruity Love Philter). All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Lemon Limiter's sound, sidechain included |
 | Exporting audio | ✅ | Song, pattern or selection to WAV, FLAC, MP3 and OGG at once; bit depth, sample rate, interpolation, dither, mono, tails, stems and WAV markers; a pattern rendered as an audio clip (Quick render, Render and replace) |
 | MIDI file import / export | ✅ | Import into a new project, the open one or a piano roll channel (tracks, channels, tempo changes, time signatures, markers); export a pattern or the song's patterns |
 | Note input | 🚧 | Mouse, computer keyboard, MIDI controllers (velocity curves, sustain pedal, pitch bend, aftertouch) and the touch controller; note recording into patterns with loop record, precount and Start on input; step edit |
@@ -111,8 +111,8 @@ ASIO is a registered trademark of Steinberg Media Technologies GmbH.
   </tr>
 </table>
 
-Per-area details are in [docs/status.md](docs/status.md). The full, item-by-item roadmap lives on the
-[Discord server](https://discord.gg/yC2uCuGs3M).
+Per-area details are in [docs/status.md](docs/status.md). The full, item-by-item roadmap is in the
+[Roadmap](#roadmap) section below, and kept on the [Discord server](https://discord.gg/yC2uCuGs3M).
 
 ## Getting started
 
@@ -128,7 +128,7 @@ cd Lemon-Studio
 `cargo run -p os-app --release` builds and runs Lemon Studio. Before Lemon Studio starts, it also rebuilds Lemon
 Studio's own plugins (Lemon Sampler, Lemon Trio, Lemon Parametric EQ, Lemon Limiter, Lemon Reverb, Lemon Delay, Lemon
 Soft Clipper, Lemon Fast Distortion, Lemon Balance, Lemon Stereo Enhancer, Lemon Transient Processor, Lemon Chorus,
-Lemon Stereo Shaper and Citrus) and
+Lemon Stereo Shaper, Citrus, Tesla, Press and Pulp Filter) and
 installs the ones that changed as VST3 and CLAP plugins, in the folders where other DAWs find them. Lemon Studio itself
 has every one of them built in and needs no plugin files. A plugin that is new or updated in the repository shows up
 in other DAWs at the next run. The first run builds every plugin, which takes
@@ -366,14 +366,279 @@ Lemon Studio is a Cargo workspace of focused crates:
 | [`lemon-chorus`](plugins/lemon-chorus) | Lemon Chorus effect (VST3 + CLAP) |
 | [`lemon-stereo-shaper`](plugins/lemon-stereo-shaper) | Lemon Stereo Shaper effect (VST3 + CLAP) |
 | [`citrus`](plugins/citrus) | Citrus instrument, a six-operator synthesizer (VST3 + CLAP) |
+| [`tesla`](plugins/tesla) | Tesla, the audio editor and recorder (VST3 + CLAP) |
+| [`press`](plugins/press) | Press effect, a multiband maximiser (VST3 + CLAP) |
+| [`pulp-filter`](plugins/pulp-filter) | Pulp Filter effect, a pattern-controlled multi-filter (VST3 + CLAP) |
 
 ## Roadmap
 
-The roadmap is kept on the [Lemon Studio Discord server](https://discord.gg/yC2uCuGs3M), where every item is
-marked as complete, in progress or not started. The broad next steps are the engine rework (sampler voice,
-automation), opening projects from older FL Studio versions, audio recording into mixer tracks, more
-built-in instruments and effects, and the rest of the plugin window features on Linux.
+The item-by-item roadmap, as it is kept on the [Lemon Studio Discord server](https://discord.gg/yC2uCuGs3M):
+every feature marked as done, in progress or not started.
 
+✅ done · 🚧 in progress · ⬜ not started
+
+### Audio engine
+
+- ✅ Sample-accurate pattern and song playback
+- ✅ Sampler with high-quality windowed-sinc resampling
+- ✅ Mixer graph: sends, sidechain routing, measured pan and volume laws
+- ✅ Sidechain inputs for mixer slot effects and hosted CLAP / VST3 effects
+- ✅ Channel envelopes, note repeat and per-pattern control lanes
+- ✅ Automation clips for channel, mixer and plugin parameters
+- ✅ Channel note rules: max polyphony, mono, portamento glides, cut groups
+- ✅ Glides on every instrument: Lemon Trio and Citrus follow portamento and slides, other plugins get pitch bend
+- ✅ Live edits reach playback instantly, without clicks
+- ✅ Offline rendering (`os-render`) and low-latency WASAPI output
+- ✅ Render a project without opening a window (`lemonstudio --render`)
+- ✅ Built-in limiter
+- ✅ Main swing in playback (measured timing)
+- ✅ Tick clock: whole-tick scheduling and swing, exact song length and render tail
+- ✅ Song rules: uncut clips play the whole pattern, one play position per pattern, "play truncated notes"
+- ✅ Mixer tracks: stereo separation, three-band track equaliser, gliding gains
+- ✅ Mixer track polarity, stereo swap and effect bypass played
+- ✅ Main volume and main pitch knobs work; channel pitch follows root note, fine tune and main pitch
+- ✅ Time stretching: every stretch method of sampler channels and audio clips (Signalsmith Stretch)
+- ✅ Tempo automation playback
+- ✅ Playback started inside an audio clip plays it from there, with a short fade-in
+- ✅ Export the song or pattern as WAV, FLAC, MP3 or OGG from the Export form, with every hosted plugin
+- ✅ Playback under load: rendered ahead of the audio device, so heavy passages and edits no longer drop out (about 4x less audio load)
+- ✅ No more stutter from plugins the interface is busy with
+- ✅ Audio settings: output device, sample rate and buffer length, applied while playing
+- ✅ Stop ends every voice, plugins included
+- ✅ Playback accuracy: audio clips at full level, automation on the exact tick with all 13 curve shapes, MP3 timing, slide notes
+- ✅ Automation clips drive every target they are linked to; mixer automation of slots, EQ bands, sends and stereo separation
+- ✅ Layer channels, channel level adjustments, and each note's own pan and mod X / Y
+- ✅ Plugin delay compensation, live and in exports, with the mixer tracks' latency settings
+- ✅ Parametric EQ quality modes: HQ+, HQ Enhanced and linear phase, with their delay reported
+- 🚧 Engine rework from the engine specifications: sampler voice, automation
+- ✅ Fruity Limiter slots in FL projects play the whole limiter: compressor, gate and sidechain
+- ✅ ASIO audio output, plus WASAPI exclusive mode on Windows
+
+### Interface
+
+- ✅ Playlist: clips, markers, automation, nine editing tools, undo
+- ✅ Piano roll: full tool set, velocity panel, live note preview
+- ✅ Piano-roll shortcuts and Tools menu: quick quantize, legato, chop, glue, strum, arpeggiate, randomize, ghost channels, time markers
+- ✅ Piano-roll keyboard shortcuts match FL
+- ✅ Piano roll: FL's tool dialogs: Quantize, Chop, Randomize, Strum, Arpeggiate, Flam, Flip, Scale levels, Limit, Claw machine and LFO
+- ✅ Piano-roll vertical zoom
+- ✅ Channel rack: step sequencer, mini piano rolls, graph editor, filter groups, per-channel loops, fill tools, swing, clone / move / delete channels
+- ✅ Mixer: routing, effect slots, track editing, level meters with peak hold
+- ✅ Browser with drag and drop, sample preview
+- ✅ Menus, plugin picker, settings window
+- ✅ Floating, resizable windows; scroll bars in every window; plugin windows dock or detach
+- ✅ Right-drag a scroll bar sideways to resize rows (playlist tracks, piano-roll keys)
+- ✅ Theme engine with `.flstheme` import
+- ✅ Skins and themes: 25 built-in themes that colour both skins, live adjustments with a colour picker, your own themes
+- ✅ Computer-keyboard note input
+- ✅ MIDI controller input (notes play the selected channel)
+- ✅ MIDI devices: Settings > MIDI, controller links, MIDI clock out and in
+- ✅ Recording: notes and knob moves into patterns, loop record, record options, one-click audio recording
+- ✅ Audio editor entries open Tesla: record into it from a mixer track or one-click recording
+- ✅ Project picker and touch controller (pads and keys) on the toolbar
+- ✅ Controls that are not available yet are greyed out everywhere
+- ✅ Asks before unsaved changes are lost; Ctrl+N saves a new version
+- ✅ Recent projects in the FILE menu
+- ✅ FILE menu: revert to last backup, templates, save to a new project folder, delete unused files
+- ✅ Undo covers every edit: mixer faders, added, inserted, replaced and deleted channels, project settings and info, plugin parameters, timebase
+- ✅ High-DPI: follows the Windows display scale, plugin editors included
+- ✅ Large projects load behind a progress panel (no more freezes)
+- ✅ Snappier UI: repaints only what changes, cached drawing, steady 60 fps
+- ✅ Faster scrolling: move the drawn picture instead of repainting the window
+- ✅ Lemon design: new default look (lemon on neutral greys, rounded-square controls); Classic look kept as a skin
+- ✅ Playhead and meters keep moving while a plugin menu or dialog is open
+- ✅ Lemon design for the built-in plugin editors
+- ✅ CPU panel (audio load, voices, memory, dropouts), polyphony counter and plugin performance monitor
+- ✅ Metronome, tempo tapper, song position slider, auto scrolling and enable groups
+- ✅ Close all windows (F12), select unused channels, purge unused audio clips
+- ✅ Piano roll: snap menu, target channel menu, resizable event panel
+- ✅ Global snap panel on the toolbar
+- ✅ Type in value: type an exact value into knobs, faders and plugin parameters
+- ✅ Mixer track commands: route to a free track, channel routing, select, alt solo, trim unused tracks
+- ✅ Mixer track equaliser is editable: drag its bands on the graph, or use the knobs and faders
+- ✅ Menu bar and toolbar: dropdown submenus, PATTERNS commands (split by channel, set time signature, open in the browser), ADD audio and automation clip channels, toolbar right-clicks, SMPTE time display
+- ✅ Pattern time signatures: the channel rack and piano-roll grid follow them
+- ✅ Settings: the OPTIONS pages work — General, Audio, MIDI, File, Theme, Project, Info and Recording — with one project-wide undo history, Auto close, Step edit and project data folders
+- ✅ Channel menu and plugin window menu: Replace puts another generator on the channel
+- 🚧 Hover and pressed states across all widgets
+- ⬜ Channel rack: loop starter, advanced looping, Patcherize
+- ✅ Window positions remembered between sessions
+- ✅ Modular toolbar: an editor for its panels, with factory and user presets
+- 🚧 Own UI scale setting (GUI and toolbar scaling work), one-row toolbar on wide screens
+- ⬜ Hover tooltips
+- ✅ Theme files: workspace picture and grid line strength
+- ⬜ Theme extras: note colour groups
+- 🚧 MCP Server for autonomous AI agents to connect and control (groundwork in review)
+
+### Playlist and browser extras
+
+- ✅ Clicking the ruler to seek
+- ✅ Stretch modes (Shift+M)
+- ✅ Arrangement switching and track groups
+- ✅ Refreshed playlist look: channel-coloured clips, smooth waveforms, group headers, flag and marker tabs
+- ✅ Audio clip fades and clip gain, edited with handles on the clip
+- ✅ Audio clips follow their channel's stretch, pitch and tempo (length and waveform update)
+- ✅ Double-click a clip: audio clips open their sampler, pattern clips the piano roll
+- ✅ Quick quantize and export of every playlist track
+- ✅ Playlist track height (vertical zoom)
+- ✅ Clip groups: group, ungroup, select, move and copy together
+- ✅ More playlist shortcuts: zoom on selection, quick slice, snap cycling, insert a bar
+- ✅ Browser: drop effects into mixer slots
+- ✅ Browser: reread (Ctrl+R) and only rows that have content
+- ✅ Browser: drag its width, long names scroll on hover, a right-click menu on every row
+- ✅ New patterns can be placed right away, shortened pattern clips cut, Ctrl+Space pauses, the piano roll works in song mode
+- ✅ Automatic crossfades between audio clips, with their own handle
+- ✅ Time markers: start, loop, marker loop / skip / pause, played in song mode and in exports
+- ✅ PATTERNS: render a pattern as an audio clip, or render and replace it
+- ⬜ Browser: tags, favourites
+
+### Plugins
+
+- ✅ CLAP and VST3 hosting: instruments, mixer effects, editors inside the plugin window
+- ✅ VST2 hosting, including the VST2 plugins of FL projects (new: keep backups)
+- ✅ Plugin menus and plugin manager: your own search folders, crash-safe background scan, favourites, hidden plugins, one entry per plugin across formats
+- ✅ Plugin parameters and automation: browse parameters, "Create automation clip" from plugin menus
+- ✅ Plugins get the song tempo and position
+- ✅ Plugin channels follow their root note and the main pitch
+- ✅ Presets for every plugin: list, step and save from the plugin window
+- ✅ Plugin presets: factory presets, import (`.vstpreset`, `.fxp` / `.fxb`), drag and drop onto a window, rack row or mixer slot
+- ✅ VST3 plugins' own context menus; parameter menu with Set... and Edit automation clip...
+- ✅ Plugin window Misc tab: levels, polyphony, time, tracking, cut groups, arpeggio, echo, root note
+- ✅ Lemon Sampler plays every sampler channel and audio clip, including factory-library samples
+- ✅ Lemon Sampler plays a project's sample settings, channel filter and note levels
+- ✅ Host link protocol for Lemon Studio's own plugins
+- ✅ Crash protection: a plugin that crashes is stopped (its slot passes the sound through) instead of closing the app (Windows)
+- 🚧 Experimental native plugin host (opt-in: effects in mixer slots, editors in the plugin window)
+- ✅ Lemon Sampler: loop points, time stretch, LFOs
+- ✅ Lemon Sampler: disk streaming (Keep on disk)
+- ✅ Every Lemon plugin built into the app: no plugin files needed
+- 🚧 More built-in instruments and effects
+
+### Clean-room plugins
+
+#### Effects
+
+- ✅ Parametric EQ 2 (Lemon Parametric EQ: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Limiter (Lemon Limiter: built into the app and mixer slots, also VST3 and CLAP)
+- ✅ Fruity Reeverb 2 (Lemon Reverb: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Delay 3 (Lemon Delay: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Chorus (Lemon Chorus: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Stereo Shaper (Lemon Stereo Shaper: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Stereo Enhancer (Lemon Stereo Enhancer: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Balance (Lemon Balance: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Soft Clipper (Lemon Soft Clipper: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Fast Dist (Lemon Fast Distortion: built into mixer slots, also VST3 and CLAP)
+- ✅ Transient Processor (Lemon Transient Processor: built into mixer slots, also VST3 and CLAP)
+- ✅ Maximus (Press: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Love Philter (Pulp Filter: built into mixer slots, also VST3 and CLAP)
+
+#### Synths / Sound generators
+
+- ✅ 3x Osc (Lemon Trio: built into the app, also VST3 and CLAP)
+- ⬜ Autogun
+- ⬜ BeepMap
+- ⬜ BooBass
+- ⬜ Dashboard
+- ⬜ Drumaxx
+- ⬜ Drumpad
+- ⬜ FL Keys
+- ⬜ FL Slayer
+- ⬜ FLEX
+- ⬜ FPC
+- ⬜ Fruit Kick
+- ⬜ Fruity DrumSynth
+- ⬜ Fruity DrumSynth Live
+- ⬜ Fruity DX10
+- ⬜ GMS
+- ⬜ Harmless
+- ⬜ Harmor
+- ⬜ Kepler
+- ⬜ Kepler Exo
+- ⬜ Minisynth
+- ⬜ Morphine
+- ⬜ Ogun
+- ⬜ PoiZone
+- ⬜ Sakura
+- ⬜ SimSynth
+- ⬜ Slicex
+- ⬜ Slapper
+- ✅ Sytrus (Citrus: built into the app, also VST3 and CLAP; plays Sytrus patches)
+- ⬜ Toxic Biohazard
+- ⬜ Transistor Bass
+- ⬜ Wave Traveller
+
+#### Audio editors
+
+- ✅ Edison (Tesla: audio editor and recorder, version 1; built into the app, also VST3 and CLAP)
+
+#### Samplers / Players
+
+- ✅ Sampler (Lemon Sampler: built into the app, also VST3 and CLAP)
+- ⬜ DirectWave
+- ⬜ Fruity Slicer
+- ⬜ Fruity Slicer 2
+- ⬜ Soundfont Player
+
+#### Drum tools
+
+- ⬜ BassDrum
+
+#### Controllers / Utilities
+
+- ⬜ Fruity Envelope Controller
+- ⬜ Fruity Granulizer
+- ⬜ Fruity Keyboard Controller
+- ⬜ Fruity Video Player
+- ⬜ Fruity Voltage Controller
+- ⬜ Fruity Wrapper
+- ⬜ MIDI Out
+- ⬜ Patcher
+- ⬜ Pluckdeli
+
+#### Misc / Mobile
+
+- ⬜ FL Studio Mobile
+- ⬜ FL Studio Mobile Rack
+
+#### VST wrappers
+
+- ⬜ FL Studio VSTi
+- ⬜ FL Studio VSTi (Multi)
+
+### Project files
+
+- ✅ Lossless `.flp` reader and writer: unknown data kept byte for byte
+- ✅ Typed project model for patterns, channels, playlist and automation
+- ✅ Round-trip tests over a corpus of real projects
+- ✅ New projects save in a form other compatible software opens
+- ✅ Channel rack settings saved: swing, filter groups, locked and zipped rows, pattern length, loop lengths
+- ✅ Added, cloned, moved and deleted channels saved into existing projects
+- ✅ Plugin channels and mixer effects saved with their state (CLAP / VST3 reopen hosted)
+- ✅ Mixer saved: effects added, removed or moved, slot on/off and mix, added tracks
+- ✅ Saved with the project: piano-roll time markers, clip groups, playlist zoom, scroll and track height
+- ✅ Mixer polarity and channel swap buttons
+- ✅ Main volume and main pitch saved with the project
+- ✅ FL Studio 24.2 and 25 playlists read correctly
+- ✅ Lemon Sampler settings saved: envelopes, LFOs, filter, loop points, sample effects
+- ✅ Channel Misc tab saved for every channel: levels, polyphony, cut groups, layers, arpeggiator, echo, tracking
+- ✅ VST2 plugins saved the way FL Studio 2026 saves them
+- ✅ Project settings saved: time signature, project info and credits, initial values, song or pattern mode, data folder
+- ✅ MIDI files: import and export
+- 🚧 Loading older project file versions (FL 20 to 24.1, in review)
+
+### Platform and release
+
+- ✅ GPLv3 licence, README, logo and third-party credits
+- ✅ Contributing rules (clean-room only) and community links in the README
+- ✅ New name and logo: Lemon Studio
+- ✅ Automatic builds and tests on Windows and Linux for every change
+- 🚧 Pre-alpha: expect breaking changes
+- ✅ Linux support (groundwork: builds off Windows, Wayland fixes)
+- ✅ Linux: runs on X11 and Wayland (through XWayland), plugin windows docked as on Windows, crisp text at any scale
+- ✅ Linux audio: shared mode through the sound server by default, exclusive mode on ALSA
+- ✅ macOS support
+- ✅ Public source release
+- ✅ Copyright and ArtCraft notice in every source file, checked by the tests
 ## Development approach
 
 Lemon Studio is developed independently. File-format and behaviour details needed for
