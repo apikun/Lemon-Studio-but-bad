@@ -1897,6 +1897,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "lemon-bass"
+version = "0.0.1"
+dependencies = [
+ "lemon-small-gen",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
+name = "lemon-boom"
+version = "0.0.1"
+dependencies = [
+ "lemon-small-gen",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
 name = "lemon-chorus"
 version = "0.0.1"
 dependencies = [
@@ -1925,6 +1943,15 @@ name = "lemon-fast-distortion"
 version = "0.0.1"
 dependencies = [
  "lemon-small-fx",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
+name = "lemon-kick"
+version = "0.0.1"
+dependencies = [
+ "lemon-small-gen",
  "nih_plug",
  "os-plugkit",
 ]
@@ -1998,6 +2025,20 @@ version = "0.0.1"
 dependencies = [
  "nih_plug",
  "os-engine",
+ "os-hostlink",
+ "os-plugkit",
+ "os-theme",
+ "os-ui",
+ "serde_json",
+ "tiny-skia",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "lemon-small-gen"
+version = "0.0.1"
+dependencies = [
+ "nih_plug",
  "os-hostlink",
  "os-plugkit",
  "os-theme",
@@ -2830,9 +2871,12 @@ dependencies = [
  "jpeg-decoder",
  "lemon-3x-osc",
  "lemon-balance",
+ "lemon-bass",
+ "lemon-boom",
  "lemon-chorus",
  "lemon-delay",
  "lemon-fast-distortion",
+ "lemon-kick",
  "lemon-limiter",
  "lemon-parametric-eq-2",
  "lemon-reverb",

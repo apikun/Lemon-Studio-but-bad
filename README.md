@@ -80,7 +80,7 @@ Where Lemon Studio stands against what a complete DAW offers:
 | Playback engine | 🚧 | Renders ahead of the audio device so edits do not cause dropouts; voice limits, cut groups, glides, layer channels; one audio thread for now |
 | Automation | 🚧 | Clips for channel, mixer and plugin parameters with every curve shape; channel volume and pan moves record into a pattern; not yet recording into automation clips, or clip LFO |
 | Project files | 🚧 | Opens and saves projects from FL Studio 24.2 and later; older versions are on the roadmap. Keep backups |
-| Built-in instruments and effects | 🚧 | Instruments: Lemon Sampler (long samples can play straight from disk), Lemon Trio (three oscillators) and Citrus (a six-operator synth that plays Sytrus patches). Effects: Lemon Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion, Transient Processor, Press (FL's Maximus) and Pulp Filter (FL's Fruity Love Philter). All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Lemon Limiter's sound, sidechain included |
+| Built-in instruments and effects | 🚧 | Instruments: Lemon Sampler (long samples can play straight from disk), Lemon Trio (three oscillators), Citrus (a six-operator synth that plays Sytrus patches), Lemon Kick (a kick drum), Lemon Boom (a bass drum) and Lemon Bass (a bass guitar). Effects: Lemon Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion, Transient Processor, Press (FL's Maximus) and Pulp Filter (FL's Fruity Love Philter). All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Lemon Limiter's sound, sidechain included |
 | Exporting audio | ✅ | Song, pattern or selection to WAV, FLAC, MP3 and OGG at once; bit depth, sample rate, interpolation, dither, mono, tails, stems and WAV markers; a pattern rendered as an audio clip (Quick render, Render and replace) |
 | MIDI file import / export | ✅ | Import into a new project, the open one or a piano roll channel (tracks, channels, tempo changes, time signatures, markers); export a pattern or the song's patterns |
 | Note input | 🚧 | Mouse, computer keyboard, MIDI controllers (velocity curves, sustain pedal, pitch bend, aftertouch) and the touch controller; note recording into patterns with loop record, precount and Start on input; step edit |
@@ -128,7 +128,7 @@ cd Lemon-Studio
 `cargo run -p os-app --release` builds and runs Lemon Studio. Before Lemon Studio starts, it also rebuilds Lemon
 Studio's own plugins (Lemon Sampler, Lemon Trio, Lemon Parametric EQ, Lemon Limiter, Lemon Reverb, Lemon Delay, Lemon
 Soft Clipper, Lemon Fast Distortion, Lemon Balance, Lemon Stereo Enhancer, Lemon Transient Processor, Lemon Chorus,
-Lemon Stereo Shaper, Citrus, Tesla, Press and Pulp Filter) and
+Lemon Stereo Shaper, Citrus, Tesla, Press, Pulp Filter, Lemon Kick, Lemon Boom and Lemon Bass) and
 installs the ones that changed as VST3 and CLAP plugins, in the folders where other DAWs find them. Lemon Studio itself
 has every one of them built in and needs no plugin files. A plugin that is new or updated in the repository shows up
 in other DAWs at the next run. The first run builds every plugin, which takes
@@ -369,6 +369,10 @@ Lemon Studio is a Cargo workspace of focused crates:
 | [`tesla`](plugins/tesla) | Tesla, the audio editor and recorder (VST3 + CLAP) |
 | [`press`](plugins/press) | Press effect, a multiband maximiser (VST3 + CLAP) |
 | [`pulp-filter`](plugins/pulp-filter) | Pulp Filter effect, a pattern-controlled multi-filter (VST3 + CLAP) |
+| [`lemon-small-gen`](plugins/lemon-small-gen) | What the three small Lemon generators share: the plugin, its state, the editor and each instrument's description |
+| [`lemon-kick`](plugins/lemon-kick) | Lemon Kick, a kick drum (VST3 + CLAP) |
+| [`lemon-boom`](plugins/lemon-boom) | Lemon Boom, a bass drum (VST3 + CLAP) |
+| [`lemon-bass`](plugins/lemon-bass) | Lemon Bass, a bass guitar (VST3 + CLAP) |
 
 ## Roadmap
 
@@ -537,7 +541,7 @@ every feature marked as done, in progress or not started.
 - ✅ 3x Osc (Lemon Trio: built into the app, also VST3 and CLAP)
 - ⬜ Autogun
 - ⬜ BeepMap
-- ⬜ BooBass
+- ✅ BooBass (Lemon Bass: built into the app, also VST3 and CLAP)
 - ⬜ Dashboard
 - ⬜ Drumaxx
 - ⬜ Drumpad
@@ -545,7 +549,7 @@ every feature marked as done, in progress or not started.
 - ⬜ FL Slayer
 - ⬜ FLEX
 - ⬜ FPC
-- ⬜ Fruit Kick
+- ✅ Fruit Kick (Lemon Kick: built into the app, also VST3 and CLAP)
 - ⬜ Fruity DrumSynth
 - ⬜ Fruity DrumSynth Live
 - ⬜ Fruity DX10
@@ -581,7 +585,7 @@ every feature marked as done, in progress or not started.
 
 #### Drum tools
 
-- ⬜ BassDrum
+- ✅ BassDrum (Lemon Boom: built into the app, also VST3 and CLAP)
 
 #### Controllers / Utilities
 
