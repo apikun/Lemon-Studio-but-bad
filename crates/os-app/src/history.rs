@@ -8,7 +8,8 @@
 //! done, the state after it while it is undone. Covered: a pattern's notes, control points and length (the piano roll
 //! and the step sequencer), the playlist (`playlist::snapshot`), knob turns, sample loads (`load_sample`), the
 //! project's initial values (`crate::init`), and with the playlist, PATTERNS > Split by channel's patterns and ADD's
-//! clip channels (`playlist::snapshot_with`). Also mixer volume faders (`fader`), generators added to the rack
+//! clip channels (`playlist::snapshot_with`). Also mixer volume faders (`fader`), the mixer's mute, routing, track
+//! names and effect slots (`mute`, `routing`, `track_name`, `slots`), generators added to the rack
 //! (`add_channel`, `insert_channel`), Replace (`replace_channel`), channel deletes (`delete_channels`), Settings >
 //! Project's values (`project_settings`) and its timebase (`timebase`), Settings > Info's text (`project_info`) and the
 //! plugin parameters Lemon Studio sets (`param`).
@@ -49,6 +50,14 @@ pub const PROJECT_SETTINGS: &str = "Project settings";
 pub const REPLACE_CHANNEL: &str = "Replace channel";
 /// Settings > Info's text changed (`project_info`).
 pub const PROJECT_INFO: &str = "Project info";
+/// A mixer track's mute toggled (`mute`; named in the knobs' style, an OS choice).
+pub const MIXER_MUTE: &str = "Mixer track mute";
+/// The mixer's routing changed (`routing`; an OS name, FL's was not checked).
+pub const MIXER_ROUTING: &str = "Mixer routing";
+/// A mixer track renamed (`track_name`).
+pub const MIXER_NAME: &str = "Mixer track name";
+/// A mixer track's effect slots changed (`slots`).
+pub const MIXER_SLOTS: &str = "Mixer effect slots";
 
 /// What a step changes, as it is on the other side of the step.
 #[derive(Debug, Clone, PartialEq)]
@@ -96,6 +105,15 @@ pub enum Snap {
     Timebase(Box<Timebase>),
     /// Settings > Info's text (`project_info`).
     Info(Box<os_model::ProjectInfo>),
+    /// Mixer track `u16`'s mute (`mute`).
+    Mute(u16, bool),
+    /// Every track's routes and send levels (`routing`): the routing commands touch any number of tracks, so the
+    /// step holds all of them (each `(track, routes, levels)`).
+    Routing(Vec<(u16, Vec<u16>, Vec<(u16, f64)>)>),
+    /// Mixer track `u16`'s name; `None` while it has none ("Master", "Insert n") (`track_name`).
+    TrackName(u16, Option<String>),
+    /// A mixer track's effect slots on one side of their change (`SlotsSide`).
+    Slots(Box<SlotsSide>),
     /// Several of these in one step, put back last first ("Create automation clip": the playlist and the initial
     /// value).
     Several(Vec<Snap>),
@@ -301,7 +319,68 @@ impl RackSide {
     }
 }
 
+/// A mixer track's effect slots on one side of a slots change (`crate::mixer`'s Add one, Delete, the moves, a
+/// Tesla added, Remove all audio editors; `slots`): each slot's plugin with its saved state, LED and mix level.
+/// The hosted instances follow an undo or redo on the next tick (`put` queues what the host must do).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlotsSide {
+    pub track: u16,
+    pub slots: [Option<os_model::SlotPlugin>; 10],
+    pub on: [bool; 10],
+    pub mix: [f64; 10],
+}
+
+impl SlotsSide {
+    /// Track `track`'s effect slots as the project has them now.
+    pub fn now(s: &State, track: u16) -> Option<SlotsSide> {
+        let m = crate::mixer::track(s, track)?;
+        Some(SlotsSide { track, slots: m.slots.clone(), on: m.slot_on, mix: m.slot_mix })
+    }
+
+    /// Puts this side back and queues what the host must do for its instances (`s.mixer.pending`): the same
+    /// plugins in other slots (a move) keep them (`FxReq::Remap`); each slot the two sides differ on gets its
+    /// instance made to match (`FxReq::Restore`). A track gone since is left as the step has it.
+    fn put(self, s: &mut State) {
+        let Self { track: t, slots, on, mix } = self;
+        let Some(m) = crate::mixer::track_mut(s, t) else { return };
+        let now = std::mem::replace(&mut m.slots, slots.clone());
+        (m.slot_on, m.slot_mix) = (on, mix);
+        // A move: both sides hold the same plugins, in other slots, so the instances follow theirs.
+        let mut taken: Vec<usize> = Vec::new();
+        let mut map: Vec<((u16, u8), (u16, u8))> = Vec::new();
+        let same_set = now.iter().filter(|s| s.is_some()).count() == slots.iter().filter(|s| s.is_some()).count();
+        let moved = now.iter().enumerate().all(|(i, n)| match n {
+            None => true,
+            Some(p) => {
+                let Some(j) = slots.iter().enumerate().position(|(j, o)| !taken.contains(&j) && o.as_ref() == Some(p)) else {
+                    return false;
+                };
+                taken.push(j);
+                map.push(((t, i as u8), (t, j as u8)));
+                true
+            }
+        });
+        if same_set && moved {
+            if map.iter().any(|(a, b)| a != b) {
+                s.mixer.pending.push(crate::mixer::FxReq::Remap(map));
+            }
+            return;
+        }
+        // Another change: the slot's instance is made to match what came back.
+        for (i, n) in now.iter().enumerate() {
+            if slots[i] != *n {
+                s.mixer.pending.push(crate::mixer::FxReq::Restore { track: t, slot: i as u8 });
+            }
+        }
+    }
+}
+
 impl Snap {
+    /// Every track's routes and send levels as the project has them now (`Snap::Routing`).
+    pub fn routing(s: &State) -> Snap {
+        Snap::Routing(s.project.mixer.iter().map(|m| (m.index, m.routes.clone(), m.send_levels.clone())).collect())
+    }
+
     /// Pattern `number` as it is now.
     pub fn pattern(s: &State, number: u16) -> Snap {
         let p = s.project.pattern(number);
@@ -348,6 +427,11 @@ impl Snap {
             },
             Snap::Timebase(_) => Snap::Timebase(Box::new(Timebase::now(s))),
             Snap::Info(_) => Snap::Info(Box::new(s.project.info.clone())),
+            // A track gone since is left as the step has it (`put` does nothing then).
+            Snap::Mute(t, _) => crate::mixer::track(s, *t).map_or_else(|| self.clone(), |m| Snap::Mute(*t, m.enabled)),
+            Snap::Routing(_) => Snap::routing(s),
+            Snap::TrackName(t, _) => crate::mixer::track(s, *t).map_or_else(|| self.clone(), |m| Snap::TrackName(*t, m.name.clone())),
+            Snap::Slots(r) => SlotsSide::now(s, r.track).map_or_else(|| self.clone(), |b| Snap::Slots(Box::new(b))),
             Snap::Several(v) => Snap::Several(v.iter().map(|x| x.now(s)).collect()),
         }
     }
@@ -395,7 +479,11 @@ impl Snap {
             | Snap::Settings(_)
             | Snap::Replace(_)
             | Snap::Timebase(_)
-            | Snap::Info(_) => {}
+            | Snap::Info(_)
+            | Snap::Mute(..)
+            | Snap::Routing(_)
+            | Snap::TrackName(..)
+            | Snap::Slots(_) => {}
             Snap::Rows(r) | Snap::Insert(r, _) => {
                 for p in &mut r.patterns {
                     p.notes.iter_mut().for_each(|n| n.rescale(from, to));
@@ -482,6 +570,24 @@ impl Snap {
                 s.project.info = *v;
                 s.settings.info_edit = None;
             }
+            Snap::Mute(t, v) => {
+                if let Some(m) = crate::mixer::track_mut(s, t) {
+                    m.enabled = v;
+                }
+            }
+            Snap::Routing(routes) => {
+                for (t, routes, levels) in routes {
+                    if let Some(m) = crate::mixer::track_mut(s, t) {
+                        (m.routes, m.send_levels) = (routes, levels);
+                    }
+                }
+            }
+            Snap::TrackName(t, v) => {
+                if let Some(m) = crate::mixer::track_mut(s, t) {
+                    m.name = v;
+                }
+            }
+            Snap::Slots(b) => b.put(s),
             Snap::Settings(v) => {
                 let p = &mut s.project;
                 let crossfades = p.auto_crossfades != v.auto_crossfades;
@@ -770,6 +876,38 @@ pub fn project_settings(s: &mut State, crossfades: bool) {
         crate::playlist::snapshot_with(s, PROJECT_SETTINGS, snap);
     } else {
         record(s, PROJECT_SETTINGS, snap);
+    }
+}
+
+/// Before mixer track `track`'s mute toggles (its LED): one step, "Mixer track mute". Solo keeps its own restore
+/// (`MixerUi::solo`) and makes no step (an OS choice).
+pub fn mute(s: &mut State, track: u16) {
+    let Some(m) = crate::mixer::track(s, track) else { return };
+    let snap = Snap::Mute(track, m.enabled);
+    record(s, MIXER_MUTE, snap);
+}
+
+/// Before the mixer's routing changes (a route made or dropped, Reset routing, Unroute to): one step, "Mixer
+/// routing", holding every track's routes and send levels, as the commands touch any number of tracks.
+pub fn routing(s: &mut State) {
+    record(s, MIXER_ROUTING, Snap::routing(s));
+}
+
+/// After mixer track `track` was renamed from `before` (the name box's accepted edit): one step, "Mixer track
+/// name", unless it stays the same.
+pub fn track_name(s: &mut State, track: u16, before: Option<String>) {
+    let Some(m) = crate::mixer::track(s, track) else { return };
+    if m.name != before {
+        record(s, MIXER_NAME, Snap::TrackName(track, before));
+    }
+}
+
+/// Before mixer track `track`'s effect slots change (Add one, Delete, the moves, a Tesla added, Remove all audio
+/// editors): one step, "Mixer effect slots"; undone or redone, the slots come back and their instances follow
+/// (`SlotsSide::put`).
+pub fn slots(s: &mut State, track: u16) {
+    if let Some(side) = SlotsSide::now(s, track) {
+        record(s, MIXER_SLOTS, Snap::Slots(Box::new(side)));
     }
 }
 
@@ -1545,5 +1683,123 @@ mod tests {
         assert!(!prefs::toggle(&prefs::UNDONE_RECORDINGS_TO_BIN));
         assert!(!prefs::check(&prefs::UNDONE_RECORDINGS_TO_BIN));
         prefs::set_check(&prefs::UNDONE_RECORDINGS_TO_BIN, true);
+    }
+
+    /// A mixer LED click is one step, "Mixer track mute": Ctrl+Z puts the track back on, Ctrl+Alt+Z mutes it again
+    /// (OS).
+    #[test]
+    fn a_mixer_mute_is_one_step() {
+        let mut app = App::new(None);
+        assert!(crate::mixer::track(&app.state, 1).is_some_and(|m| m.enabled), "insert 1 is on");
+        crate::mixer::hit(&mut app, crate::mixer::MHit::Led(1));
+        assert!(!crate::mixer::track(&app.state, 1).unwrap().enabled);
+        assert_eq!(names(&app.state), [LAST_RESET, MIXER_MUTE]);
+        ctrl_z(&mut app);
+        assert!(crate::mixer::track(&app.state, 1).unwrap().enabled, "back on");
+        ctrl_alt_z(&mut app);
+        assert!(!crate::mixer::track(&app.state, 1).unwrap().enabled, "muted again");
+        ctrl_z(&mut app);
+        assert!(crate::mixer::track(&app.state, 1).unwrap().enabled);
+    }
+
+    /// A route dropped and one made are steps, "Mixer routing": undone, every track's sends are exactly as they
+    /// were; redone, back (OS).
+    #[test]
+    fn mixer_routing_is_one_step() {
+        let mut app = App::new(None);
+        let sends = |s: &State| crate::mixer::track(s, 1).map(|m| (m.routes.clone(), m.send_levels.clone()));
+        let start = sends(&app.state).unwrap();
+        assert_eq!(start.0, vec![0], "insert 1 sends to the master");
+        app.state.selected_mixer = 1;
+        crate::mixer::hit(&mut app, crate::mixer::MHit::Unroute(0));
+        assert_eq!(sends(&app.state).unwrap().0, Vec::<u16>::new());
+        assert_eq!(names(&app.state), [LAST_RESET, MIXER_ROUTING]);
+        ctrl_z(&mut app);
+        assert_eq!(sends(&app.state).unwrap(), start, "the send is back");
+        ctrl_alt_z(&mut app);
+        assert_eq!(sends(&app.state).unwrap().0, Vec::<u16>::new(), "dropped again");
+        crate::mixer::route(&mut app.state, 2, false, false);
+        assert_eq!(sends(&app.state).unwrap().0, vec![2], "routed to insert 2 (no master route since the redo)");
+        assert_eq!(names(&app.state), [LAST_RESET, MIXER_ROUTING, MIXER_ROUTING]);
+        ctrl_z(&mut app);
+        assert_eq!(sends(&app.state).unwrap().0, Vec::<u16>::new(), "the route to 2 is gone");
+        ctrl_z(&mut app);
+        assert_eq!(sends(&app.state).unwrap(), start, "the send to the master is back too");
+        ctrl_alt_z(&mut app);
+        assert_eq!(sends(&app.state).unwrap().0, Vec::<u16>::new(), "dropped once more");
+        ctrl_alt_z(&mut app);
+        assert_eq!(sends(&app.state).unwrap().0, vec![2], "and redone");
+    }
+
+    /// A mixer track renamed is one step, "Mixer track name": undone, the default name is back; redone, the typed
+    /// one. The same name again makes no step (OS).
+    #[test]
+    fn a_mixer_rename_is_one_step() {
+        let mut app = App::new(None);
+        crate::playlist::start_edit(&mut app.state, crate::playlist::EditTarget::MixerName(1), (0.0, 0.0));
+        app.state.playlist.edit.as_mut().unwrap().text = "Drums".into();
+        crate::playlist::commit_edit(&mut app.state);
+        assert_eq!(crate::mixer::track(&app.state, 1).unwrap().name.as_deref(), Some("Drums"));
+        assert_eq!(names(&app.state), [LAST_RESET, MIXER_NAME]);
+        ctrl_z(&mut app);
+        assert_eq!(crate::mixer::track(&app.state, 1).unwrap().name, None, "the default name is back");
+        ctrl_alt_z(&mut app);
+        assert_eq!(crate::mixer::track(&app.state, 1).unwrap().name.as_deref(), Some("Drums"));
+        crate::playlist::start_edit(&mut app.state, crate::playlist::EditTarget::MixerName(1), (0.0, 0.0));
+        app.state.playlist.edit.as_mut().unwrap().text = "Drums".into();
+        crate::playlist::commit_edit(&mut app.state);
+        assert_eq!(app.state.history.len(), 1, "the same name again");
+    }
+
+    /// Effect slots added, moved and deleted are steps, "Mixer effect slots": an undo or redo puts the slots back
+    /// and the hosted instances follow (a move's Remap keeps them, other changes make each changed slot's instance
+    /// match) (OS).
+    #[test]
+    fn mixer_slots_are_steps() {
+        let mut a = App::new(None);
+        a.plugins.effects = crate::plugins::builtin_effects();
+        let delay = a.plugins.effect_index("Lemon Delay").expect("Lemon Delay is built in");
+        let clip = a.plugins.effect_index("Lemon Soft Clipper").expect("Lemon Soft Clipper is built in");
+        let key = |slot: u8| crate::plugins::fx_key(1, slot);
+        let slot = |s: &State, k: usize| crate::mixer::track(s, 1).unwrap().slots[k].clone();
+        a.state.selected_mixer = 1;
+        // Added: one step; undone, the slot empties and its instance goes; redone, both come back.
+        crate::mixer::run(&mut a, crate::mixer::MCmd::AddEffect(0, delay));
+        assert_eq!(slot(&a.state, 0).map(|s| s.name).as_deref(), Some("Lemon Delay"));
+        assert_eq!(names(&a.state), [LAST_RESET, MIXER_SLOTS]);
+        a.plugin_tick();
+        assert!(a.plugins.hosted.contains_key(&key(0)), "the instance is hosted");
+        undo(&mut a.state);
+        assert_eq!(slot(&a.state, 0), None);
+        assert!(a.state.mixer.pending.iter().any(|r| matches!(r, crate::mixer::FxReq::Restore { track: 1, slot: 0 })));
+        a.plugin_tick();
+        assert!(!a.plugins.hosted.contains_key(&key(0)), "the instance went with the slot");
+        redo(&mut a.state);
+        a.plugin_tick();
+        assert_eq!(slot(&a.state, 0).map(|s| s.name).as_deref(), Some("Lemon Delay"));
+        assert!(a.plugins.hosted.contains_key(&key(0)), "the instance came back");
+        // Moved: undone, the instances follow theirs (a Remap), neither is remade.
+        crate::mixer::run(&mut a, crate::mixer::MCmd::AddEffect(1, clip));
+        a.plugin_tick();
+        a.state.mixer.pending.clear();
+        crate::mixer::run(&mut a, crate::mixer::MCmd::SlotMove(0, 1));
+        a.plugin_tick();
+        a.state.mixer.pending.clear();
+        assert_eq!(a.plugins.descriptor(key(1)).map(|d| d.name).as_deref(), Some("Lemon Delay"), "the instance followed");
+        undo(&mut a.state);
+        assert!(a.state.mixer.pending.iter().any(|r| matches!(r, crate::mixer::FxReq::Remap(_))), "a move keeps the instances");
+        a.plugin_tick();
+        assert_eq!(a.plugins.descriptor(key(0)).map(|d| d.name).as_deref(), Some("Lemon Delay"), "moved back");
+        assert!(a.plugins.hosted.contains_key(&key(0)) && a.plugins.hosted.contains_key(&key(1)));
+        // Deleted: undone, the slot and its instance come back (the slot's own state decides what it plays).
+        a.state.mixer.pending.clear();
+        crate::mixer::run(&mut a, crate::mixer::MCmd::SlotDelete(0));
+        assert_eq!(slot(&a.state, 0), None);
+        a.plugin_tick();
+        assert!(!a.plugins.hosted.contains_key(&key(0)));
+        undo(&mut a.state);
+        assert_eq!(slot(&a.state, 0).map(|s| s.name).as_deref(), Some("Lemon Delay"));
+        a.plugin_tick();
+        assert!(a.plugins.hosted.contains_key(&key(0)), "the deleted effect is back");
     }
 }

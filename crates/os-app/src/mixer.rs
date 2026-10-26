@@ -103,6 +103,10 @@ pub enum FxReq {
     Toggle { track: u16, slot: u8 },
     Show { track: u16, slot: u8 },
     Delete { track: u16, slot: u8 },
+    /// A slots undo step put a slot back (`crate::history::slots`): the host makes its instance there match the
+    /// slot again — an empty slot drops it, a slot with a plugin (re)creates one from the slot's own name and
+    /// saved state, the way an opened project's slots are hosted (`App::restore_slot`).
+    Restore { track: u16, slot: u8 },
     /// Slots moved inside a track or tracks moved: `map[(t, s)] = (t2, s2)`; unlisted instances are dropped.
     Remap(Vec<((u16, u8), (u16, u8))>),
 }
@@ -308,6 +312,7 @@ pub fn hit(app: &mut App, h: MHit) -> Option<String> {
         }
         MHit::Led(n) => {
             select(s, n, ctrl);
+            crate::history::mute(s, n);
             let m = track_mut(s, n)?;
             m.enabled = !m.enabled;
             changed(s);
@@ -330,6 +335,7 @@ pub fn hit(app: &mut App, h: MHit) -> Option<String> {
         MHit::Route(dst) => route(s, dst, ctrl, shift),
         MHit::Unroute(dst) => {
             let cur = s.selected_mixer;
+            crate::history::routing(s);
             let m = track_mut(s, cur)?;
             m.routes.retain(|&r| r != dst);
             m.send_levels.retain(|&(d, _)| d != dst);
@@ -739,6 +745,7 @@ fn remove_tracks(s: &mut State, gone: &[u16]) -> Option<String> {
 /// Routes the selected tracks to `dst` (§5): a normal route at unity, a sidechain at level 0, `only` drops their
 /// other routes.
 pub fn route(s: &mut State, dst: u16, only: bool, side: bool) -> Option<String> {
+    crate::history::routing(s);
     let mut msg = None;
     for src in selected(s) {
         if src == dst || src == 0 {
@@ -1152,6 +1159,19 @@ pub fn run(app: &mut App, c: MCmd) -> Option<String> {
         MCmd::RemoveTeslas => return app.ask_remove_teslas(),
         MCmd::RemoveTeslasNow => {
             let gone = teslas(s);
+            // One step for all of them: the touched tracks' slots, instances and all.
+            let mut snaps: Vec<crate::history::Snap> = Vec::new();
+            for &(t, _) in &gone {
+                if snaps.iter().any(|sn| matches!(sn, crate::history::Snap::Slots(b) if b.track == t)) {
+                    continue;
+                }
+                if let Some(side) = crate::history::SlotsSide::now(s, t) {
+                    snaps.push(crate::history::Snap::Slots(Box::new(side)));
+                }
+            }
+            if !snaps.is_empty() {
+                crate::history::record(s, crate::history::MIXER_SLOTS, crate::history::Snap::Several(snaps));
+            }
             for &(t, k) in &gone {
                 clear_slot(s, t, k);
             }
@@ -1168,6 +1188,7 @@ pub fn run(app: &mut App, c: MCmd) -> Option<String> {
             None
         }
         MCmd::ResetRouting(n) => {
+            crate::history::routing(s);
             for t in targets(s, n).into_iter().filter(|&t| t != 0) {
                 if let Some(m) = track_mut(s, t) {
                     m.routes = vec![0];
@@ -1178,6 +1199,7 @@ pub fn run(app: &mut App, c: MCmd) -> Option<String> {
             None
         }
         MCmd::UnrouteTo(n) => {
+            crate::history::routing(s);
             let tg = targets(s, n);
             for m in s.project.mixer.iter_mut() {
                 m.routes.retain(|r| !tg.contains(r));
@@ -1236,6 +1258,7 @@ pub fn run(app: &mut App, c: MCmd) -> Option<String> {
         MCmd::AddEffect(slot, index) => {
             let t = s.selected_mixer;
             let Some(nm) = app.plugins.effects.get(index).map(|a| a.desc.name.clone()) else { return None };
+            crate::history::slots(s, t);
             if let Some(m) = track_mut(s, t) {
                 m.slots[usize::from(slot)] = Some(crate::plugins::new_slot(&nm));
                 m.slot_on[usize::from(slot)] = true;
@@ -1247,6 +1270,7 @@ pub fn run(app: &mut App, c: MCmd) -> Option<String> {
             None
         }
         MCmd::SlotDelete(slot) => {
+            crate::history::slots(s, s.selected_mixer);
             clear_slot(s, s.selected_mixer, slot);
             changed(s);
             None
@@ -1257,6 +1281,7 @@ pub fn run(app: &mut App, c: MCmd) -> Option<String> {
             if !(0..10).contains(&o) {
                 return None;
             }
+            crate::history::slots(s, t);
             let (a, b) = (usize::from(slot), o as usize);
             if let Some(m) = track_mut(s, t) {
                 m.slots.swap(a, b);
@@ -1286,6 +1311,7 @@ pub fn run(app: &mut App, c: MCmd) -> Option<String> {
         }
         MCmd::SlotSidechain(slot, port) => {
             let t = s.selected_mixer;
+            crate::history::slots(s, t);
             if crate::project_plugins::set_slot_sidechain(&mut s.project, &app.plugins, t, slot, port) {
                 changed(s);
                 None
@@ -1394,8 +1420,10 @@ impl App {
         let mut waiting: Vec<FxReq> = Vec::new();
         let mut done = false;
         for r in reqs {
-            if let FxReq::Create { track, slot, .. } | FxReq::Delete { track, slot } = r {
-                waiting.retain(|w| !matches!(*w, FxReq::Create { track: t, slot: s, .. } if (t, s) == (track, slot)));
+            if let FxReq::Create { track, slot, .. } | FxReq::Delete { track, slot } | FxReq::Restore { track, slot } = r {
+                waiting.retain(|w| {
+                    !matches!(*w, FxReq::Create { track: t, slot: s, .. } | FxReq::Restore { track: t, slot: s } if (t, s) == (track, slot))
+                });
             }
             if let FxReq::Create { index, .. } = r {
                 if !self.plugins.effect_ready(index) {
@@ -1435,6 +1463,11 @@ impl App {
                     let key = crate::plugins::fx_key(track, slot);
                     if self.plugins.hosted.contains_key(&key) {
                         self.plugins.drop_key(key);
+                        relink = true;
+                    }
+                }
+                FxReq::Restore { track, slot } => {
+                    if self.restore_slot(track, slot) {
                         relink = true;
                     }
                 }
@@ -1528,6 +1561,7 @@ impl App {
             self.invalidate();
             return false;
         };
+        crate::history::slots(s, t);
         let m = track_mut(s, t).expect("the track");
         m.slots[k] = Some(crate::plugins::new_slot(TESLA));
         m.slot_on[k] = true;

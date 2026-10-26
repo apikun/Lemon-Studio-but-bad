@@ -320,8 +320,12 @@ and Touch controller. Kept with the program's settings, not the project. Which w
   on one goes back or forward to it
 - General settings ▸ Undo history: Maximum undo levels, Undo knob tweaks, Alternate undo mode, and showing the
   history in the browser, newest first if wanted
-- Not yet: a plugin editor's own changes, other mixer track commands (mute, routing, names, slots); "Put undone
-  recordings in the recycle bin" waits for recording
+- Also the mixer's mute ("Mixer track mute"), routing ("Mixer routing": a route made or dropped, Reset routing,
+  Unroute to), renames ("Mixer track name") and effect slots ("Mixer effect slots": Add one, Delete, the moves, a
+  Tesla added, Remove all (audio editor) instances, Sidechain input; the hosted instances follow an undo or redo,
+  a move keeping them)
+- Not yet: a plugin editor's own changes, Reset on a mixer track, routing the channels (Route channels, Route to
+  free track); "Put undone recordings in the recycle bin" waits for recording
 
 ## 🚧 Audio drivers
 

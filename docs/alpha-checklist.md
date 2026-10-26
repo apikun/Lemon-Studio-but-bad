@@ -47,7 +47,10 @@ Greyed-out controls and partial features. These can land alongside the blockers.
 
 - [ ] **Event editor window.** Edit events is greyed out in five menus (playlist, channel rack, parameter menus)
 - [ ] **Undo for a plugin editor's own changes**
-- [ ] **Undo for mixer track commands.** Mute, routing, names and slots are not in the history yet
+- [x] **Undo for mixer track commands.** Mute, routing, renames and the effect slots are steps now, the slots'
+  hosted instances following an undo or redo (a move keeps them, other changes remake them from the slot's own
+  state). Solo keeps its own restore and makes no step, Reset is not a step, and routing the channels (Route
+  channels, Route to free track) is not yet
 - [x] **Undo for the remaining edits.** A generator inserted higher up the rack, Replace, project info and the
   timebase are each one step
 - [ ] **Mixer right-click menus.** 49 entries greyed out on 2026-10-24: the routing menu, groups, Render to wave

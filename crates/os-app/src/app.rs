@@ -2241,6 +2241,71 @@ impl App {
         self.state.piano.dirty = true;
     }
 
+    pub(crate) fn restore_slot(&mut self, track: u16, slot: u8) -> bool {
+        use crate::plugins::{EDISON_FILE_NAME, EQ_FILE_NAME, LOVE_PHILTER_FILE_NAME, MAXIMUS_FILE_NAME};
+        use os_flp::wrapper::WRAPPER;
+        let key = crate::plugins::fx_key(track, slot);
+        let dropped = self.plugins.hosted.contains_key(&key);
+        if dropped {
+            self.plugins.drop_key(key);
+        }
+        let Some(sp) = self
+            .state
+            .project
+            .mixer
+            .iter()
+            .find(|m| m.index == track)
+            .and_then(|m| m.slots.get(usize::from(slot)).cloned().flatten())
+        else {
+            return dropped;
+        };
+        let made = if sp.name == WRAPPER {
+            // A wrapped plugin: its saved reference names it, as a load reads it.
+            crate::project_plugins::wrapped_slot(&sp).and_then(|r| {
+                crate::project_plugins::find(&self.plugins.effects, &r).map(|i| {
+                    let other = crate::project_plugins::switched_format(&self.plugins.effects[i].desc, &r);
+                    let state = other.is_none().then_some(r.state.as_slice());
+                    (other.is_some(), self.plugins.create_effect(track, slot, i, state))
+                })
+            })
+        } else if [EQ_FILE_NAME, EDISON_FILE_NAME, LOVE_PHILTER_FILE_NAME, MAXIMUS_FILE_NAME].contains(&sp.name.as_str()) {
+            // The file plugins: Lemon Studio's recreations, from the file's state.
+            let (name, st): (&str, Option<Vec<u8>>) = match sp.name.as_str() {
+                EQ_FILE_NAME => (crate::plugins::LEMON_EQ, Some(lemon_parametric_eq_2::params::plugin_state_from_fl(&sp.state))),
+                LOVE_PHILTER_FILE_NAME => (crate::plugins::PULP_FILTER, Some(pulp_filter::plugin_state_from_fl(&sp.state))),
+                MAXIMUS_FILE_NAME => (crate::plugins::PRESS, Some(press::plugin_state_from_fl(&sp.state))),
+                _ => (crate::plugins::TESLA, tesla::plugin_state_from_edison(&sp.state)),
+            };
+            self.plugins.effect_index(name).map(|i| (false, self.plugins.create_effect(track, slot, i, st.as_deref())))
+        } else {
+            // A plain name: the effect called so, from the slot's saved state (none: from its defaults).
+            self.plugins.effect_index(&sp.name).map(|i| {
+                let state = (!sp.state.is_empty()).then_some(sp.state.as_slice());
+                (false, self.plugins.create_effect(track, slot, i, state))
+            })
+        };
+        match made {
+            Some((stand_in, Ok(_))) => {
+                if stand_in {
+                    self.plugins.mark_stand_in(key);
+                }
+                true
+            }
+            // The plugin did not come: the slot stays without an instance, and the load scans must not bring it
+            // back every tick (a load marks the same failures).
+            Some((_, Err(e))) => {
+                self.state.message = Some(format!("{}: {e}", sp.name));
+                if sp.name == WRAPPER {
+                    self.wrap_failed.push(key);
+                } else {
+                    self.fx_failed.push(key);
+                }
+                false
+            }
+            None => false,
+        }
+    }
+
     /// Plugin host work on the UI thread: create / open requested plugins, apply plugin-window edits to the channel.
     pub(crate) fn plugin_tick(&mut self) {
         // Rows moved by an undone or redone channel delete: the instruments follow, the deleted ones come back.

@@ -3684,7 +3684,10 @@ pub fn start_edit(s: &mut State, target: EditTarget, at: (f32, f32)) {
 /// Enter in the text box.
 pub fn commit_edit(s: &mut State) {
     let Some(e) = s.playlist.edit.take() else { return };
-    snapshot(s);
+    // The mixer's name edit is a mixer step (`crate::history::track_name`), not a playlist one.
+    if !matches!(e.target, EditTarget::MixerName(_)) {
+        snapshot(s);
+    }
     let text = e.text.trim().to_string();
     match e.target {
         EditTarget::ArrangementName => {
@@ -3719,9 +3722,11 @@ pub fn commit_edit(s: &mut State) {
         }
         EditTarget::MixerName(n) => {
             let def = if n == 0 { "Master".to_string() } else { format!("Insert {n}") };
+            let before = s.project.mixer.iter().find(|m| m.index == n).and_then(|m| m.name.clone());
             if let Some(m) = s.project.mixer.iter_mut().find(|m| m.index == n) {
                 m.name = (!text.is_empty() && text != def).then_some(text);
             }
+            crate::history::track_name(s, n, before);
         }
         EditTarget::SlotName(t, k) => {
             if text.is_empty() {
