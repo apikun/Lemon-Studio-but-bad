@@ -85,7 +85,7 @@ pub const FILE_EXPORT_MIDI: usize = 14;
 pub const FILE_EXIT: usize = 18;
 /// OPTIONS > Theme settings (flat index: header counts).
 #[cfg(test)]
-pub const OPT_THEME: usize = 5;
+pub const OPT_THEME: usize = 6;
 /// OPTIONS > Metronome (spec: ui/metronome.md §1).
 pub const METRONOME_LABEL: &str = "Metronome";
 /// OPTIONS > the record options (spec: ui/recording.md §3).
@@ -120,7 +120,7 @@ pub const INTO_WORKSPACE_LABEL: &str = "Into workspace";
 /// Index of the OPTIONS menu.
 pub const OPTIONS_MENU: usize = 5;
 /// OPTIONS > Project info (the toolbar's info button).
-pub const OPT_INFO: usize = 9;
+pub const OPT_INFO: usize = 10;
 /// HELP > About (the toolbar logo).
 pub const HELP_MENU: usize = 7;
 pub const HELP_ABOUT: usize = 6;
@@ -259,6 +259,7 @@ const OPTIONS: &[Item] = &[
     head("System"),
     it("MIDI settings", "F10"),
     it("Audio settings", ""),
+    it("Recording settings", ""),
     it("General settings", ""),
     it("File settings", ""),
     it("Theme settings", ""),

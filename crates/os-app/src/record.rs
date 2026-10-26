@@ -83,6 +83,45 @@ impl Opt {
         crate::settings_file::set_flag(self.key().0, on);
         on
     }
+
+    /// The name the right-click menu, the OPTIONS menu and the Recording settings page show.
+    pub fn label(self) -> &'static str {
+        match self {
+            Opt::Notes => "Notes",
+            Opt::Automation => "Automation",
+            Opt::StartsPlayback => "Recording starts playback",
+            Opt::DisarmOnStop => "Disarm on stop",
+            Opt::QuantizeStart => "Note start time",
+            Opt::QuantizeEnd => "Note end time",
+            Opt::Wait => "Start on input",
+            Opt::WaitFilter => "Respect recording filter",
+            Opt::WaitArmed => "Only when recording",
+            Opt::Precount => "Recording precount",
+            Opt::Blend => "Blend recorded notes",
+            Opt::Loop => "Loop record",
+            Opt::Ask => "Ask what to record",
+        }
+    }
+
+    /// The option the Recording settings page's check labelled `label` switches (`Opt::label`).
+    pub fn by_label(label: &str) -> Option<Opt> {
+        Some(match label {
+            "Notes" => Opt::Notes,
+            "Automation" => Opt::Automation,
+            "Recording starts playback" => Opt::StartsPlayback,
+            "Disarm on stop" => Opt::DisarmOnStop,
+            "Note start time" => Opt::QuantizeStart,
+            "Note end time" => Opt::QuantizeEnd,
+            "Start on input" => Opt::Wait,
+            "Respect recording filter" => Opt::WaitFilter,
+            "Only when recording" => Opt::WaitArmed,
+            "Recording precount" => Opt::Precount,
+            "Blend recorded notes" => Opt::Blend,
+            "Loop record" => Opt::Loop,
+            "Ask what to record" => Opt::Ask,
+            _ => return None,
+        })
+    }
 }
 
 /// The button's hint: what the filter records (spec §2 The button).
@@ -428,8 +467,8 @@ impl App {
         use crate::playlist::{Cmd, Mark, PItem, Popup};
         let items = match o {
             Opt::Wait => vec![
-                PItem::new("Respect recording filter", Cmd::Record(Opt::WaitFilter)).mark(Mark::Check(Opt::WaitFilter.on())),
-                PItem::new("Only when recording", Cmd::Record(Opt::WaitArmed)).mark(Mark::Check(Opt::WaitArmed.on())),
+                PItem::new(Opt::WaitFilter.label(), Cmd::Record(Opt::WaitFilter)).mark(Mark::Check(Opt::WaitFilter.on())),
+                PItem::new(Opt::WaitArmed.label(), Cmd::Record(Opt::WaitArmed)).mark(Mark::Check(Opt::WaitArmed.on())),
             ],
             Opt::Precount => {
                 let bars = precount_bars();
@@ -444,19 +483,14 @@ impl App {
         self.state.playlist.popup = Some(Popup { x, y, items, sub: None, scroll: [0; 2] });
     }
 
-    /// An option switch (the buttons, OPTIONS menu, Ctrl+I / Ctrl+P / Ctrl+B); turning Start on input off ends a wait.
+    /// An option switch (the buttons, OPTIONS menu, the Recording settings page, Ctrl+I / Ctrl+P / Ctrl+B); turning
+    /// Start on input off ends a wait.
     pub(crate) fn toggle_record_option(&mut self, o: Opt) {
         let on = o.toggle();
         if o == Opt::Wait && !on {
             self.state.rec.waiting = false;
         }
-        let name = match o {
-            Opt::Wait => "Start on input",
-            Opt::Precount => "Recording precount",
-            Opt::Loop => "Loop record",
-            _ => "Blend recorded notes",
-        };
-        self.state.message = Some(format!("{name} {}", if on { "on" } else { "off" }));
+        self.state.message = Some(format!("{} {}", o.label(), if on { "on" } else { "off" }));
         self.invalidate();
     }
 
@@ -466,18 +500,18 @@ impl App {
         let it = |label: &'static str, o: Opt| PItem::new(label, Cmd::Record(o)).mark(Mark::Check(o.on()));
         let items = vec![
             PItem::head("Recording filter"),
-            it("Notes", Opt::Notes),
-            it("Automation", Opt::Automation),
+            it(Opt::Notes.label(), Opt::Notes),
+            it(Opt::Automation.label(), Opt::Automation),
             // Audio (FL: recording into mixer tracks, then the playlist): mixer tracks don't record yet; audio comes with
             // One-click audio recording, into the playlist or the audio editor.
             PItem::new("Audio", Cmd::Nothing).off(),
             PItem::head("Options"),
-            it("Ask what to record", Opt::Ask),
-            it("Recording starts playback", Opt::StartsPlayback),
-            it("Disarm on stop", Opt::DisarmOnStop),
+            it(Opt::Ask.label(), Opt::Ask),
+            it(Opt::StartsPlayback.label(), Opt::StartsPlayback),
+            it(Opt::DisarmOnStop.label(), Opt::DisarmOnStop),
             PItem::head("Quantize"),
-            it("Note start time", Opt::QuantizeStart),
-            it("Note end time", Opt::QuantizeEnd),
+            it(Opt::QuantizeStart.label(), Opt::QuantizeStart),
+            it(Opt::QuantizeEnd.label(), Opt::QuantizeEnd),
         ];
         self.state.playlist.popup = Some(Popup { x, y, items, sub: None, scroll: [0; 2] });
     }

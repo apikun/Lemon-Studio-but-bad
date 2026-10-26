@@ -66,7 +66,10 @@ Greyed-out controls and partial features. These can land alongside the blockers.
   Performance mode MIDI channel stays greyed out until Performance mode is built
 - [ ] **Performance mode.** Live clip launching on the playlist (Ctrl+P says it is not available yet), with MIDI
   settings' Performance mode MIDI channel and TOOLS ▸ Macros ▸ Prepare for performance mode
-- [ ] **Recording settings page.** The only settings page that doesn't work yet
+- [x] **Recording settings page.** The Record button's options as live checks: the recording filter (Notes,
+  Automation; Audio waits for mixer-track recording, with where audio records today on the page), ask what to record,
+  recording starts playback, disarm on stop, Start on input with its two sub-checks, Recording precount with its
+  duration, the quantize checks and Loop record / Blend recorded notes
 - [ ] **Editable mixer latency settings.** Plugin delay compensation reads, uses and saves them, but they can't be
   edited
 - [ ] **Browser: Favorites, the plugin database and Browser find**

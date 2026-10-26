@@ -3,9 +3,10 @@
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
 //! Settings window (OPTIONS > MIDI / Audio / General / File / Theme settings, Project settings, Project info,
-//! Debugging log; F10 / F11): ten tabs of grouped controls. The controls that work today are listed in `LIVE` and
-//! handled in `App::settings_act`, or are program settings declared in `crate::prefs`; every other control is drawn
-//! greyed out and only says it is not available yet.
+//! Debugging log; F10 / F11): eleven tabs of grouped controls. The controls that work today are listed in `LIVE` and
+//! handled in `App::settings_act`, or are program settings declared in `crate::prefs` (the Recording page's are the
+//! Record button's options, `crate::record::Opt`); every other control is drawn greyed out and only says it is not
+//! available yet.
 //! The Plugins tab is the plugin manager (search folders, scanning, the plugin table).
 // spec: ui/settings.md, ui/plugin-manager.md
 
@@ -214,9 +215,10 @@ pub struct SettingsUi {
 
 /// Tabs: label, page title, group (0 system / 1 project / 2 info) (spec §2). Plugins takes the place of FL's Account
 /// tab (spec: ui/plugin-manager.md §2); tabs are laid out from their text widths (`tab_rects`).
-pub const TABS: [(&str, &str, u8); 10] = [
+pub const TABS: [(&str, &str, u8); 11] = [
     ("MIDI", "MIDI input / output devices", 0),
     ("Audio", "Audio devices / mixer", 0),
+    ("Recording", "Recording options", 0),
     ("General", "System / miscellaneous", 0),
     ("File", "Files & folders", 0),
     ("Plugins", "Plugin manager", 0),
@@ -228,9 +230,10 @@ pub const TABS: [(&str, &str, u8); 10] = [
 ];
 pub const MIDI: usize = 0;
 pub const AUDIO: usize = 1;
-pub const GENERAL: usize = 2;
-pub const FILE: usize = 3;
-pub const PLUGINS: usize = 4;
+pub const RECORDING: usize = 2;
+pub const GENERAL: usize = 3;
+pub const FILE: usize = 4;
+pub const PLUGINS: usize = 5;
 
 /// Opt in to the experimental FL native plugin host (spec plugins/fruity-abi.md), on the Plugins page only with
 /// `OPENSTUDIO_NATIVE_SETTINGS` (`SettingsUi::native`). Labels are the keys for `SAct::Check`; `App::settings_act`
@@ -298,13 +301,20 @@ const NO_SCRIPTS: &str = "Lemon Studio has no MIDI scripts";
 pub const PERFORMANCE_CHANNEL: &str = "Performance mode MIDI channel";
 const NO_PERFORMANCE: &str = "Lemon Studio has no playlist performance mode";
 
-/// `LIVE`, and the checks declared in `crate::prefs`.
+/// `LIVE`, the checks declared in `crate::prefs`, and the Record button's options (`crate::record::Opt`, the
+/// Recording page's checks).
 fn live(key: &str) -> bool {
-    LIVE.contains(&key) || crate::prefs::find_check(key).is_some()
+    LIVE.contains(&key) || crate::prefs::find_check(key).is_some() || crate::record::Opt::by_label(key).is_some()
 }
 
 /// The combos that work (they open a menu of choices, `App::audio_menu`).
 pub const LIVE_COMBOS: [&str; 5] = [OUTPUT_DEVICE, MODE, SAMPLE_RATE, BUFFER_LENGTH, ANIMATIONS];
+/// Recording ▸ Precount: the count-in's length menu (the same one the Recording precount button's right-click opens,
+/// `App::record_option_menu`).
+pub const PRECOUNT_DURATION: &str = "Precount duration";
+/// Recording ▸ Recording filter: where audio records today (the filter's Audio entry waits for mixer-track
+/// recording, spec: ui/recording.md §2).
+const AUDIO_ONE_CLICK: &str = "Audio records with One-click recording: into the playlist, or into the audio editor";
 /// General ▸ Display: "Entertain me" simulates the mixer's cables, "Off" hangs them still (crate::cable).
 pub const ANIMATIONS: &str = "Animations";
 pub const OUTPUT_DEVICE: &str = "Output device";
@@ -390,7 +400,7 @@ pub const DEFAULT_TEMPLATE: &str = "Default template";
 
 /// Whether the combo labelled `label` works (opens a menu of choices).
 fn live_combo(label: &str) -> bool {
-    LIVE_COMBOS.contains(&label) || PROJECT_COMBOS.contains(&label) || label == DEFAULT_TEMPLATE
+    LIVE_COMBOS.contains(&label) || PROJECT_COMBOS.contains(&label) || label == DEFAULT_TEMPLATE || label == PRECOUNT_DURATION
 }
 
 /// A buffer length as the Audio page shows it: frames and milliseconds at `rate`.
@@ -398,10 +408,10 @@ pub fn buffer_text(frames: u32, rate: u32) -> String {
     format!("{frames} frames ({:.1} ms)", f64::from(frames) * 1000.0 / f64::from(rate.max(1)))
 }
 
-pub const THEME: usize = 5;
-pub const PROJECT: usize = 6;
-pub const INFO: usize = 7;
-pub const DEBUG: usize = 8;
+pub const THEME: usize = 6;
+pub const PROJECT: usize = 7;
+pub const INFO: usize = 8;
+pub const DEBUG: usize = 9;
 
 /// Plugin table rows shown at once (spec: ui/plugin-manager.md §2).
 pub const TABLE_ROWS: usize = 18;
@@ -414,6 +424,7 @@ pub fn tab_for_menu(label: &str) -> Option<usize> {
     Some(match label {
         "MIDI settings" => MIDI,
         "Audio settings" => AUDIO,
+        "Recording settings" => RECORDING,
         "General settings" => GENERAL,
         "File settings" => FILE,
         "Manage plugins" => PLUGINS,
@@ -669,6 +680,47 @@ pub fn page(tab: usize, s: &State) -> Vec<Group> {
                     Value(crate::prefs::number_text(&crate::prefs::METRONOME_TRACK), "Metronome track"),
                     Check("Play truncated notes on transport", true),
                     Check("Reset plugins on transport", false),
+                ]),
+            ]
+        }
+        // The Record button's options (spec: ui/recording.md §2-§3), the same program settings its right-click menu and
+        // the toolbar's option buttons keep. The filter's Audio waits for mixer-track recording (an alpha blocker);
+        // today audio records with one-click recording, into the playlist or the audio editor.
+        RECORDING => {
+            use crate::record::{precount_bars, Opt};
+            let bars = precount_bars();
+            vec![
+                g("Recording filter", vec![
+                    Check(Opt::Notes.label(), Opt::Notes.on()),
+                    Check(Opt::Automation.label(), Opt::Automation.on()),
+                    Check("Audio", false),
+                    Text(AUDIO_ONE_CLICK.into(), true),
+                ]),
+                g("Options", vec![
+                    Check(Opt::Ask.label(), Opt::Ask.on()),
+                    Check(Opt::StartsPlayback.label(), Opt::StartsPlayback.on()),
+                    Check(Opt::DisarmOnStop.label(), Opt::DisarmOnStop.on()),
+                ]),
+                g("Start on input", vec![
+                    Check(Opt::Wait.label(), Opt::Wait.on()),
+                    Check(Opt::WaitFilter.label(), Opt::WaitFilter.on()),
+                    Check(Opt::WaitArmed.label(), Opt::WaitArmed.on()),
+                ]),
+                g("Precount", vec![
+                    Check(Opt::Precount.label(), Opt::Precount.on()),
+                    Combo(
+                        if Opt::Precount.on() { format!("{bars} bar{}", if bars == 1 { "" } else { "s" }) } else { "Off".into() },
+                        64.0,
+                        PRECOUNT_DURATION,
+                    ),
+                ]),
+                g("Quantize", vec![
+                    Check(Opt::QuantizeStart.label(), Opt::QuantizeStart.on()),
+                    Check(Opt::QuantizeEnd.label(), Opt::QuantizeEnd.on()),
+                ]),
+                g("Takes", vec![
+                    Check(Opt::Loop.label(), Opt::Loop.on()),
+                    Check(Opt::Blend.label(), Opt::Blend.on()),
                 ]),
             ]
         }
@@ -1024,9 +1076,8 @@ pub fn paint(ui: &mut Ui, s: &State) {
     let x = Rect::new(r.right() - 26.0, r.y + 5.0, 20.0, 20.0);
     let hov = ui.hit(x, Action::Settings(SAct::Close), "Close");
     ui.c.icon(&os_ui::tabler::X, x.inset(3.0), if hov { t.glyph } else { t.text });
-    // Tabs (spec §2): active text coloured by group.
-    let font = Font::new(13);
-    let rects = tab_rects(ui, r);
+    // Tabs (spec §2): active text coloured by group. Eleven tabs share the width: their font may step down a size.
+    let (rects, font) = tab_rects(ui, r);
     for (i, &(label, _, grp)) in TABS.iter().enumerate() {
         let tr = rects[i];
         let hov = ui.hit(tr, Action::Settings(SAct::Tab(i)), TABS[i].1);
@@ -1241,20 +1292,26 @@ fn picker(ui: &mut Ui, s: &State, p: &crate::theme_adjust::Picker, win: Rect) {
     ui.c.text_center(Font::new(13), b, if hov { t.glyph } else { t.text }, "Revert");
 }
 
-/// Tab rects in window `r`: text width + 10 px each side, 4 px apart, 15 px more between groups.
-fn tab_rects(ui: &mut Ui, r: Rect) -> Vec<Rect> {
-    let font = Font::new(13);
-    let mut x = r.x + 3.0;
-    let mut v = Vec::new();
-    for (i, &(label, _, grp)) in TABS.iter().enumerate() {
-        if i > 0 && TABS[i - 1].2 != grp {
-            x += 15.0;
+/// Tab rects in window `r`: text width + 10 px each side, 4 px apart, 15 px more between groups. Eleven tabs share
+/// the 668 px window: while the row is too wide, the labels' font steps down a size (returns the font it used).
+fn tab_rects(ui: &mut Ui, r: Rect) -> (Vec<Rect>, Font) {
+    for (size, last) in [(13, false), (12, false), (11, false), (10, true)] {
+        let font = Font::new(size);
+        let mut x = r.x + 3.0;
+        let mut v = Vec::new();
+        for (i, &(label, _, grp)) in TABS.iter().enumerate() {
+            if i > 0 && TABS[i - 1].2 != grp {
+                x += 15.0;
+            }
+            let w = ui.c.text_width(font, label) + 20.0;
+            v.push(Rect::new(x.round(), r.y + 34.0, w.round(), TABS_B - 34.0));
+            x += w + 11.0;
         }
-        let w = ui.c.text_width(font, label) + 20.0;
-        v.push(Rect::new(x.round(), r.y + 34.0, w.round(), TABS_B - 34.0));
-        x += w + 11.0;
+        if last || x - 11.0 <= r.right() - 3.0 {
+            return (v, font);
+        }
     }
-    v
+    unreachable!()
 }
 
 fn paint_group(ui: &mut Ui, s: &State, gr: &Group, r: Rect, open: bool, clip: Rect) {

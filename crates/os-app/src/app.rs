@@ -4651,6 +4651,10 @@ impl App {
             // The program settings declared in `crate::prefs`.
             SAct::Combo(views::settings::DEFAULT_TEMPLATE, x, y) => return self.template_menu(x, y),
             SAct::Combo(crate::data_folder::COMBO, x, y) => return self.data_folder_menu(x, y),
+            // Recording ▸ Precount duration: the same menu the Recording precount button's right-click opens.
+            SAct::Combo(views::settings::PRECOUNT_DURATION, x, y) => {
+                return self.record_option_menu(crate::record::Opt::Precount, x, y)
+            }
             SAct::Combo(label, x, y) if crate::prefs::find_combo(label).is_some() => return self.pref_menu(label, x, y),
             SAct::Combo(label, x, y) => return self.audio_menu(label, x, y),
             SAct::Slider(label, x, w) => return self.pref_slider_press(label, x, w),
@@ -4698,6 +4702,11 @@ impl App {
             SAct::Check(k) if views::settings::plugin_check(k) => self.plugin_check(k),
             SAct::Plug(p) => self.plugin_act(p),
             SAct::Check(k) if k == crate::prefs::COPY_USED_SAMPLES.label => self.toggle_copy_samples(),
+            // The Recording page's checks are the Record button's options (spec: ui/recording.md §2-§3); the same
+            // switch the right-click menu and the option buttons make (Start on input off ends a wait).
+            SAct::Check(k) if crate::record::Opt::by_label(k).is_some() => {
+                self.toggle_record_option(crate::record::Opt::by_label(k).unwrap_or(crate::record::Opt::Blend))
+            }
             SAct::Check(k) if crate::prefs::find_check(k).is_some() => self.pref_toggle(k),
             SAct::Check(k) if k == views::settings::TRUNCATED_CHECK => self.toggle_play_truncated(),
             SAct::Check(k) if k == views::settings::CROSSFADES_CHECK => self.toggle_auto_crossfades(),
@@ -11336,6 +11345,78 @@ mod tests {
         assert!(!app.state.settings.open);
         app.key(&winit::keyboard::Key::Named(winit::keyboard::NamedKey::F10), false, false);
         assert!(app.state.settings.open && app.state.settings.tab == MIDI);
+    }
+
+    /// The Recording settings page (spec: ui/recording.md §2-§3): its checks are the Record button's options, the same
+    /// program settings its right-click menu and the option buttons keep; the precount combo opens its length menu; the
+    /// filter's Audio waits for mixer-track recording.
+    #[test]
+    fn recording_settings_page() {
+        use crate::record::Opt;
+        use crate::views::settings::{SAct, PRECOUNT_DURATION, RECORDING};
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let mut app = App::new(None);
+        frame(&mut app, &mut c, None);
+        app.open_settings(RECORDING);
+        app.paint(&mut c, None);
+        // Every option of the Record button's right-click menu is on the page, live.
+        for o in [
+            Opt::Notes,
+            Opt::Automation,
+            Opt::Ask,
+            Opt::StartsPlayback,
+            Opt::DisarmOnStop,
+            Opt::Wait,
+            Opt::WaitFilter,
+            Opt::WaitArmed,
+            Opt::Precount,
+            Opt::QuantizeStart,
+            Opt::QuantizeEnd,
+            Opt::Loop,
+            Opt::Blend,
+        ] {
+            let a = Action::Settings(SAct::Check(o.label()));
+            assert!(app.hits.iter().any(|h| h.action == a), "{} is on the page", o.label());
+        }
+        // Audio is not available yet: greyed out with its reason, and the page says where audio records today.
+        assert!(app.hits.iter().any(|h| h.action == Action::Placeholder("Audio")));
+        assert!(
+            crate::views::settings::page(RECORDING, &app.state)
+                .into_iter()
+                .flat_map(|g| g.rows)
+                .any(|r| matches!(&r, crate::views::settings::Row::Text(t, true) if t.contains("One-click recording"))),
+            "the page says where audio records today"
+        );
+        // Toggling one keeps its program setting, the same one the right-click menu writes.
+        let was = Opt::Loop.on();
+        let r = hit_rect(&app, &Action::Settings(SAct::Check(Opt::Loop.label())));
+        click(&mut app, &mut c, r);
+        assert_eq!(Opt::Loop.on(), !was);
+        assert_eq!(app.state.message.as_deref(), Some(format!("{} {}", Opt::Loop.label(), if was { "off" } else { "on" }).as_str()));
+        // Start on input's check carries the sub-checks of its button's right-click menu.
+        for o in [Opt::WaitFilter, Opt::WaitArmed] {
+            assert!(app.hits.iter().any(|h| h.action == Action::Settings(SAct::Check(o.label()))));
+        }
+        // The precount combo shows the count-in's length and opens its menu (1 bar / 2 bars, the choice marked).
+        let r = app
+            .hits
+            .iter()
+            .rev()
+            .find(|h| matches!(&h.action, Action::Settings(SAct::Combo(l, ..)) if *l == PRECOUNT_DURATION))
+            .map(|h| h.rect)
+            .expect("the precount combo works");
+        click(&mut app, &mut c, r);
+        let p = app.state.playlist.popup.as_ref().expect("the precount menu");
+        let labels: Vec<&str> = p.items.iter().map(|it| it.label.as_ref()).collect();
+        assert_eq!(labels, ["Precount duration", "1 bar", "2 bars"]);
+        // The current length is marked (the store is empty in tests, so the default 1 bar).
+        assert_eq!(p.items[1].mark, crate::playlist::Mark::Radio(crate::record::precount_bars() == 1));
+        assert_eq!(p.items[2].mark, crate::playlist::Mark::Radio(false));
+        // The menu keeps the same program setting the button's menu does (its length; the check beside the combo
+        // switches the precount itself).
+        let item = hit_rect(&app, &Action::PlPopup(2));
+        click(&mut app, &mut c, item);
+        assert_eq!(crate::record::precount_bars(), 2);
     }
 
     /// A project in the layout used before version 24.2 is refused with a dialog that says what to do.
