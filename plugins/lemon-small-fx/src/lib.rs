@@ -3,8 +3,8 @@
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
 //! Lemon Studio's small effects as VST3 / CLAP plugins (nih-plug): Lemon Soft Clipper, Lemon Fast Distortion, Lemon
-//! Balance, Lemon Stereo Enhancer, Lemon Transient Processor, Lemon Chorus and Lemon Stereo Shaper. Each is a handful
-//! of settings over a sound of
+//! Balance, Lemon Stereo Enhancer, Lemon Transient Processor, Lemon Chorus, Lemon Stereo Shaper, Lemon Flanger and
+//! Lemon Phaser (the last two Lemon Studio's own designs). Each is a handful of settings over a sound of
 //! `os_engine::effects`, so they share
 //! everything but their description: the plugin, its parameters and saved state ([`params`]), the Pith editor
 //! ([`editor`], [`view`]). A description ([`Spec`]) gives the settings, their value texts, the editor's cards and
@@ -19,7 +19,9 @@ pub mod balance;
 pub mod chorus;
 pub mod editor;
 pub mod fast_distortion;
+pub mod flanger;
 pub mod params;
+pub mod phaser;
 pub mod soft_clipper;
 pub mod stereo_enhancer;
 pub mod stereo_shaper;
@@ -312,7 +314,7 @@ impl<K: Kind> Vst3Plugin for SmallFx<K> {
 mod tests {
     use super::*;
 
-    pub const SPECS: [&Spec; 7] = [
+    pub const SPECS: [&Spec; 9] = [
         soft_clipper::SPEC,
         fast_distortion::SPEC,
         balance::SPEC,
@@ -320,6 +322,8 @@ mod tests {
         transient_processor::SPEC,
         chorus::SPEC,
         stereo_shaper::SPEC,
+        flanger::SPEC,
+        phaser::SPEC,
     ];
 
     /// Every effect: ids unique, starts inside the ranges, a control per setting, the plugin ids distinct.
@@ -351,6 +355,8 @@ mod tests {
             <transient_processor::LemonTransientProcessor as ClapPlugin>::CLAP_ID,
             <chorus::LemonChorus as ClapPlugin>::CLAP_ID,
             <stereo_shaper::LemonStereoShaper as ClapPlugin>::CLAP_ID,
+            <flanger::LemonFlanger as ClapPlugin>::CLAP_ID,
+            <phaser::LemonPhaser as ClapPlugin>::CLAP_ID,
         ];
         let classes = [
             <soft_clipper::LemonSoftClipper as Vst3Plugin>::VST3_CLASS_ID,
@@ -360,6 +366,8 @@ mod tests {
             <transient_processor::LemonTransientProcessor as Vst3Plugin>::VST3_CLASS_ID,
             <chorus::LemonChorus as Vst3Plugin>::VST3_CLASS_ID,
             <stereo_shaper::LemonStereoShaper as Vst3Plugin>::VST3_CLASS_ID,
+            <flanger::LemonFlanger as Vst3Plugin>::VST3_CLASS_ID,
+            <phaser::LemonPhaser as Vst3Plugin>::VST3_CLASS_ID,
         ];
         for i in 0..ids.len() {
             for j in i + 1..ids.len() {
@@ -428,7 +436,7 @@ mod tests {
             }
             v.into_iter().map(|x| x.expect("every parameter listed")).collect()
         };
-        for spec in [soft_clipper::SPEC, fast_distortion::SPEC, stereo_enhancer::SPEC, transient_processor::SPEC, chorus::SPEC, stereo_shaper::SPEC] {
+        for spec in [soft_clipper::SPEC, fast_distortion::SPEC, stereo_enhancer::SPEC, transient_processor::SPEC, chorus::SPEC, stereo_shaper::SPEC, flanger::SPEC, phaser::SPEC] {
             for name in all(spec) {
                 read(spec, &name);
             }
@@ -454,5 +462,13 @@ mod tests {
         assert_eq!(read(stereo_shaper::SPEC, "Effects/Stereoize 3"), [0, 12800, 12800, 0, 1408, -2496, 1]);
         assert_eq!(read(stereo_shaper::SPEC, "Effects/Narrow"), [8176, 12800, 12800, 8076, -1952, 0, 0]);
         assert_eq!(all(stereo_shaper::SPEC).len(), 21);
+        // Lemon Flanger and Lemon Phaser, Lemon Studio's own designs: the feedback is stored signed, so its preset
+        // step counts from -512.
+        assert_eq!(read(flanger::SPEC, "Jet"), [2100, 820, 600, 384, 512, 640]);
+        assert_eq!(read(flanger::SPEC, "Subtle thickening"), [1500, 300, 800, 156, 340, 340]);
+        assert_eq!(all(flanger::SPEC).len(), 6);
+        assert_eq!(read(phaser::SPEC, "Negative feedback"), [1500, 700, 2400, -400, 2, 512, 600]);
+        assert_eq!(read(phaser::SPEC, "Vibrato"), [1600, 620, 2600, 0, 1, 512, 1024]);
+        assert_eq!(all(phaser::SPEC).len(), 7);
     }
 }

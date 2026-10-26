@@ -1,0 +1,10 @@
+OSPRESET 1
+plugin=Lemon Phaser	id=clap:org.openstudio.lemon-phaser	format=clap	body=params
+# Values: OpenStudio-specs plugins/factory-presets.md.
+Rate = 900
+Depth = 800
+Center = 2200
+Feedback = 972
+Stages = 3
+Stereo = 683
+Mix = 512
