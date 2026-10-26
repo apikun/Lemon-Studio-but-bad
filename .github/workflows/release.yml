@@ -1,0 +1,103 @@
+# Builds the release app and the plugin bundles for Windows, Linux and macOS, and attaches them to a GitHub release
+# (a push of a tag `v*`) or uploads them as workflow artifacts (a manual run), so the alpha can be run without
+# building from source. The macOS app is signed ad hoc only (as `bundle-app` builds it); Gatekeeper asks before an
+# unsigned download runs.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            archive: Lemon-Studio-windows-x86_64.zip
+          - name: Linux
+            os: ubuntu-24.04
+            archive: Lemon-Studio-linux-x86_64.tar.gz
+          - name: macOS
+            os: macos-latest
+            archive: Lemon-Studio-macos-arm64.zip
+    steps:
+      - uses: actions/checkout@v4
+
+      # As in ci.yml: ALSA for the audio output, the Wayland headers for the file dialogs' wayland-client, libclang
+      # for the time stretcher's build-time bindings.
+      - name: Install Linux packages
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev libwayland-dev libclang-dev pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked -p os-app
+
+      - name: Bundle the app
+        if: runner.os == 'macOS'
+        run: cargo run -p bundle-app --locked
+
+      # The VST3 and CLAP bundles for other DAWs; Lemon Studio itself needs none of them.
+      - name: Bundle plugins
+        run: cargo run -p bundle-plugins --locked
+
+      # One folder per system: the app (the .app bundle on macOS), the plugin bundles, and the licence files.
+      - name: Assemble the archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force Lemon-Studio | Out-Null
+          Copy-Item target/release/lemonstudio.exe Lemon-Studio/
+          Copy-Item README.md,LICENSE,THIRD-PARTY-NOTICES.txt Lemon-Studio/
+          Copy-Item target/bundled Lemon-Studio/plugins -Recurse
+          Compress-Archive -Path Lemon-Studio -DestinationPath ${{ matrix.archive }}
+
+      - name: Assemble the archive (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir Lemon-Studio
+          cp target/release/lemonstudio Lemon-Studio/
+          cp README.md LICENSE THIRD-PARTY-NOTICES.txt Lemon-Studio/
+          cp -r target/bundled Lemon-Studio/plugins
+          tar czf ${{ matrix.archive }} Lemon-Studio
+
+      - name: Assemble the archive (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir stage
+          cp -R "target/bundled/Lemon Studio.app" stage/
+          cp README.md LICENSE THIRD-PARTY-NOTICES.txt stage/
+          cp -r target/bundled stage/plugins
+          ditto -c -k --sequesterRsrc --keepParent stage ${{ matrix.archive }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive }}
+          path: ${{ matrix.archive }}
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.archive }}
+          generate_release_notes: true
