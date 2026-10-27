@@ -1,6 +1,7 @@
-# Builds Lemon Studio for Windows and attaches the portable exe to a GitHub release: a `v*` tag pushed to the
-# repository (or a manual dispatch) becomes a release with `Lemon-Studio-windows-x64.zip`. The build is the one CI
-# checks (see ci.yml): Windows 10+, x64 — and the build Winlator (Wine on Android) runs, since nothing needs the GPU.
+# Builds Lemon Studio for Windows and Linux and attaches the portable builds to a GitHub release: a `v*` tag pushed to
+# the repository (or a manual dispatch) becomes a release with `Lemon-Studio-windows-x64.zip` and
+# `Lemon-Studio-linux-x64.zip`. The builds are the ones CI checks (see ci.yml): Windows 10+, x64 — the build Winlator
+# (Wine on Android) runs, since nothing needs the GPU — and Linux on X11 or Wayland, x64.
 name: Release
 
 on:
@@ -9,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag, created if it does not exist (e.g. v0.0.1)'
+        description: 'Release tag, created if it does not exist (e.g. v0.2.0)'
         required: true
-        default: 'v0.0.1'
+        default: 'v0.2.0'
 
 permissions:
   contents: write
@@ -53,11 +54,59 @@ jobs:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           name: Lemon Studio ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           body: |
-            Lemon Studio for Windows (x64): the portable build that runs on Windows 10 and 11, and under Wine — for
-            example Winlator on Android.
+            Lemon Studio for Windows (x64) and Linux (x64): the portable builds that run on Windows 10 and 11, Linux on
+            X11 or Wayland, and under Wine — for example Winlator on Android.
 
-            - Unzip and run `lemonstudio.exe`: no installer, and nothing else to install.
+            - Unzip and run `lemonstudio` (`lemonstudio.exe` on Windows): no installer, and nothing else to install.
+            - v0.2: the new Lemon Acid (an acid bass, the roadmap's Transistor Bass) joins the instruments, and on a
+              narrow window the top band scales down to fit, so the output monitor's waveform display stays visible
+              (the Wine and Winlator reports).
             - On Winlator, see the README's "Winlator (Android)" section: shared audio mode, Buffer length 1024.
             - If it will not start, `%APPDATA%\Lemon Studio\panic-log.txt` says why.
           files: Lemon-Studio-windows-x64.zip
+          fail_on_unmatched_files: true
+
+  linux:
+    name: Linux x64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # libclang for the time stretcher's bindings, ALSA's and Wayland's development files for the build (as ci.yml).
+      - name: Native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libasound2-dev libwayland-dev libclang-dev pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked -p os-app
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/release/lemonstudio dist/
+          cp README.md dist/
+          cp THIRD-PARTY-NOTICES.txt dist/
+          zip -r Lemon-Studio-linux-x64.zip dist
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: Lemon Studio ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          body: |
+            Lemon Studio for Windows (x64) and Linux (x64): the portable builds that run on Windows 10 and 11, Linux on
+            X11 or Wayland, and under Wine — for example Winlator on Android.
+
+            - Unzip and run `lemonstudio` (`lemonstudio.exe` on Windows): no installer, and nothing else to install.
+            - v0.2: the new Lemon Acid (an acid bass, the roadmap's Transistor Bass) joins the instruments, and on a
+              narrow window the top band scales down to fit, so the output monitor's waveform display stays visible
+              (the Wine and Winlator reports).
+            - On Winlator, see the README's "Winlator (Android)" section: shared audio mode, Buffer length 1024.
+            - If it will not start, `%APPDATA%\Lemon Studio\panic-log.txt` says why.
+          files: Lemon-Studio-linux-x64.zip
           fail_on_unmatched_files: true
