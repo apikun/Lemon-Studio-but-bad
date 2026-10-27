@@ -97,10 +97,31 @@ pub fn toolbar_scale(main: f32) -> f32 {
     pct.map_or(main, |p| p / 100.0)
 }
 
+/// The least a band that auto fits paints at, of its own px per window px (`band_k`): below it the far panels are left
+/// out again (`toolbar::room`) and widening the window or lowering Toolbars scaling is the only way.
+const BAND_FIT_MIN: f32 = 0.5;
+
+/// The band's scale for a window `width` logical px wide (its rows, layout `l`, `editing`): Toolbars scaling, lowered
+/// when the band at it is wider than the window, so every panel keeps showing instead of being left out from the right
+/// — the output monitor's waveform display among them, gone on the small windows of Wine and Winlator (2026-10-27).
+/// A scaling chosen by name ("Main", the default) only: a percentage is the user's measured wish and is kept. While
+/// the toolbar editor is up the scale is kept too (its palette needs the band's full size to drag on). At
+/// `BAND_FIT_MIN` it stops: narrower than that, the ▶ arrow comes back (`toolbar::room`).
+pub fn toolbar_scale_fit(main: f32, width: f32, l: &crate::toolbar::Layout, editing: bool) -> f32 {
+    let k = toolbar_scale(main) / main.max(0.01);
+    if editing || !crate::prefs::is_main_choice(&crate::prefs::TOOLBARS_SCALING) {
+        return k * main.max(0.01);
+    }
+    // Window px per band px at which every panel shows: the band's full natural width plus the ▶ arrow's room.
+    let full = crate::toolbar::natural_width(l, editing) + toolbar::MORE_W;
+    let k = k.min((width / full).max(BAND_FIT_MIN));
+    k * main.max(0.01)
+}
+
 /// The window's px per px of the top band at the last paint's scale: 1 at Toolbars scaling Main.
 pub fn band_k(s: &State) -> f32 {
     let main = s.ui_scale.max(0.01);
-    toolbar_scale(main) / main
+    toolbar_scale_fit(main, s.screen.0, &s.bar.layout, s.bar.editing) / main
 }
 
 /// Height of the top band in the window's px (shown or not): its rows' (`toolbar::Layout::band_h`, `WORK_Y` for two)
@@ -233,8 +254,9 @@ pub fn paint(ui: &mut Ui, s: &State, f: &FrameInfo) -> usize {
     }
     if !s.toolbar.hidden {
         // At Toolbars scaling (spec: ui/ui-scaling.md §1): the band works in its own px, `k` of the window's each, so
-        // it is `w / k` of them wide; what doesn't fit is left out (`toolbar::room`).
-        let scale = toolbar_scale(ui.c.scale);
+        // it is `w / k` of them wide; what doesn't fit is left out (`toolbar::room`). On a window too narrow for every
+        // panel, the scale lowers instead (`toolbar_scale_fit`), so none is left out.
+        let scale = toolbar_scale_fit(ui.c.scale, w, &s.bar.layout, s.bar.editing);
         ui.part(Seg::Toolbar, Rect::new(0.0, 0.0, w, band_h(s)), |ui| ui.scaled(scale, |ui, k| toolbar::paint(ui, s, f, w / k)));
     }
     // The floating hint bar, over every window (spec: ui/toolbar-menu.md §4).
@@ -245,7 +267,7 @@ pub fn paint(ui: &mut Ui, s: &State, f: &FrameInfo) -> usize {
     // The toolbar editor's palette goes over the windows, which docked plugin windows leave free like any overlay (spec:
     // ui/toolbar-menu.md §8).
     if s.bar.editing && !s.toolbar.hidden {
-        let scale = toolbar_scale(ui.c.scale);
+        let scale = toolbar_scale_fit(ui.c.scale, w, &s.bar.layout, s.bar.editing);
         ui.scaled(scale, |ui, k| toolbar::paint_palette(ui, s, f, w / k));
     }
     if let Some(m) = s.menu_open {

@@ -689,6 +689,12 @@ pub fn choice(c: &Combo) -> &'static str {
     c.choices[index(c)]
 }
 
+/// Whether combo `c` is on its choice by name ("Main", the first of the scaling combos): what it does follows another
+/// setting, rather than a value of its own.
+pub fn is_main_choice(c: &Combo) -> bool {
+    index(c) == 0
+}
+
 /// Chooses entry `i` of combo `c` and keeps it (an index past its choices changes nothing).
 pub fn set_choice(c: &Combo, i: usize) {
     if let Some(v) = c.choices.get(i) {

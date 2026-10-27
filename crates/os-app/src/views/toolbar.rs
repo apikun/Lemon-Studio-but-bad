@@ -1294,14 +1294,21 @@ mod tests {
         app.mouse_up();
         assert_eq!((app.state.message.clone(), app.state.menu_open, app.state.settings.open), before, "a click does nothing");
 
-        // Main on a narrower window: the same rule (the CPU panel fits, the last buttons don't).
+        // Main on a narrower window: the band scales down to fit it (auto fit, 2026-10-27), so every panel keeps
+        // showing — the Wine / Winlator reports' missing waveform display. Past the 50 % floor, panels leave again.
         set_choice(&TOOLBARS_SCALING, 0);
         let Ok(mut narrow) = Canvas::new(1300, 800, 1.0) else { return };
         app.invalidate();
         app.paint(&mut narrow, None);
+        assert_eq!(more(&app), None, "auto fit keeps every panel");
+        assert!(has(&app, &Action::Monitor) && has(&app, &Action::CpuPanel) && has(&app, &Action::PatternPrev));
+        // 600 px: the floor is past. The monitor still shows; the CPU panel and the utilities go, the arrow says why.
+        let Ok(mut tiny) = Canvas::new(600, 800, 1.0) else { return };
+        app.invalidate();
+        app.paint(&mut tiny, None);
         let (r, _) = more(&app).expect("the arrow");
-        assert_eq!(r, Rect::new(1300.0 - MORE_W, 0.0, MORE_W, 81.0));
-        assert!(has(&app, &Action::CpuPanel) && has(&app, &Action::PatternPrev));
-        assert!(!app.hits.iter().any(|h| h.hint == "About Lemon Studio" || h.hint == "Project info (F11)"));
+        assert_eq!(r, Rect::new(600.0 - MORE_W / 2.0, 0.0, MORE_W / 2.0, 81.0 * 0.5));
+        assert!(has(&app, &Action::Monitor) && has(&app, &Action::PatternPrev));
+        assert!(!has(&app, &Action::CpuPanel) && !app.hits.iter().any(|h| h.hint == "About Lemon Studio"));
     }
 }

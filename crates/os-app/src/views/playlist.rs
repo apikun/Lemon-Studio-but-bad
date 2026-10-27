@@ -162,7 +162,10 @@ pub fn paint(ui: &mut Ui, s: &State, r: Rect, f: &FrameInfo) {
     let last = pl::clips(s).iter().map(|c| c.end() as f32 / bar_t).fold(0.0, f32::max);
     let bars = (last.ceil() + 16.0).max(100.0);
     let (hbar, vbar) = bar_sizes();
-    let over = Rect::new(grid_x, client.y + 1.0, grid_w, hbar);
+    // The same arithmetic `overview_rect` does (`grid.y` is `grid_rect`'s), so the two agree to the bit at the
+    // fractional band scales (`views::toolbar_scale_fit`).
+    let grid_y = client.y + 42.0 + if has_markers { MARKER_H } else { 0.0 };
+    let over = Rect::new(grid_x, grid_y - if has_markers { MARKER_H } else { 0.0 } - 41.0, grid_w, hbar);
     debug_assert_eq!(over, overview_rect(s, grid));
     super::scrollbar(ui, over, false, sx, grid_w, bars * bar_w, crate::app::Scroll::PlaylistX);
     // High visibility: two lighter edges at the top and bottom of the track, around the thumb (spec:
