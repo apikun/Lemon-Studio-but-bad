@@ -1,5 +1,6 @@
 // Copyright (C) 2026 ItsAlphaNeon
 // Copyright (C) 2026 thacer13
+// Copyright (C) 2026 Artig3nce
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -1327,7 +1328,8 @@ impl App {
                 retimed: false,
                 file: None,
                 path: None,
-                z: vec![Win::Playlist, Win::ChannelRack],
+                // A start shows the playlist, the mixer along the bottom and the channel rack on top, as in FL.
+                z: vec![Win::Playlist, Win::Mixer, Win::ChannelRack],
                 no_focus: false,
                 show_browser: true,
                 rack_pos: (317.0, 195.0),
@@ -1403,7 +1405,8 @@ impl App {
                 pat_ui: Default::default(),
                 wins: [
                     WinState { rect: Rect::new(693.0, 101.0, 1126.0, 378.0), maxed: true, mini: false },
-                    WinState { rect: Rect::new(231.0, 565.0, 1552.0, 435.0), maxed: true, mini: false },
+                    // The mixer floats along the bottom of the workspace, under the playlist, as in FL.
+                    WinState { rect: Rect::new(231.0, 565.0, 1552.0, 435.0), maxed: false, mini: false },
                     WinState { rect: Rect::new(480.0, 140.0, 1000.0, 640.0), maxed: true, mini: false },
                 ],
                 screen: (1920.0, 1080.0),
@@ -12505,6 +12508,8 @@ mod tests {
             let Ok(mut a) = Canvas::new(1920, 1080, 1.0) else { return };
             let mut b = Canvas::new(1920, 1080, 1.0).unwrap();
             let mut app = App::new(None);
+            // The mixer a start shows keeps its meters moving: closed here.
+            app.state.z.retain(|w| *w != Win::Mixer);
             app.theme = design_theme(design, false);
             app.act(Action::ToggleWin(Win::Tapper));
             app.state.tapper.test_time = Some(1.0);
@@ -13644,6 +13649,8 @@ mod tests {
     fn browser_splitter_resizes_the_browser() {
         let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
         let mut app = App::new(None);
+        // The floating mixer a start shows would cover the splitter once the browser is wider: closed here.
+        app.state.z.retain(|w| *w != Win::Mixer);
         frame(&mut app, &mut c, None);
         let split = hit_rect(&app, &Action::BrowserSplitter);
         assert_eq!((split.x, split.right()), (201.0, 209.0), "the measured splitter");
@@ -17568,6 +17575,7 @@ mod tests {
 
         // F5 brings a covered playlist to the front.
         app.state.z = vec![Win::Playlist, Win::Mixer];
+        app.state.wins[1].maxed = true;
         app.key(&Key::Named(NamedKey::F5), false, false);
         assert_eq!(app.state.z.last(), Some(&Win::Playlist));
         assert!(app.state.shown(Win::Playlist));
