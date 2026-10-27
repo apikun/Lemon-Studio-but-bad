@@ -138,7 +138,8 @@ install only the plugins with `cargo run -p bundle-plugins -- --install`.
 
 ### Windows
 
-Windows 10 or 11, x64.
+Windows 10 or 11, x64. A ready-to-run build is attached to this repository's GitHub releases: a portable
+`lemonstudio.exe`, with no installer and no runtime to install.
 
 **Prerequisites**
 
@@ -178,6 +179,25 @@ and `...\CLAP`, where DAWs find them. To build and install them without starting
   record (`HKEY_LOCAL_MACHINE\SOFTWARE\VST`, `VSTPluginsPath`) and in those of `%PROGRAMFILES%\VSTPlugins`,
   `%PROGRAMFILES%\Steinberg\VSTPlugins`, `%COMMONPROGRAMFILES%\VST2` and `%COMMONPROGRAMFILES%\Steinberg\VST2` that
   exist. 32-bit VST2 plugins cannot be loaded: they are listed as not supported, without being tried.
+
+#### Winlator (Android)
+
+The release build runs on Winlator, which runs Windows programs on Android through Wine and Box64. The interface is
+drawn by the CPU (no GPU is used), so it runs in any container on any GPU driver, and the CPU panel's FPS reading
+shows how fast it paints.
+
+**Setup**
+
+- Container: Wine 9.x or newer, the Box64 preset "Performance" (if the program will not start, try "Compatibility"),
+  four CPU cores or more.
+- Audio: the container's PulseAudio driver is the sound card. In Settings > Audio leave shared mode on; if playback
+  pops, set Buffer length to 1024.
+- Exclusive (WASAPI) mode, ASIO drivers and IAudioClient3's short buffers are not implemented by Wine: the program
+  falls back to shared mode on its own and says so above the status lines.
+
+**If it will not start**, or a plugin crashes it, `%APPDATA%\Lemon Studio\panic-log.txt` (in the container:
+`C:\users\<user>\AppData\Roaming\Lemon Studio\panic-log.txt`) holds the last panic's message, and a failure at
+startup shows a message box instead of closing quietly.
 
 ### Linux
 
@@ -636,6 +656,7 @@ every feature marked as done, in progress or not started.
 - ✅ Contributing rules (clean-room only) and community links in the README
 - ✅ New name and logo: Lemon Studio
 - ✅ Automatic builds and tests on Windows and Linux for every change
+- ✅ Windows releases: a portable x64 build attached to GitHub releases, runs under Wine (Winlator on Android)
 - 🚧 Pre-alpha: expect breaking changes
 - ✅ Linux support (groundwork: builds off Windows, Wayland fixes)
 - ✅ Linux: runs on X11 and Wayland (through XWayland), plugin windows docked as on Windows, crisp text at any scale

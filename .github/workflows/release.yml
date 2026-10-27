@@ -1,0 +1,63 @@
+# Builds Lemon Studio for Windows and attaches the portable exe to a GitHub release: a `v*` tag pushed to the
+# repository (or a manual dispatch) becomes a release with `Lemon-Studio-windows-x64.zip`. The build is the one CI
+# checks (see ci.yml): Windows 10+, x64 — and the build Winlator (Wine on Android) runs, since nothing needs the GPU.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, created if it does not exist (e.g. v0.0.1)'
+        required: true
+        default: 'v0.0.1'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Windows image ships LLVM, whose libclang generates the time stretcher's and the ASIO SDK's bindings.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked -p os-app
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/release/lemonstudio.exe dist/
+          Copy-Item README.md dist/
+          Copy-Item THIRD-PARTY-NOTICES.txt dist/
+          Compress-Archive -Path dist/* -DestinationPath Lemon-Studio-windows-x64.zip -Force
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: Lemon Studio ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          body: |
+            Lemon Studio for Windows (x64): the portable build that runs on Windows 10 and 11, and under Wine — for
+            example Winlator on Android.
+
+            - Unzip and run `lemonstudio.exe`: no installer, and nothing else to install.
+            - On Winlator, see the README's "Winlator (Android)" section: shared audio mode, Buffer length 1024.
+            - If it will not start, `%APPDATA%\Lemon Studio\panic-log.txt` says why.
+          files: Lemon-Studio-windows-x64.zip
+          fail_on_unmatched_files: true

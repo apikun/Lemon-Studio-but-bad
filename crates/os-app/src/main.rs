@@ -698,13 +698,14 @@ impl ApplicationHandler for Shell {
             let attrs = WindowAttributesExtX11::with_name(attrs, APP_ID, APP_ID);
             attrs.with_window_icon(linux_icon())
         };
-        let window = Rc::new(el.create_window(attrs).expect("create window"));
+        let window = Rc::new(el.create_window(attrs).unwrap_or_else(|e| fatal("could not open the main window", e.to_string())));
         #[cfg(target_os = "macos")]
         if frame.is_some_and(|m| m.max) {
             set_maximized(&window, true);
         }
-        let context = softbuffer::Context::new(window.clone()).expect("graphics context");
-        self.surface = Some(softbuffer::Surface::new(&context, window.clone()).expect("surface"));
+        let context = softbuffer::Context::new(window.clone()).unwrap_or_else(|e| fatal("could not create the graphics context", e.to_string()));
+        let surface = softbuffer::Surface::new(&context, window.clone()).unwrap_or_else(|e| fatal("could not create the drawing surface", e.to_string()));
+        self.surface = Some(surface);
         // Hosted plugins: windows are owned by the main window; scanning loads the .clap files found.
         #[cfg(windows)]
         {
@@ -1723,7 +1724,38 @@ fn wake_ui() {
     }
 }
 
+/// Tells the user of a startup failure and ends the program. Windows shows a message box: run from a shortcut, or
+/// under Wine (Winlator on Android), there is no console to read the error from, and the program would just vanish.
+fn fatal(what: &str, why: String) -> ! {
+    let message = format!("Lemon Studio could not start.\n\n{what}: {why}");
+    eprintln!("{message}");
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+        let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
+        let (text, title) = (wide(&message), wide("Lemon Studio"));
+        MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), MB_ICONERROR | MB_OK);
+    }
+    std::process::exit(1);
+}
+
+/// Panics append a line to `panic-log.txt` in the user folder, so a run without a console (Windows from a shortcut,
+/// or Winlator) can read what went wrong after the fact. The default report still goes to stderr.
+fn log_panics() {
+    use std::io::Write;
+    std::panic::set_hook(Box::new(|info| {
+        let line = format!("{info}");
+        eprintln!("{line}");
+        if let Some(dir) = os_paths::user_dir() {
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("panic-log.txt"))
+                .and_then(|mut f| writeln!(f, "{} {line}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")));
+        }
+    }));
+}
+
 fn main() {
+    log_panics();
     let args: Vec<String> = std::env::args().skip(1).collect();
     // A plugin scanner process (spec: ui/plugin-manager.md §4): loads one file, prints its plugins, ends.
     if args.first().map(String::as_str) == Some(plugin_scan::ARG) {
@@ -1761,7 +1793,7 @@ fn main() {
         use winit::platform::x11::EventLoopBuilderExtX11;
         builder.with_x11();
     }
-    let event_loop = builder.build().expect("event loop");
+    let event_loop = builder.build().unwrap_or_else(|e| fatal("could not open the event loop", e.to_string()));
     // The startup splash, from here until startup is done (spec: ui/settings-choices.md "Miscellaneous: naming,
     // detached plugins and startup"); each step below moves its gauge on. After the event loop: on Windows building it
     // makes the process per-monitor DPI aware, which the splash's size follows.
@@ -1833,7 +1865,7 @@ fn main() {
         ctrl_click: false,
         main_win: layout::main_win(),
     };
-    event_loop.run_app(&mut shell).expect("run");
+    event_loop.run_app(&mut shell).unwrap_or_else(|e| fatal("the event loop stopped", e.to_string()));
     // After a contained plugin crash the process ends here, before plugin files are unloaded (a stopped plugin's code
     // must not run again).
     if os_host::guard::tripped() {
