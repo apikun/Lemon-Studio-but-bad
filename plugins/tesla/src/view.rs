@@ -39,7 +39,7 @@ const RIGHT_WAVE: Color = Color::rgb(0xd4b43c);
 const FLAG: Color = Color::rgb(0xf0a030);
 const LOOP: Color = Color::rgb(0xe0505a);
 const RECORD: Color = Color::rgb(0xe8503c);
-const SEL: Color = Color::rgb(0xffe066);
+const SEL: Color = Color::rgb(0xffa33a);
 
 const CAPTION: Font = Font::condensed(9, 0).bold();
 const VALUE: Font = Font::new(11).bold();
