@@ -4034,6 +4034,10 @@ impl App {
             peaks: self.transport.peaks(),
             sounding: self.shown.sounding.clone(),
             song_pos_drag: matches!(self.drag, Some(Drag::SongPos { .. })),
+            fader_drag: match self.drag {
+                Some(Drag::Fader { track, .. }) => Some(track),
+                _ => None,
+            },
             bar_drag: match self.drag {
                 Some(Drag::Bar(d)) => Some(d),
                 _ => None,

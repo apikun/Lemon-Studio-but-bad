@@ -407,7 +407,17 @@ fn strip(ui: &mut Ui, s: &State, n: u16, left: f32, bottom: f32, f: &FrameInfo, 
     if n != 0 {
         let hr = Rect::new(left, ly.y(HEAD_Y0), STRIP_W, ly.y(HEAD_Y1) - ly.y(HEAD_Y0) + 1.0);
         ui.c.fill_rect(hr, ui.t.s(0x2b2e30));
-        if selected && lemon {
+        let own = s.project.mixer.iter().find(|m| m.index == n).and_then(|m| m.color).map(super::rgb);
+        let pill = Rect::new(hr.x + 3.0, hr.y + 2.0, hr.w - 6.0, hr.h - 4.0);
+        if let (true, Some(col)) = (lemon, own) {
+            // Mango: a coloured track's number sits on a pill of its colour (lit for the black), outlined in mango
+            // when selected.
+            ui.c.fill_rrect(pill, lk::r_btn(t), readable_on_black(col));
+            if selected {
+                ui.c.stroke_rrect(pill.outset(1.0), lk::r_btn(t) + 1.0, 2.0, t.accent);
+            }
+            ui.c.text_center(Font::new(17), Rect::new(left, ly.y(HEAD_Y0), STRIP_W, 21.0), Color::rgb(0x141414), &n.to_string());
+        } else if selected && lemon {
             lk::lit_in(ui.c, ui.t, Rect::new(hr.x + 3.0, hr.y + 2.0, hr.w - 6.0, hr.h - 4.0), lk::r_btn(t), false);
         } else if selected {
             // Hatched header for the selected strip.
@@ -418,8 +428,18 @@ fn strip(ui: &mut Ui, s: &State, n: u16, left: f32, bottom: f32, f: &FrameInfo, 
             }
             ui.c.pop_clip();
         }
-        let c = if selected && lemon { lk::ink_on_lit(ui.t) } else if selected || hov { ui.t.tx(0x9aa1a5) } else { ui.t.s(0x6d7275) };
-        ui.c.text_center(Font::new(17), Rect::new(left, ly.y(HEAD_Y0), STRIP_W, 21.0), c, &n.to_string());
+        if !(lemon && own.is_some()) {
+            let c = if selected && lemon {
+                lk::ink_on_lit(ui.t)
+            } else if selected || hov {
+                ui.t.tx(0x9aa1a5)
+            } else if lemon {
+                ui.t.tx(0x8c8c8c)
+            } else {
+                ui.t.s(0x6d7275)
+            };
+            ui.c.text_center(Font::new(17), Rect::new(left, ly.y(HEAD_Y0), STRIP_W, 21.0), c, &n.to_string());
+        }
     }
 
     // Dark head panel (name, LED, pan) with a rounded bottom.
@@ -456,12 +476,18 @@ fn strip(ui: &mut Ui, s: &State, n: u16, left: f32, bottom: f32, f: &FrameInfo, 
 
     // Name, rotated, reading upward from the bottom of the meter.
     let name = track.and_then(|m| m.name.clone()).unwrap_or_else(|| if n == 0 { "Master".into() } else { format!("Insert {n}") });
-    let name_c = track
-        .and_then(|m| m.color)
-        .map(super::rgb)
-        .map_or(if selected { ui.t.tx(0xaab2b7) } else if also { ui.t.tx(0xe4e8ea) } else { ui.t.s(0x7f868a) }, |c| {
-            if also { c.mix(ui.t.tx(0xffffff), 0.5) } else { c.mix(ui.t.s(0x7f868a), 0.4) }
-        });
+    // Mango: names near white on the black strips, the selected track's in mango; a track's colour shows on its number's
+    // pill at the top instead.
+    let name_c = if lemon {
+        if selected { t.accent } else { ui.t.tx(0xe2e2e2) }
+    } else {
+        track
+            .and_then(|m| m.color)
+            .map(super::rgb)
+            .map_or(if selected { ui.t.tx(0xaab2b7) } else if also { ui.t.tx(0xe4e8ea) } else { ui.t.s(0x7f868a) }, |c| {
+                if also { c.mix(ui.t.tx(0xffffff), 0.5) } else { c.mix(ui.t.s(0x7f868a), 0.4) }
+            })
+    };
     ui.c.push_clip(Rect::new(left + 2.0, ly.y(PANEL_Y0), 20.0, ly.y(METER_Y1) - ly.y(PANEL_Y0)));
     ui.c.text_vertical(Font::new(15), sx - 7.0, meter.bottom() - 1.0, name_c, &name);
     ui.c.pop_clip();
@@ -516,8 +542,11 @@ fn strip(ui: &mut Ui, s: &State, n: u16, left: f32, bottom: f32, f: &FrameInfo, 
         let r = 6.0;
         let bar = Rect::new(mx - r, hy - r, 2.0 * r, (track_y1 - 1.0 - (hy - r)).max(2.0 * r));
         let (top, bottom_c) = (t.brand_sel(os_theme::design::lemon::HIGHLIGHT), t.brand_sel(os_theme::design::lemon::MAIN));
-        let (top, bottom_c) = if selected { (top, bottom_c) } else { (top.mix(ui.t.s(0x141618), 0.38), bottom_c.mix(ui.t.s(0x141618), 0.32)) };
-        let (top, bottom_c) = if hov { (top.shade(0.12), bottom_c.shade(0.12)) } else { (top, bottom_c) };
+        // Full mango on the selected strip and while held; softer on the others, a little brighter under the pointer.
+        let held = f.fader_drag == Some(n);
+        let (top, bottom_c) = if selected || held { (top, bottom_c) } else { (top.mix(ui.t.s(0x141618), 0.38), bottom_c.mix(ui.t.s(0x141618), 0.32)) };
+        let lift = if held { 0.07 } else if hov { 0.12 } else { 0.0 };
+        let (top, bottom_c) = (top.shade(lift), bottom_c.shade(lift));
         ui.c.fill_rect_gradient(bar, top, bottom_c, r);
     } else {
         if selected {
@@ -596,6 +625,14 @@ fn mixer_knob(ui: &mut Ui, cx: f32, cy: f32, r: f32, halo: f32, value: f32, arc:
     let hov = ui.hovering(Rect::new(cx - halo, cy - halo, 2.0 * halo, 2.0 * halo));
     let look = os_ui::kit::KnobLook::Mixer { halo, arc: arc.is_some() };
     os_ui::kit::knob(ui.c, ui.t, cx, cy, r, value, arc.unwrap_or(false), look, os_ui::kit::State::hover(hov));
+}
+
+/// A track colour on the Mango skin's black strips (its number's pill): its hue kept, lit to at least 68 % lightness and given some
+/// saturation back, so a dark red reads as a clear red; greys stay grey and light colours as they are.
+fn readable_on_black(c: Color) -> Color {
+    let (h, s, l) = c.hsl();
+    let s = if s < 0.08 { s } else { s.max(0.6) };
+    Color::from_hsl_pub(h, s, l.clamp(0.68, 0.85), 255)
 }
 
 /// Gain marks beside a fader track (spec: ui/mixer.md §5, measured from FL): 6 px ticks on both sides at 0, −6, −12 and
