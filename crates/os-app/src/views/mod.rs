@@ -7,6 +7,7 @@
 // spec: ui/main-window.md
 
 pub mod browser;
+pub mod plugin_panel;
 pub mod cabledebug;
 pub mod channel_win;
 pub mod data_folder;

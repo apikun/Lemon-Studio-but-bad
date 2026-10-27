@@ -1,5 +1,6 @@
 // Copyright (C) 2026 ItsAlphaNeon
 // Copyright (C) 2026 thacer13
+// Copyright (C) 2026 ravenmarkdev-alt
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -33,6 +34,8 @@ pub enum PlugCmd {
     /// Settings > Plugins.
     Manage,
     View(MenuView),
+    /// The plugin browser's star on the family of plugin `index` (an effect when `effect`, else a generator).
+    Star { effect: bool, index: usize },
 }
 
 /// Which plugins a menu lists and where a pick goes (spec §1).
@@ -201,9 +204,36 @@ pub fn run(app: &mut App, c: PlugCmd) -> Option<String> {
             app.prefs_changed();
             None
         }
+        PlugCmd::Star { effect, index } => {
+            star(app, effect, index);
+            None
+        }
     };
     app.invalidate();
     m
+}
+
+/// Stars the family of plugin `index` (its variant a click adds), or unstars every starred variant of it.
+fn star(app: &mut App, effect: bool, index: usize) {
+    let db = &mut app.state.plugdb;
+    let list = if effect { &db.lists.fx } else { &db.lists.gens };
+    let Some(fam) = db::families(list, effect).into_iter().find(|f| f.variants.iter().any(|e| e.index == index)) else { return };
+    let starred: Vec<&str> = fam.variants.iter().filter(|e| e.favorite).map(|e| e.uid.as_str()).collect();
+    if starred.is_empty() {
+        db.prefs.toggle_favorite(&fam.entry().uid);
+    } else {
+        for uid in starred {
+            db.prefs.toggle_favorite(uid);
+        }
+    }
+    app.prefs_changed();
+}
+
+/// Plugin `uid` was added: first in the plugin browser's Recent.
+fn note_recent(app: &mut App, uid: &str) {
+    let prefs = &mut app.state.plugdb.prefs;
+    prefs.note_recent(uid);
+    prefs.save();
 }
 
 /// A new channel for generator `index` (spec §1): at the bottom of the rack, or right below row `after`; selected and
@@ -211,6 +241,7 @@ pub fn run(app: &mut App, c: PlugCmd) -> Option<String> {
 /// channel hosting it. Its plugin window opens once it is hosted.
 pub fn add_generator(app: &mut App, index: usize, after: Option<usize>) -> Option<String> {
     let d = app.plugins.available.get(index)?.desc.clone();
+    note_recent(app, &d.uid());
     let s = &mut app.state;
     let sampler = d.name == crate::plugins::LEMON_SAMPLER && crate::project_plugins::is_builtin(&d);
     // One step, at the bottom (`history::add_channel`) or inserted higher up (`history::insert_channel`).
@@ -336,7 +367,13 @@ pub fn add_effect(app: &mut App, index: usize, slot: Option<u8>) -> Option<Strin
     let t = s.selected_mixer;
     let slot = slot.or_else(|| s.project.mixer.iter().find(|m| m.index == t).and_then(|m| m.slots.iter().position(Option::is_none)).map(|k| k as u8));
     match slot {
-        Some(k) => crate::mixer::run(app, crate::mixer::MCmd::AddEffect(k, index)),
+        Some(k) => {
+            if let Some(a) = app.plugins.effects.get(index) {
+                let uid = a.desc.uid();
+                note_recent(app, &uid);
+            }
+            crate::mixer::run(app, crate::mixer::MCmd::AddEffect(k, index))
+        }
         None => Some("Every slot of this track is in use".into()),
     }
 }

@@ -258,6 +258,11 @@ pub enum Action {
     BrowserSearch,
     /// The splitter right of the browser: drag to resize it, double-click for the default width (§9).
     BrowserSplitter,
+    /// The plugin browser (Plugin database tab): filter button `i` (`views::plugin_panel::FILTERS`), a category
+    /// (`None`: all of them), the star of row `i`.
+    BrowserPlugFilter(usize),
+    BrowserPlugCat(Option<&'static str>),
+    BrowserPlugStar(usize),
     PlaylistArea,
     MixerArea,
     RackArea,
@@ -1058,6 +1063,11 @@ pub struct State {
     /// runs, and the last press on the splitter, for its double click (spec: ui/browser.md §9).
     pub browser_w: f32,
     pub browser_split_click: Option<std::time::Instant>,
+    /// The plugin browser's filter button (`views::plugin_panel::FILTERS`) and category (`None`: all), and the last
+    /// press on one of its plugins, for its double click.
+    pub browser_plug_filter: usize,
+    pub browser_plug_cat: Option<&'static str>,
+    pub browser_plug_click: Option<(String, std::time::Instant)>,
     /// The hovered row whose label is scrolling, as last painted (spec: ui/browser.md §9).
     pub browser_marquee: std::cell::RefCell<Option<views::browser::Marquee>>,
     /// Plugin parameter lists and the last tweaked parameters (spec: plugins/plugin-parameters.md).
@@ -1427,6 +1437,9 @@ impl App {
                 browser_hist_pos: 0,
                 browser_w: crate::browser::load_width(),
                 browser_split_click: None,
+                browser_plug_filter: views::plugin_panel::ALL,
+                browser_plug_cat: None,
+                browser_plug_click: None,
                 browser_marquee: Default::default(),
                 tempo: 130.0,
                 tempo_digits: std::cell::Cell::new([f32::INFINITY; 3]),
@@ -6762,7 +6775,7 @@ impl App {
     fn wheel_act(&mut self, dx: f32, dy: f32, shift: bool, ctrl: bool) -> Option<Win> {
         let (x, y) = self.mouse;
         let area = self.top_hit(x, y).map(|h| h.action.clone());
-        if matches!(area, Some(Action::BrowserList | Action::BrowserRow(_) | Action::BrowserTab(_))) {
+        if matches!(area, Some(Action::BrowserList | Action::BrowserRow(_) | Action::BrowserTab(_) | Action::BrowserPlugStar(_))) {
             self.browser_wheel(dy + dx);
             return None;
         }
@@ -8153,6 +8166,7 @@ impl App {
             }
             Action::CloseWin(w) => s.hide(w),
             Action::BrowserRow(_) | Action::BrowserTab(_) | Action::BrowserList | Action::BrowserCollapse | Action::BrowserReread | Action::BrowserMenu | Action::BrowserSearch | Action::BrowserSplitter => {}
+            Action::BrowserPlugFilter(_) | Action::BrowserPlugCat(_) | Action::BrowserPlugStar(_) => {}
             Action::TypeIn(t) => crate::typein::click(s, t),
             Action::PlaylistArea | Action::MixerArea | Action::RackArea | Action::Swallow => {}
             Action::PlTool(_)
@@ -13299,13 +13313,10 @@ mod tests {
         click(&mut app, &mut c, r0);
         assert!(rows(&app.state).iter().all(|r| r.item != Item::Pattern(1)));
         assert_eq!(crate::playlist::clips(&app.state).len(), n0 + 1);
-        // Plugin database tab: open Generators, drag Lemon Sampler onto the playlist -> a new channel.
+        // Plugin database tab (the plugin browser): drag Lemon Sampler onto the playlist -> a new channel.
         app.plugins = crate::plugins::Plugins::builtins();
         app.state.plugdb.rebuild(&app.plugins);
         let r0 = hit_rect(&app, &Action::BrowserTab(2));
-        click(&mut app, &mut c, r0);
-        let gi = rows(&app.state).iter().position(|r| r.label == "Generators").unwrap();
-        let r0 = hit_rect(&app, &Action::BrowserRow(gi));
         click(&mut app, &mut c, r0);
         let si = rows(&app.state).iter().position(|r| r.item == Item::Generator(0)).expect("sampler row");
         let ch0 = app.state.project.channels.len();
