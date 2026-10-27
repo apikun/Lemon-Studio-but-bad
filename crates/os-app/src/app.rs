@@ -3175,6 +3175,7 @@ impl App {
     pub fn toggle_command_palette(&mut self) {
         self.state.palette.open = !self.state.palette.open;
         if self.state.palette.open {
+            self.typing_release_all();
             self.state.palette.query.clear();
             self.state.palette.selected = 0;
             self.state.palette.scroll = 0;
@@ -7391,6 +7392,10 @@ impl App {
     /// the octave keys while the switch is on, or the release of a held note); the caller then
     /// skips the normal shortcut handling. Spec: ui/typing-keyboard.md.
     pub fn typing_key(&mut self, code: KeyCode, pressed: bool, ctrl: bool, alt: bool) -> bool {
+        // While the command palette is open, all keystrokes go to search input, never MIDI notes.
+        if self.state.palette.open {
+            return false;
+        }
         // A playlist text box (track / marker name, point value) takes the letters.
         if pressed && (self.modal_open() || self.state.playlist.edit.is_some() || self.state.plugdb.finding || self.state.pat_ui.name_box.is_some() || self.state.pat_ui.confirm || self.browser_takes_typing() || self.state.perf.finding || self.state.picker.is_some()) {
             return false;
@@ -20914,5 +20919,23 @@ mod tests {
         let stop_idx = all.iter().position(|it| it.title == "Stop Playback").unwrap();
         app.act(Action::PaletteClick(stop_idx));
         assert!(!app.state.palette.open, "PaletteClick closed command palette");
+
+        // 11. Typing keyboard does not intercept palette keys
+        app.act(Action::ToggleCommandPalette);
+        assert!(app.state.palette.open);
+        assert!(!app.typing_key(winit::keyboard::KeyCode::KeyM, true, false, false), "Typing keyboard bypasses palette");
+        assert!(!app.typing_key(winit::keyboard::KeyCode::KeyA, true, false, false), "Typing keyboard bypasses palette");
+
+        // 12. Fast typing and shortcut enhancements
+        app.state.palette.query = "vocals and music".into();
+        // Ctrl+Backspace deletes last word
+        app.key(&Key::Named(NamedKey::Backspace), true, false);
+        assert_eq!(app.state.palette.query, "vocals and");
+        // Ctrl+A clears query
+        app.key(&Key::Character("a".into()), true, false);
+        assert_eq!(app.state.palette.query, "");
+        // Escape on empty closes palette
+        app.key(&Key::Named(NamedKey::Escape), false, false);
+        assert!(!app.state.palette.open);
     }
 }

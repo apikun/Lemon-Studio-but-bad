@@ -677,23 +677,42 @@ pub fn key(app: &mut App, key: &winit::keyboard::Key, ctrl: bool, alt: bool) -> 
             }
         }
         Key::Named(NamedKey::Backspace | NamedKey::Delete) => {
-            app.state.palette.query.pop();
+            if ctrl {
+                // Delete previous word on Ctrl+Backspace
+                let trimmed = app.state.palette.query.trim_end();
+                if let Some(idx) = trimmed.rfind(|c: char| c.is_whitespace() || c == ':') {
+                    app.state.palette.query.truncate(idx);
+                } else {
+                    app.state.palette.query.clear();
+                }
+            } else {
+                app.state.palette.query.pop();
+            }
             app.state.palette.selected = 0;
             app.state.palette.scroll = 0;
         }
-        Key::Named(NamedKey::Space) if !ctrl && !alt => {
+        Key::Named(NamedKey::Space) if !alt => {
             if app.state.palette.query.len() < 128 {
                 app.state.palette.query.push(' ');
                 app.state.palette.selected = 0;
                 app.state.palette.scroll = 0;
             }
         }
-        Key::Character(text) if !ctrl && !alt => {
-            let clean: String = text.chars().filter(|c| !c.is_control()).collect();
-            if app.state.palette.query.len() + clean.len() <= 128 {
-                app.state.palette.query.push_str(&clean);
-                app.state.palette.selected = 0;
-                app.state.palette.scroll = 0;
+        Key::Character(text) if !alt => {
+            // Allow typing even if Ctrl was momentarily held, unless it's a reserved shortcut
+            if ctrl && (text.eq_ignore_ascii_case("k") || text.eq_ignore_ascii_case("u") || text.eq_ignore_ascii_case("a")) {
+                if text.eq_ignore_ascii_case("u") || text.eq_ignore_ascii_case("a") {
+                    app.state.palette.query.clear();
+                    app.state.palette.selected = 0;
+                    app.state.palette.scroll = 0;
+                }
+            } else {
+                let clean: String = text.chars().filter(|c| !c.is_control()).collect();
+                if app.state.palette.query.len() + clean.len() <= 128 {
+                    app.state.palette.query.push_str(&clean);
+                    app.state.palette.selected = 0;
+                    app.state.palette.scroll = 0;
+                }
             }
         }
         _ => {}
