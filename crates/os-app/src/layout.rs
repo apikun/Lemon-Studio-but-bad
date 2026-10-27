@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 Artig3nce
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -55,15 +56,19 @@ fn switch(on: bool) -> f32 {
     if on { 1.0 } else { 0.0 }
 }
 
-/// The windows inside the main window back where `save` left them; one not kept (or unreadable) stays as it is.
-pub fn restore(s: &mut State) {
+/// The windows inside the main window back where `save` left them; one not kept (or unreadable) stays as it is. False
+/// when neither the Playlist, Mixer and Piano roll nor the Channel rack had a place kept (a first start).
+pub fn restore(s: &mut State) -> bool {
+    let mut kept = false;
     for (w, key) in WINS {
         let (Some(i), Some([x, y, rw, rh, max, mini])) = (w.slot(), numbers(key)) else { continue };
         if rw > 0.0 && rh > 0.0 {
             s.wins[i] = WinState { rect: Rect::new(x, y, rw, rh), maxed: max == 1.0, mini: mini == 1.0 };
+            kept = true;
         }
     }
     if let Some([x, y, w, h]) = numbers(RACK) {
+        kept = true;
         s.rack_pos = (x, y);
         // Not below the smallest size a resize leaves it (`views::rack::snap_size`).
         s.rack_size = (w.max(views::rack::min_w(s)), h.max(views::rack::MIN_H));
@@ -75,6 +80,21 @@ pub fn restore(s: &mut State) {
             *placed = true;
         }
     }
+    kept
+}
+
+/// Height of the mixer along the bottom of FL's layout (`fl_default`), its default floating height.
+const FL_MIXER_H: f32 = 435.0;
+
+/// FL's layout on the workspace there is (a first start, `State::fl_layout`): the Channel rack at its top left, the
+/// Playlist floating right of it down to the Mixer, and the Mixer floating along the bottom the whole width.
+pub fn fl_default(s: &mut State) {
+    let w = s.work_rect();
+    s.rack_pos = (w.x + 4.0, w.y + 4.0);
+    let mix_h = FL_MIXER_H.min(w.h * 0.5).max(Win::Mixer.min_size().1);
+    s.wins[1] = WinState { rect: Rect::new(w.x, w.bottom() - mix_h, w.w, mix_h), maxed: false, mini: false };
+    let px = s.rack_pos.0 + s.rack_size.0 + 8.0;
+    s.wins[0] = WinState { rect: Rect::new(px, w.y, w.right() - px, w.h - mix_h), maxed: false, mini: false };
 }
 
 /// Keeps where the windows inside the main window are, for the next start. The monitor, tapper and touch controller only
@@ -126,6 +146,23 @@ pub fn on_screens(m: MainWin, screens: &[[i32; 4]]) -> MainWin {
 mod tests {
     use super::*;
     use crate::app::App;
+
+    /// A first start lays the windows out as FL does: the Channel rack at the workspace's top left, the Playlist right of
+    /// it down to the Mixer, the Mixer along the bottom the whole width; none maximized.
+    #[test]
+    fn a_first_start_lays_the_windows_out_as_fl() {
+        let mut app = App::new(None);
+        let s = &mut app.state;
+        s.screen = (2560.0, 1440.0);
+        fl_default(s);
+        let w = s.work_rect();
+        let (pl, mx) = (s.win_rect(Win::Playlist), s.win_rect(Win::Mixer));
+        assert_eq!(s.rack_pos, (w.x + 4.0, w.y + 4.0));
+        assert_eq!((mx.x, mx.w, mx.bottom()), (w.x, w.w, w.bottom()), "the mixer along the bottom");
+        assert_eq!((pl.y, pl.right(), pl.bottom()), (w.y, w.right(), mx.y), "the playlist above it, to the right edge");
+        assert!(pl.x >= s.rack_pos.0 + s.rack_size.0, "right of the channel rack");
+        assert!(s.wins.iter().take(2).all(|ws| !ws.maxed));
+    }
 
     /// Moved, resized, maximized and collapsed windows come back as they were at the next start; the monitor, tapper and
     /// touch controller open where they were left instead of centred.
