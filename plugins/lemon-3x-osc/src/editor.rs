@@ -545,7 +545,7 @@ mod win32 {
                 tracking: false,
                 slot: slot.clone(),
             });
-            let title = pw::wide("Lemon Trio");
+            let title = pw::wide("Mango Trio");
             let hwnd = CreateWindowExW(
                 0,
                 class.as_ptr(),

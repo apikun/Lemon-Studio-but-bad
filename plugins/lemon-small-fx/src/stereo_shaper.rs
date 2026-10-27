@@ -79,9 +79,9 @@ const CONTROLS: [Control; 7] = [
 ];
 
 pub const SPEC: &Spec = &Spec {
-    name: "Lemon Stereo Shaper",
+    name: "Mango Stereo Shaper",
     word: "STEREO SHAPER",
-    about: "Lemon Studio's stereo shaper",
+    about: "Mango Studio's stereo shaper",
     settings: &SETTINGS,
     version: Some(dsp::VERSION),
     any_version: true,
@@ -207,7 +207,7 @@ pub struct StereoShaperKind;
 impl Kind for StereoShaperKind {
     const SPEC: &'static Spec = SPEC;
     const CLAP_ID: &'static str = "org.openstudio.lemon-stereo-shaper";
-    const CLAP_DESCRIPTION: &'static str = "Lemon Studio's stereo shaper";
+    const CLAP_DESCRIPTION: &'static str = "Mango Studio's stereo shaper";
     const CLAP_FEATURES: &'static [ClapFeature] = &[ClapFeature::AudioEffect, ClapFeature::Utility, ClapFeature::Mixing, ClapFeature::Stereo];
     const VST3_CLASS_ID: [u8; 16] = *b"LemonStudioStShp";
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[Vst3SubCategory::Fx, Vst3SubCategory::Spatial];

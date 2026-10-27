@@ -146,9 +146,9 @@ const CONTROLS: [Control; 6] = [
 ];
 
 pub const SPEC: &GenSpec = &GenSpec {
-    name: "Lemon Acid",
+    name: "Mango Acid",
     word: "ACID",
-    about: "Lemon Studio's acid bass",
+    about: "Mango Studio's acid bass",
     settings: &SETTINGS,
     version: None,
     any_version: false,
@@ -490,7 +490,7 @@ pub struct AcidKind;
 impl Kind for AcidKind {
     const SPEC: &'static GenSpec = SPEC;
     const CLAP_ID: &'static str = "org.openstudio.lemon-acid";
-    const CLAP_DESCRIPTION: &'static str = "Lemon Studio's acid bass";
+    const CLAP_DESCRIPTION: &'static str = "Mango Studio's acid bass";
     const CLAP_FEATURES: &'static [ClapFeature] = &[
         ClapFeature::Instrument,
         ClapFeature::Synthesizer,

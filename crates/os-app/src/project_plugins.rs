@@ -253,11 +253,13 @@ fn same_file(a: &std::path::Path, b: &str) -> bool {
 /// [`switched_format`]).
 pub fn find(list: &[Available], r: &PluginRef) -> Option<usize> {
     let format = Format::parse(&r.format);
+    // A built-in plugin saved under an earlier name ("Lemon Limiter") is found by its name now.
+    let name = crate::plugins::current_name(&r.name);
     let tests: [&dyn Fn(&Descriptor) -> bool; 4] = [
         &|d| !r.id.is_empty() && Some(d.format) == format && d.id.eq_ignore_ascii_case(&r.id),
         &|d| !r.path.is_empty() && same_file(&d.path, &r.path) && d.name == r.name,
-        &|d| Some(d.format) == format && d.name == r.name,
-        &|d| d.name == r.name,
+        &|d| Some(d.format) == format && d.name == name,
+        &|d| d.name == name,
     ];
     tests.iter().find_map(|t| list.iter().position(|a| t(&a.desc)))
 }
@@ -1062,8 +1064,8 @@ mod tests {
             state: eq.clone(),
         };
         let slot = |r: &PluginRef| Some(SlotPlugin { name: WRAPPER.into(), state: wrapper::encode(None, r) });
-        a.state.project.mixer[2].slots[0] = slot(&saved_as("vst2", LEMON_EQ, "Lemon EQ.dll"));
-        a.state.project.mixer[3].slots[0] = slot(&saved_as("clap", LEMON_EQ, "Lemon EQ.clap"));
+        a.state.project.mixer[2].slots[0] = slot(&saved_as("vst2", LEMON_EQ, "Mango EQ.dll"));
+        a.state.project.mixer[3].slots[0] = slot(&saved_as("clap", LEMON_EQ, "Mango EQ.clap"));
         let row = crate::app::add_plugin_channel(&mut a.state.project, WRAPPER);
         a.state.project.channels[row].plugin_state = Some(wrapper::encode(None, &saved_as("vst2", "Nowhere", "Nowhere.dll")));
         a.sync_wrapped();

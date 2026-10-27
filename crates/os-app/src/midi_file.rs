@@ -1061,7 +1061,7 @@ mod tests {
         assert_eq!(p.ppq, 96);
         assert_eq!(p.channels.iter().map(|c| c.name.as_deref().unwrap_or("")).collect::<Vec<_>>(), ["Piano", "Bass", "Drums"]);
         assert_eq!(p.channels.iter().map(|c| c.mixer_track).collect::<Vec<_>>(), [1, 2, 3]);
-        assert!(p.channels.iter().all(|c| c.plugin.as_deref() == Some(crate::osc3::FILE_NAME)), "Lemon Trio plays them");
+        assert!(p.channels.iter().all(|c| c.plugin.as_deref() == Some(crate::osc3::FILE_NAME)), "Mango Trio plays them");
         assert_eq!(p.patterns.len(), 1);
         assert_eq!(p.patterns[0].name.as_deref(), Some(stem(&path).as_str()));
         assert_eq!(p.patterns[0].notes.len(), 4);

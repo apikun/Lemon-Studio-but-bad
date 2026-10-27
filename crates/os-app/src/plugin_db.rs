@@ -103,7 +103,7 @@ fn read_json<T: for<'de> Deserialize<'de>>(name: &str) -> Option<T> {
         return None;
     }
     let bytes = std::fs::read(os_paths::user_file(name)?).ok()?;
-    serde_json::from_slice(&bytes).map_err(|e| eprintln!("lemonstudio: {name}: {e}")).ok()
+    serde_json::from_slice(&bytes).map_err(|e| eprintln!("mangostudio: {name}: {e}")).ok()
 }
 
 /// Writes a JSON file into the user folder through a temporary file, so a failed write keeps the old one.
@@ -119,10 +119,10 @@ fn write_json<T: Serialize>(name: &str, v: &T) {
     match serde_json::to_vec_pretty(v) {
         Ok(text) if std::fs::write(&tmp, &text).is_ok() => {
             if let Err(e) = std::fs::rename(&tmp, &p) {
-                eprintln!("lemonstudio: {name}: {e}");
+                eprintln!("mangostudio: {name}: {e}");
             }
         }
-        _ => eprintln!("lemonstudio: could not write {name}"),
+        _ => eprintln!("mangostudio: could not write {name}"),
     }
 }
 
@@ -738,7 +738,7 @@ pub fn category(d: &Descriptor) -> &'static str {
 }
 
 /// The built-in plugins' vendor in the menus.
-pub const BUILTIN_VENDOR: &str = "Lemon Studio";
+pub const BUILTIN_VENDOR: &str = "Mango Studio";
 pub const NO_VENDOR: &str = "(unknown vendor)";
 
 /// A plugin as the menus list it.
@@ -1102,7 +1102,7 @@ mod tests {
     /// Installed bundles of the built-in Lemon plugins are not scanned: the built-in copy is used.
     #[test]
     fn installed_copies_of_built_in_plugins_are_skipped() {
-        for name in ["Lemon Sampler.clap", "Lemon Parametric EQ.vst3", "Lemon Limiter.clap", "Lemon Chorus.vst3", "lemon stereo shaper.clap"] {
+        for name in ["Mango Sampler.clap", "Mango Parametric EQ.vst3", "Mango Limiter.clap", "Mango Chorus.vst3", "lemon stereo shaper.clap"] {
             assert!(builtin_file(Path::new(&format!("/Library/Audio/Plug-Ins/{name}"))), "{name}");
         }
         assert!(!builtin_file(Path::new("/Library/Audio/Plug-Ins/Surge XT.clap")));
@@ -1196,7 +1196,7 @@ mod tests {
         w("added/Vendor/Deep/Er/Fx.vst3");
         w("added/Bundle.vst3/Contents/x86_64-win/Bundle.vst3");
         w("added/Bundle.vst3/Contents/x86_64-win/Inner.clap");
-        w("added/Lemon Sampler.clap");
+        w("added/Mango Sampler.clap");
         w("added/Open Parametric EQ 2.vst3/Contents/x86_64-win/Open Parametric EQ 2.vst3");
         w("added/readme.txt");
         // A macOS CLAP bundle: a plugin on macOS, a plain folder elsewhere.

@@ -676,7 +676,7 @@ impl ApplicationHandler for Shell {
         }
         splash::step(&self.splash, splash::WINDOW, "Opening the main window");
         let attrs = Window::default_attributes()
-            .with_title("Lemon Studio")
+            .with_title("Mango Studio")
             .with_decorations(false)
             .with_inner_size(LogicalSize::new(1920.0, 1080.0))
             // Layouts are measured at 1920x1080 and are not responsive yet; below this they break.
@@ -1134,7 +1134,7 @@ impl ApplicationHandler for Shell {
                     match Canvas::new(cw, ch, scale) {
                         Ok(c) => self.canvas = Some(c),
                         Err(e) => {
-                            eprintln!("lemonstudio: {e}");
+                            eprintln!("mangostudio: {e}");
                             el.exit();
                             return;
                         }
@@ -1281,13 +1281,13 @@ impl ApplicationHandler for Shell {
 
 /// The application id on Linux: Wayland's app id and X11's WM_CLASS, matching `assets/lemonstudio.desktop`.
 #[cfg(all(unix, not(target_os = "macos")))]
-const APP_ID: &str = "lemonstudio";
+const APP_ID: &str = "mangostudio";
 
 /// The app icon as RGBA bytes, width and height: `assets/lemonstudio.png`, 256 px (X11 windows show it; Wayland takes the
 /// desktop entry's).
 #[cfg(all(unix, not(target_os = "macos")))]
 pub(crate) fn icon_rgba() -> Option<(Vec<u8>, u32, u32)> {
-    let png = tiny_skia::Pixmap::decode_png(include_bytes!("../assets/lemonstudio.png")).ok()?;
+    let png = tiny_skia::Pixmap::decode_png(include_bytes!("../assets/mangostudio.png")).ok()?;
     let rgba = png.pixels().iter().flat_map(|p| {
         let c = p.demultiply();
         [c.red(), c.green(), c.blue(), c.alpha()]
@@ -1760,13 +1760,13 @@ fn wake_ui() {
 /// Tells the user of a startup failure and ends the program. Windows shows a message box: run from a shortcut, or
 /// under Wine (Winlator on Android), there is no console to read the error from, and the program would just vanish.
 fn fatal(what: &str, why: String) -> ! {
-    let message = format!("Lemon Studio could not start.\n\n{what}: {why}");
+    let message = format!("Mango Studio could not start.\n\n{what}: {why}");
     eprintln!("{message}");
     #[cfg(windows)]
     unsafe {
         use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
         let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
-        let (text, title) = (wide(&message), wide("Lemon Studio"));
+        let (text, title) = (wide(&message), wide("Mango Studio"));
         MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), MB_ICONERROR | MB_OK);
     }
     std::process::exit(1);

@@ -204,7 +204,7 @@ pub struct MidiIn {
 }
 
 /// The name Lemon Studio's connections show in the system's MIDI routing (ALSA / JACK clients).
-pub const CLIENT: &str = "Lemon Studio";
+pub const CLIENT: &str = "Mango Studio";
 
 /// How often the watcher lists the devices.
 const WATCH: Duration = Duration::from_secs(2);
@@ -399,7 +399,7 @@ mod tests {
         }
         let midi = MidiIn::open(wake);
         let names = midi.open_names();
-        let out = midir::MidiOutput::new("Lemon Studio test").expect("MIDI output");
+        let out = midir::MidiOutput::new("Mango Studio test").expect("MIDI output");
         let port = out.ports().into_iter().find(|p| out.port_name(p).is_ok_and(|n| names.contains(&n)));
         let Some(port) = port else { panic!("no loopback port among the inputs {names:?}") };
         let mut conn = out.connect(&port, "loopback").expect("open the loopback output");
