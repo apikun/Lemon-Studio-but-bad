@@ -10,7 +10,7 @@ use std::f32::consts::PI;
 use os_ui::kit::lemon as lk;
 use os_ui::{Color, Font, Glyph, Rect};
 
-use super::{led, resize_zones, window_body, window_buttons, FrameInfo};
+use super::{led_small, resize_zones, window_body, window_buttons, FrameInfo};
 use crate::knobs::KnobId;
 use crate::app::{Action, Live, State, Ui, Win, TITLE_H};
 use crate::meters;
@@ -464,7 +464,7 @@ fn strip(ui: &mut Ui, s: &State, n: u16, left: f32, bottom: f32, f: &FrameInfo, 
 
     let enabled = track.is_none_or(|m| m.enabled);
     ui.hit(Rect::new(kx - 7.0, ly.y(LED_Y) - 7.0, 14.0, 14.0), Action::Mix(MHit::Led(n)), "Mute / solo");
-    led(ui, kx, ly.y(LED_Y), enabled);
+    led_small(ui, kx, ly.y(LED_Y), enabled);
     let pan = KnobId::MixPan(n);
     ui.hit(Rect::new(kx - 14.0, ly.y(PAN_Y) - 14.0, 28.0, 28.0), Action::Knob(pan), s.knob_text(pan));
     mixer_knob(ui, kx, ly.y(PAN_Y), 10.5, 15.0, s.knob(pan), Some(true));
@@ -690,7 +690,7 @@ fn slot_panel(ui: &mut Ui, s: &State, r: Rect) {
         mixer_knob(ui, row.right() - 33.0, row.cy(), 10.5 * q, 12.0 * q, s.knob(mix), Some(false));
         ui.c.stroke_circle(row.right() - 33.0, row.cy(), 11.8 * q, 1.5, ui.t.s(0x55595c));
         ui.hit(Rect::new(row.right() - 18.0, row.y, 18.0, row.h), Action::Mix(MHit::SlotLed(k)), "Mute / solo  (ctrl)0..9");
-        led(ui, row.right() - 10.0, row.cy(), track.is_none_or(|m| m.slot_on[i]));
+        led_small(ui, row.right() - 10.0, row.cy(), track.is_none_or(|m| m.slot_on[i]));
     }
     let sep = r.y + 61.0 + 330.0 * kp;
     ui.c.fill_rect(Rect::new(r.x, sep, r.w, 1.0), ui.t.s(0x1f2224));

@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 Artig3nce
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -177,6 +178,20 @@ pub fn led(c: &mut Canvas, t: &Palette, cx: f32, cy: f32, radius: f32, st: State
         c.fill_rect_gradient(inner, t.brand_led(brand::HIGHLIGHT), t.brand_led(brand::MAIN), rad - 1.0);
     } else {
         c.fill_rrect(inner, rad - 1.0, t.brand_led(brand::COLORED_DARK).mix(t.toolbar_line, 0.35));
+    }
+}
+
+/// A round LED (the mixer's switches, after FL's): `led`'s rim and colours in a circle.
+pub fn led_round(c: &mut Canvas, t: &Palette, cx: f32, cy: f32, radius: f32, st: State) {
+    let h = radius - 0.5;
+    let r = Rect::new(cx - h, cy - h, 2.0 * h, 2.0 * h);
+    let rim = if st.hover { t.brand_grey(brand::DARK_HIGHLIGHT).shade(0.15) } else { t.toolbar_line.shade(-0.2) };
+    c.fill_rrect(r, h, rim);
+    let inner = r.inset(1.0);
+    if st.on {
+        c.fill_rect_gradient(inner, t.brand_led(brand::HIGHLIGHT), t.brand_led(brand::MAIN), h - 1.0);
+    } else {
+        c.fill_rrect(inner, h - 1.0, t.brand_led(brand::COLORED_DARK).mix(t.toolbar_line, 0.35));
     }
 }
 
