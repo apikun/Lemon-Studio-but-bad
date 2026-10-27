@@ -145,7 +145,8 @@ mod tests {
         save(&app.state);
 
         let mut next = App::new(None);
-        assert!(next.state.wins.iter().all(|w| w.maxed), "a new App starts with the defaults");
+        let maxed: Vec<bool> = next.state.wins.iter().map(|w| w.maxed).collect();
+        assert_eq!(maxed, [true, false, true], "a new App starts with the defaults (the mixer floats)");
         restore(&mut next.state);
         let (a, b) = (&app.state, &next.state);
         for i in 0..3 {
