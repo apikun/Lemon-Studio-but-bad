@@ -573,7 +573,7 @@ pub fn led(ui: &mut Ui, cx: f32, cy: f32, on: bool) {
     kit::led(ui.c, ui.t, cx, cy, 6.0, kit::State::hover(hov).with_on(on));
 }
 
-/// The mixer's small round LED (track and effect slot switches, after FL's), centred on `cx, cy`.
+/// The small round LED of the mixer's, the playlist's and the channel rack's switches (after FL's), centred on `cx, cy`.
 pub fn led_small(ui: &mut Ui, cx: f32, cy: f32, on: bool) {
     let hov = ui.hovering(Rect::new(cx - 6.0, cy - 6.0, 12.0, 12.0));
     kit::led_round(ui.c, ui.t, cx, cy, 4.5, kit::State::hover(hov).with_on(on));
