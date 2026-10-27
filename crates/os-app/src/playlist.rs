@@ -1233,6 +1233,17 @@ pub fn source_len(s: &State, src: ClipSource) -> u32 {
     }
 }
 
+/// Ticks a dropped sample's audio clip would take (the whole sample at the tempo; a fresh audio clip has no stretch
+/// and the channel pitch does not apply, `audio_ticks`), 0 while its waveform is not loaded — the drop-zone ghost's
+/// length (issue #4).
+pub fn sample_len(s: &State, path: &str) -> u32 {
+    let secs = s.playlist.wave(path).map_or(0.0, |w| w.secs());
+    if secs <= 0.0 {
+        return 0;
+    }
+    (secs * s.project.tick_tempo(s.tempo.max(1.0)) / 60.0 * f64::from(ppq(s))).round().max(1.0) as u32
+}
+
 /// Pattern `n`'s length changed from `old` (its time signature, spec: ui/pattern-time-signature.md §5): its clips that
 /// were not resized by hand (uncut, at the old natural length) take the new one, in every arrangement.
 pub fn refit_pattern_clips(s: &mut State, n: u16, old: u32) {

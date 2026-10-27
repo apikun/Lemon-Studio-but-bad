@@ -6,11 +6,12 @@
 //! Playlist window: tools, picker, track headers, ruler, markers, clips, overlays and popup menus.
 // spec: ui/main-window.md §5–6; ui/playlist.md
 
-use os_model::{AutoMode, Clip, ClipSource, TimeMarker};
+use os_model::{AutoMode, ChannelKind, Clip, ClipSource, TimeMarker};
 use os_ui::kit::lemon as lk;
 use os_theme::waves::Waves;
 use os_ui::{Color, Font, Rect};
 
+use super::browser::Item;
 use super::{resize_zones, rgb, window_body, FrameInfo};
 use crate::app::{Action, Seg, State, Ui, Win};
 use crate::icons::{self, Icon};
@@ -254,6 +255,19 @@ pub fn paint(ui: &mut Ui, s: &State, r: Rect, f: &FrameInfo) {
         }
         None => {}
     }
+    // The drop zone of a browser drag (issue #4): a translucent clip where the drop would land, at the snapped
+    // start, named like the clip will be. Under the playhead, after FL's.
+    if let Some((_, x, y)) = s.browser_drag {
+        if let Some(dg) = drop_ghost(s, grid, x, y) {
+            let rad = lk::r_btn(t).min(dg.rect.w / 2.0).min(dg.rect.h / 2.0);
+            ui.c.fill_rrect(dg.rect, rad, t.tx(0xffffff).with_alpha(26));
+            ui.c.stroke_rrect(dg.rect, rad, 1.0, t.tx(0xd0d8dc).with_alpha(130));
+            if dg.rect.w > 24.0 && dg.rect.h > TITLE_H {
+                ui.c.fill_rect(Rect::new(dg.rect.x + 1.0, dg.rect.y + TITLE_H, dg.rect.w - 2.0, 1.0), t.tx(0xd0d8dc).with_alpha(70));
+                ui.c.text_clip(Font::new(12), dg.rect.x + 5.0, dg.rect.y, dg.rect.w - 10.0, t.tx(0xd6dfe4).with_alpha(210), &dg.label);
+            }
+        }
+    }
     // Playhead: on the song position while playing the song, else on the start position (under the ruler's flag).
     let x = g.x_of(if f.playing && f.song { f.tick as f32 } else { s.playlist.pos as f32 });
     // A thin light line through the tracks, after FL's; the flag on the ruler keeps the playhead colour.
@@ -297,6 +311,52 @@ fn bar_sizes() -> (f32, f32) {
 pub fn grid_of(s: &State) -> Option<Rect> {
     let (fr, fc) = super::frame_rects(s, Win::Playlist, s.win_rect(Win::Playlist));
     (fr.h >= 2.0 * crate::app::TITLE_H).then(|| grid_rect(s, fr, fc))
+}
+
+/// The drop zone a browser drag shows on the playlist (issue #4): the ghost's rect (the clip the drop makes) and its
+/// name.
+pub struct DropGhost {
+    pub rect: Rect,
+    pub label: String,
+}
+
+/// What a browser drag at (x, y) over `grid` would place, for the drop zone's ghost (issue #4): the clip the drop
+/// makes at the snapped start (`alt`: no snap, as a drop makes), or None off `grid` or for an item that places no
+/// clip (an effect, a preset, a parameter, a file). A sample's length is the whole sample at the tempo, 0 until its
+/// waveform is loaded; a pattern's and an audio or automation channel's their own (`pl::source_len`).
+pub fn drop_ghost(s: &State, grid: Rect, x: f32, y: f32) -> Option<DropGhost> {
+    let (item, alt) = s.browser_drag_item.as_ref()?;
+    if !grid.contains(x, y) {
+        return None;
+    }
+    let g = PGeom::new(s, grid);
+    let (track, tick) = (g.track_at(y), pl::snap_place(s, &g, g.tick_at(x), *alt));
+    let (length, label) = match item {
+        Item::Sample(path) => {
+            let label = std::path::Path::new(path).file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            (pl::sample_len(s, path), label)
+        }
+        Item::Pattern(n) => {
+            let src = ClipSource::Pattern(*n);
+            (pl::source_len(s, src), pl::source_name(s, src))
+        }
+        Item::Channel(c) => {
+            // What a drop places (browser_drop): audio clips and automation only; the message a generator channel's
+            // drop gives is its own.
+            let ch = s.project.channels.get(*c)?;
+            if !matches!(ch.kind, ChannelKind::AudioClip | ChannelKind::Automation) {
+                return None;
+            }
+            let src = ClipSource::Channel(ch.index);
+            (pl::source_len(s, src), pl::source_name(s, src))
+        }
+        // A generator lands on the tracks through the plugin menu's own path (issue #2, its own change); an effect,
+        // a preset, a parameter and a file place nothing.
+        _ => return None,
+    };
+    // The rect of the clip the drop makes (`clip_rect` reads a clip's position, length and track only).
+    let c = Clip { position: tick, length, track, source: ClipSource::Pattern(0), muted: false, window: None, raw: Clip::TEMPLATE };
+    Some(DropGhost { rect: g.clip_rect(&c), label })
 }
 
 /// The parts of a playlist painted with its grid at `grid` that follow the view (`App::playlist_scrolled`): the

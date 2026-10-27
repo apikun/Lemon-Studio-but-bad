@@ -320,11 +320,20 @@ impl App {
         if !started && (x - m0.0).hypot(y - m0.1) < DRAG_START {
             return;
         }
+        // The playlist's drop-zone ghost (issue #4): damaged where it was and where it goes, so the grid repaints.
+        let grid = self.pl_grid().filter(|g| g.contains(x, y) && self.state.shown(Win::Playlist));
+        let zone = |s: &crate::app::State| grid.and_then(|grid| crate::views::playlist::drop_ghost(s, grid, x, y).map(|dg| dg.rect));
+        let old_zone = zone(&self.state);
+        self.state.browser_drag_item = Some((item.clone(), self.alt));
         if !started {
             self.drag = Some(Drag::Browser { item, label: label.clone(), m0, started: true });
         }
+        let new_zone = zone(&self.state);
         if let Some((_, ox, oy)) = self.state.browser_drag {
             self.damage_rect(view::ghost_rect(ox, oy));
+        }
+        for r in old_zone.into_iter().chain(new_zone) {
+            self.damage_rect(r.outset(1.0));
         }
         self.state.browser_drag = Some((label, x, y));
         self.damage_rect(view::ghost_rect(x, y));
@@ -333,6 +342,7 @@ impl App {
     /// Release: drop the dragged item on whatever is under the mouse (spec §3).
     pub(crate) fn browser_drop(&mut self, item: Item, started: bool) {
         self.state.browser_drag = None;
+        self.state.browser_drag_item = None;
         self.invalidate();
         if !started {
             return;

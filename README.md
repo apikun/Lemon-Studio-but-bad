@@ -519,6 +519,7 @@ every feature marked as done, in progress or not started.
 - ✅ Clip groups: group, ungroup, select, move and copy together
 - ✅ More playlist shortcuts: zoom on selection, quick slice, snap cycling, insert a bar
 - ✅ Browser: drop effects into mixer slots
+- ✅ Browser: the drop zone shows on the playlist while a sample, pattern or audio/automation channel is dragged over it — a translucent clip at the snapped start, named like the clip will be (issue #4)
 - ✅ Browser: reread (Ctrl+R) and only rows that have content
 - ✅ Browser: drag its width, long names scroll on hover, a right-click menu on every row
 - ✅ Browser: the arrow keys walk the tree as FL's do — a sample is heard the moment it is focused, Right replays it from the start, Left and Right open and close the folders
