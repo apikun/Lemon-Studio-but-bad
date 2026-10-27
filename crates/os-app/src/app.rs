@@ -990,9 +990,12 @@ pub struct State {
     /// spec: ui/close-windows.md §2).
     pub no_focus: bool,
     pub show_browser: bool,
-    /// No window places were kept (a first start): the first paint lays the windows out as FL does
-    /// (`layout::fl_default`).
+    /// No window places were kept (a first start): the paints lay the windows out as FL does (`layout::fl_default`) on
+    /// the screen they get, again whenever its size changes (the main window maximized after its first paint), until
+    /// a window is moved, resized, minimized or maximized.
     pub fl_layout: bool,
+    /// The screen `fl_default` last laid the windows out on.
+    pub fl_screen: (f32, f32),
     pub rack_pos: (f32, f32),
     pub rack_size: (f32, f32),
     /// Horizontal step scroll of the rack, pixels.
@@ -1379,6 +1382,7 @@ impl App {
                 no_focus: false,
                 show_browser: true,
                 fl_layout: false,
+                fl_screen: (0.0, 0.0),
                 rack_pos: (317.0, 195.0),
                 rack_size: views::rack::DEFAULT_SIZE,
                 rack_scroll_x: 0.0,
@@ -3977,9 +3981,14 @@ impl App {
         }
         self.state.screen = canvas.size();
         self.state.ui_scale = canvas.scale;
-        // A first start: the windows are laid out on the workspace the screen gives, as FL lays them out.
-        if std::mem::take(&mut self.state.fl_layout) {
+        // A first start: the windows are laid out on the workspace the screen gives, as FL lays them out, again when
+        // the screen grows or shrinks before any window is placed by hand.
+        if self.state.fl_layout && self.state.fl_screen != self.state.screen {
+            self.state.fl_screen = self.state.screen;
             crate::layout::fl_default(&mut self.state);
+            if damage.is_some() {
+                self.invalidate();
+            }
         }
         // The main window or the workspace shrank: the windows keep their part in it (`win_clamp::keep_all`). Moved
         // during a partial paint, the next frame is painted whole.
@@ -8034,6 +8043,7 @@ impl App {
             }
             Action::Settings(_) => {}
             Action::RackResize(edges) => {
+                s.fl_layout = false;
                 self.drag = Some(Drag::RackResize { edges, m0: self.mouse, s0: s.rack_size });
             }
             Action::ChannelEnable(_)
@@ -8063,6 +8073,7 @@ impl App {
                 }
                 self.title_click = Some((win, now, m));
                 let s = &mut self.state;
+                s.fl_layout = false;
                 if s.is_max(win) {
                     return;
                 }
@@ -8087,15 +8098,18 @@ impl App {
                 self.drag = Some(Drag::Window { win, dx: self.mouse.0 - pos.0, dy: self.mouse.1 - pos.1 });
             }
             Action::WinResize(win, edges) => {
+                s.fl_layout = false;
                 let r0 = s.float_rect(win);
                 self.drag = Some(Drag::WinResize { win, edges, m0: self.mouse, r0 });
             }
             Action::MinWin(w) => {
+                s.fl_layout = false;
                 if let Some(i) = w.slot() {
                     s.wins[i].mini = !s.wins[i].mini;
                 }
             }
             Action::MaxWin(w) => {
+                s.fl_layout = false;
                 if let Some(i) = w.slot() {
                     s.wins[i].mini = false;
                     s.wins[i].maxed = !s.wins[i].maxed;
