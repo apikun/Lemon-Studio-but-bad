@@ -248,13 +248,15 @@ pub fn builtin() -> Vec<Available> {
     static KICK: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static BOOM: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static BASS: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static ACID: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     let mut v = linked(&LIB, &lemon_sampler::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, LEMON_SAMPLER);
     v.extend(linked(&OSC3, &lemon_3x_osc::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, crate::osc3::LEMON_TRIO));
     v.extend(linked(&CITRUS, &citrus::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, crate::citrus::CITRUS));
-    // The small generators (spec: plugins/lemon-small-generators.md): Lemon Kick, Lemon Boom and Lemon Bass.
+    // The small generators (spec: plugins/lemon-small-generators.md): Lemon Kick, Lemon Boom, Lemon Bass and Lemon Acid.
     v.extend(linked(&KICK, &lemon_kick::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Lemon Kick"));
     v.extend(linked(&BOOM, &lemon_boom::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Lemon Boom"));
     v.extend(linked(&BASS, &lemon_bass::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Lemon Bass"));
+    v.extend(linked(&ACID, &lemon_acid::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Lemon Acid"));
     v
 }
 
@@ -824,19 +826,23 @@ impl Plugins {
         }
     }
 
-    /// Moves every hosted instance to sample rate `rate` (the audio settings changed); new ones start at it.
-    pub fn set_rate(&mut self, rate: u32) {
+    /// Moves every hosted instance to sample rate `rate` (the audio settings changed); new ones start at it. The
+    /// count of instances that refused to restart (`None`: none — or they were already there), for the status line.
+    pub fn set_rate(&mut self, rate: u32) -> Option<usize> {
         if rate == self.rate {
-            return;
+            return None;
         }
         self.rate = rate;
+        let mut refused = 0;
         for h in self.hosted.values() {
             if let Ok(mut p) = h.plugin.lock() {
                 if !p.activate(rate) {
-                    eprintln!("[plugins] an instance did not restart at {rate} Hz");
+                    refused += 1;
+                    eprintln!("[plugins] {} did not restart at {rate} Hz", p.desc().name);
                 }
             }
         }
+        (refused > 0).then_some(refused)
     }
 
     /// The voices of every hosted instrument, as their last processed blocks left them (spec: audio/voices.md §5).

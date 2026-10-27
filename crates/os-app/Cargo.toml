@@ -31,6 +31,7 @@ citrus = { path = "../../plugins/citrus", features = ["linked"] }
 lemon-kick = { path = "../../plugins/lemon-kick", features = ["linked"] }
 lemon-boom = { path = "../../plugins/lemon-boom", features = ["linked"] }
 lemon-bass = { path = "../../plugins/lemon-bass", features = ["linked"] }
+lemon-acid = { path = "../../plugins/lemon-acid", features = ["linked"] }
 lemon-limiter = { path = "../../plugins/lemon-limiter", features = ["linked"] }
 lemon-reverb = { path = "../../plugins/lemon-reverb", features = ["linked"] }
 lemon-delay = { path = "../../plugins/lemon-delay", features = ["linked"] }

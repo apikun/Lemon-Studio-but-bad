@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
-//! Lemon Studio's small generators as VST3 / CLAP plugins (nih-plug): Lemon Kick, Lemon Boom and Lemon Bass. Each is a
-//! handful of settings over a small synthesizer, so they share everything but their description: the plugin, its
-//! parameters and saved state ([`params`]), the Pith editor ([`editor`], [`view`]). A description ([`GenSpec`]) gives
-//! the settings, their value texts, the editor's cards and controls, and the sound. The plugin modules
-//! (`plugins/lemon-kick` and the others) export one each, the way the small effects do.
+//! Lemon Studio's small generators as VST3 / CLAP plugins (nih-plug): Lemon Kick, Lemon Boom, Lemon Bass and Lemon
+//! Acid. Each is a handful of settings over a small synthesizer, so they share everything but their description: the
+//! plugin, its parameters and saved state ([`params`]), the Pith editor ([`editor`], [`view`]). A description
+//! ([`GenSpec`]) gives the settings, their value texts, the editor's cards and controls, and the sound. The plugin
+//! modules (`plugins/lemon-kick` and the others) export one each, the way the small effects do.
 //!
 // spec: plugins/lemon-small-generators.md, plugins/plugin-formats.md
 #![allow(semicolon_in_expressions_from_non_local_macros)]
@@ -15,6 +15,7 @@ pub mod editor;
 pub mod params;
 pub mod view;
 
+pub mod acid;
 pub mod boobass;
 pub mod fruit_kick;
 pub mod lemon_boom;
@@ -423,7 +424,7 @@ impl<K: Kind> Vst3Plugin for SmallGen<K> {
 mod tests {
     use super::*;
 
-    pub const SPECS: [&GenSpec; 3] = [fruit_kick::SPEC, lemon_boom::SPEC, boobass::SPEC];
+    pub const SPECS: [&GenSpec; 4] = [fruit_kick::SPEC, lemon_boom::SPEC, boobass::SPEC, acid::SPEC];
 
     /// Every generator: ids unique, starts inside the ranges, a control per setting, the plugin ids distinct.
     #[test]
@@ -490,11 +491,13 @@ mod tests {
             <fruit_kick::LemonKick as ClapPlugin>::CLAP_ID,
             <lemon_boom::LemonBoom as ClapPlugin>::CLAP_ID,
             <boobass::LemonBass as ClapPlugin>::CLAP_ID,
+            <acid::LemonAcid as ClapPlugin>::CLAP_ID,
         ];
         let classes = [
             <fruit_kick::LemonKick as Vst3Plugin>::VST3_CLASS_ID,
             <lemon_boom::LemonBoom as Vst3Plugin>::VST3_CLASS_ID,
             <boobass::LemonBass as Vst3Plugin>::VST3_CLASS_ID,
+            <acid::LemonAcid as Vst3Plugin>::VST3_CLASS_ID,
         ];
         for i in 0..ids.len() {
             for j in i + 1..ids.len() {

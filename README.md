@@ -80,7 +80,7 @@ Where Lemon Studio stands against what a complete DAW offers:
 | Playback engine | 🚧 | Renders ahead of the audio device so edits do not cause dropouts; voice limits, cut groups, glides, layer channels; one audio thread for now |
 | Automation | 🚧 | Clips for channel, mixer and plugin parameters with every curve shape; channel volume and pan moves record into a pattern; not yet recording into automation clips, or clip LFO |
 | Project files | 🚧 | Opens and saves projects from FL Studio 24.2 and later; older versions are on the roadmap. Keep backups |
-| Built-in instruments and effects | 🚧 | Instruments: Lemon Sampler (long samples can play straight from disk), Lemon Trio (three oscillators), Citrus (a six-operator synth that plays Sytrus patches), Lemon Kick (a kick drum), Lemon Boom (a bass drum) and Lemon Bass (a bass guitar). Effects: Lemon Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion, Transient Processor, Press (FL's Maximus) and Pulp Filter (FL's Fruity Love Philter). All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Lemon Limiter's sound, sidechain included |
+| Built-in instruments and effects | 🚧 | Instruments: Lemon Sampler (long samples can play straight from disk), Lemon Trio (three oscillators), Citrus (a six-operator synth that plays Sytrus patches), Lemon Kick (a kick drum), Lemon Boom (a bass drum), Lemon Bass (a bass guitar) and Lemon Acid (an acid bass). Effects: Lemon Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion, Transient Processor, Press (FL's Maximus) and Pulp Filter (FL's Fruity Love Philter). All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Lemon Limiter's sound, sidechain included |
 | Exporting audio | ✅ | Song, pattern or selection to WAV, FLAC, MP3 and OGG at once; bit depth, sample rate, interpolation, dither, mono, tails, stems and WAV markers; a pattern rendered as an audio clip (Quick render, Render and replace) |
 | MIDI file import / export | ✅ | Import into a new project, the open one or a piano roll channel (tracks, channels, tempo changes, time signatures, markers); export a pattern or the song's patterns |
 | Note input | 🚧 | Mouse, computer keyboard, MIDI controllers (velocity curves, sustain pedal, pitch bend, aftertouch) and the touch controller; note recording into patterns with loop record, precount and Start on input; step edit |
@@ -128,7 +128,7 @@ cd Lemon-Studio
 `cargo run -p os-app --release` builds and runs Lemon Studio. Before Lemon Studio starts, it also rebuilds Lemon
 Studio's own plugins (Lemon Sampler, Lemon Trio, Lemon Parametric EQ, Lemon Limiter, Lemon Reverb, Lemon Delay, Lemon
 Soft Clipper, Lemon Fast Distortion, Lemon Balance, Lemon Stereo Enhancer, Lemon Transient Processor, Lemon Chorus,
-Lemon Stereo Shaper, Citrus, Tesla, Press, Pulp Filter, Lemon Kick, Lemon Boom and Lemon Bass) and
+Lemon Stereo Shaper, Citrus, Tesla, Press, Pulp Filter, Lemon Kick, Lemon Boom, Lemon Bass and Lemon Acid) and
 installs the ones that changed as VST3 and CLAP plugins, in the folders where other DAWs find them. Lemon Studio itself
 has every one of them built in and needs no plugin files. A plugin that is new or updated in the repository shows up
 in other DAWs at the next run. The first run builds every plugin, which takes
@@ -194,10 +194,20 @@ shows how fast it paints.
   pops, set Buffer length to 1024.
 - Exclusive (WASAPI) mode, ASIO drivers and IAudioClient3's short buffers are not implemented by Wine: the program
   falls back to shared mode on its own and says so above the status lines.
+- Small screens: the top band scales down to fit (auto fit, 2026-10-27), so every panel — the output monitor's
+  waveform display among them — stays visible on a phone's narrow window. A Toolbars scaling percentage chosen by
+  hand is kept as it is.
 
 **If it will not start**, or a plugin crashes it, `%APPDATA%\Lemon Studio\panic-log.txt` (in the container:
 `C:\users\<user>\AppData\Roaming\Lemon Studio\panic-log.txt`) holds the last panic's message, and a failure at
 startup shows a message box instead of closing quietly.
+
+**If the keyboard and playback make no sound** while the metronome and the Tempo tapper do: a new project's channel
+is a sampler with no sample, and a sampler without a sample is silent — the hint bar says so when a note plays on it.
+Drop a sample from the browser onto the channel, or add an instrument with the channel rack's plus (Lemon Trio,
+Lemon Kick, Lemon Bass, Lemon Acid ... all built in). If the hint bar says a plugin did not follow the audio rate,
+or nothing helps, set `OS_DEBUG=1` in the container's environment and run once more: the log names the plugin and
+the rates it was asked for.
 
 ### Linux
 
@@ -393,6 +403,7 @@ Lemon Studio is a Cargo workspace of focused crates:
 | [`lemon-kick`](plugins/lemon-kick) | Lemon Kick, a kick drum (VST3 + CLAP) |
 | [`lemon-boom`](plugins/lemon-boom) | Lemon Boom, a bass drum (VST3 + CLAP) |
 | [`lemon-bass`](plugins/lemon-bass) | Lemon Bass, a bass guitar (VST3 + CLAP) |
+| [`lemon-acid`](plugins/lemon-acid) | Lemon Acid, an acid bass (VST3 + CLAP) |
 
 ## Roadmap
 
@@ -589,7 +600,7 @@ every feature marked as done, in progress or not started.
 - ⬜ Slapper
 - ✅ Sytrus (Citrus: built into the app, also VST3 and CLAP; plays Sytrus patches)
 - ⬜ Toxic Biohazard
-- ⬜ Transistor Bass
+- ✅ Transistor Bass (Lemon Acid: built into the app, also VST3 and CLAP)
 - ⬜ Wave Traveller
 
 #### Audio editors
