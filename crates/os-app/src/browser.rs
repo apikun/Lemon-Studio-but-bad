@@ -205,6 +205,31 @@ impl App {
             }
             return true;
         }
+        // The arrow keys, as FL's browser has them (spec §7): Down / Up walk the visible rows, wrapping, and the
+        // sample a move lands on is heard at once; Right replays the focused sample from its start, opens a closed
+        // folder or steps into its first row; Left closes an opened folder or selects the parent. From the search
+        // field Up / Down still walk the rows (the results); Left / Right stay with the field. The older Shift and
+        // Ctrl arrows above keep their meanings, and an open menu or popup takes its keys first.
+        if over && !ctrl && !alt && !shift && self.state.playlist.popup.is_none() && self.state.menu_open.is_none() {
+            let arrow = matches!(key, Key::Named(NamedKey::ArrowUp | NamedKey::ArrowDown | NamedKey::ArrowLeft | NamedKey::ArrowRight));
+            if arrow && (!focus || matches!(key, Key::Named(NamedKey::ArrowUp | NamedKey::ArrowDown))) {
+                let s = &mut self.state;
+                let sample = match key {
+                    Key::Named(NamedKey::ArrowDown) => move_sel(s, 1),
+                    Key::Named(NamedKey::ArrowUp) => move_sel(s, -1),
+                    Key::Named(NamedKey::ArrowRight) => into_sel(s),
+                    _ => {
+                        out_sel(s);
+                        None
+                    }
+                };
+                if let Some(p) = sample {
+                    self.preview_sample(&p);
+                }
+                self.invalidate();
+                return true;
+            }
+        }
         let s = &mut self.state;
         if focus {
             match key {
@@ -890,6 +915,62 @@ fn send_sample(s: &mut crate::app::State, path: &str, label: &str) -> Option<Str
     Some(format!("Sent {label} to the selected channel"))
 }
 
+/// Arrow Down / Up over the browser: the selection moves a visible row, wrapping from the last to the first and back
+/// (FL's browser). The row landed on is returned when it is a sample, so the move itself plays it (§7, the sample
+/// heard as soon as it is focused); every other kind of row is only selected.
+fn move_sel(s: &mut crate::app::State, dir: isize) -> Option<String> {
+    let rows = view::rows(s);
+    let i = step(s, &rows, dir, |_| true)?;
+    let key = rows[i].key.clone();
+    select(s, &key);
+    reveal(s);
+    match &rows[i].item {
+        Item::Sample(p) => Some(p.clone()),
+        _ => None,
+    }
+}
+
+/// Arrow Right over the browser: the focused sample is returned to be replayed from its start; a closed folder opens
+/// where it stands; an opened folder selects its first row (the one below it), which is heard when it is a sample.
+fn into_sel(s: &mut crate::app::State) -> Option<String> {
+    let rows = view::rows(s);
+    let i = rows.iter().position(|r| Some(&r.key) == s.browser_sel.as_ref())?;
+    if let Item::Sample(p) = &rows[i].item {
+        return Some(p.clone());
+    }
+    match rows[i].open? {
+        true => {
+            let child = rows.get(i + 1)?;
+            select(s, &child.key);
+            reveal(s);
+            match &child.item {
+                Item::Sample(p) => Some(p.clone()),
+                _ => None,
+            }
+        }
+        false => {
+            s.browser_open.insert(rows[i].key.clone());
+            None
+        }
+    }
+}
+
+/// Arrow Left over the browser: an opened folder closes; a leaf or a closed folder selects the nearest folder above
+/// it (its parent, when the tree shows it), so walking out of a folder of samples takes the arrows alone.
+fn out_sel(s: &mut crate::app::State) {
+    let rows = view::rows(s);
+    let Some(i) = rows.iter().position(|r| Some(&r.key) == s.browser_sel.as_ref()) else { return };
+    if rows[i].open == Some(true) {
+        s.browser_open.remove(rows[i].key.as_str());
+        s.browser_scroll = s.browser_scroll.min(view::max_scroll(s));
+        return;
+    }
+    if let Some(p) = rows[..i].iter().rposition(|r| r.open.is_some() && r.depth < rows[i].depth) {
+        select(s, &rows[p].key);
+        reveal(s);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -901,5 +982,113 @@ mod tests {
         assert_eq!(parse_width("width=120"), crate::views::BROWSER_W);
         assert_eq!(parse_width("width=wide\n"), crate::views::BROWSER_W);
         assert_eq!(parse_width(""), crate::views::BROWSER_W);
+    }
+
+    /// The arrows' walk over the browser's rows (FL's browser): Down / Up step a row, wrapping, every kind of row
+    /// selected, a sample heard the moment it is focused, files and folders silent; Right replays a sample, opens a
+    /// closed folder or steps into an opened one's first row; Left closes it again or walks out to the parent.
+    #[test]
+    fn arrows_walk_the_rows_and_hear_the_samples() {
+        let dir = std::env::temp_dir().join(format!("os_browser_arrows_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let wav = |n: &str| {
+            let p = dir.join(format!("{n}.wav"));
+            os_engine::wav::write_f32_stereo(&mut std::fs::File::create(&p).unwrap(), 44100, &[0.0; 8]).unwrap();
+            p.to_string_lossy().into_owned()
+        };
+        let (kick, snare, hat) = (wav("A Kick"), wav("B Snare"), wav("C Hat"));
+        std::fs::write(dir.join("readme.txt"), b"hello").unwrap();
+        let mut app = App::new(None);
+        app.state.browser_folders.push(dir.clone());
+        app.state.browser_open.insert(view::disk_key(&dir));
+        let keys: Vec<String> = view::rows(&app.state).into_iter().map(|r| r.key).collect();
+        assert_eq!(keys.len(), 8, "the three closed roots, the dropped folder and its four rows");
+        // From no selection Down takes the first row: the closed Current project root, nothing heard.
+        assert_eq!(move_sel(&mut app.state, 1), None);
+        assert_eq!(app.state.browser_sel.as_deref(), Some(keys[0].as_str()));
+        for k in &keys[1..4] {
+            assert_eq!(move_sel(&mut app.state, 1), None, "roots and the folder row are silent");
+            assert_eq!(app.state.browser_sel.as_deref(), Some(k.as_str()));
+        }
+        // The folder's samples, each heard the moment it is focused:
+        assert_eq!(move_sel(&mut app.state, 1).as_deref(), Some(kick.as_str()));
+        assert_eq!(move_sel(&mut app.state, 1).as_deref(), Some(snare.as_str()));
+        assert_eq!(move_sel(&mut app.state, 1).as_deref(), Some(hat.as_str()));
+        // The readme is a file, not a sample: silent, and the walk wraps to the top.
+        assert_eq!(move_sel(&mut app.state, 1), None);
+        assert_eq!(move_sel(&mut app.state, 1), None);
+        assert_eq!(app.state.browser_sel.as_deref(), Some(keys[0].as_str()), "wrapped to the first row");
+        // Up from the first row wraps to the last (the readme, silent), then back onto the samples.
+        assert_eq!(move_sel(&mut app.state, -1), None);
+        assert_eq!(move_sel(&mut app.state, -1).as_deref(), Some(hat.as_str()));
+        assert_eq!(move_sel(&mut app.state, -1).as_deref(), Some(snare.as_str()));
+        assert_eq!(move_sel(&mut app.state, -1).as_deref(), Some(kick.as_str()));
+        assert_eq!(move_sel(&mut app.state, -1), None, "the folder row again");
+        assert_eq!(app.state.browser_sel.as_deref(), Some(keys[3].as_str()));
+        // Right on the opened folder steps into its first row, the kick, heard.
+        assert_eq!(into_sel(&mut app.state).as_deref(), Some(kick.as_str()));
+        assert_eq!(app.state.browser_sel.as_deref(), Some(keys[4].as_str()));
+        // Right on a sample replays it, the selection staying where it is.
+        assert_eq!(into_sel(&mut app.state).as_deref(), Some(kick.as_str()));
+        assert_eq!(app.state.browser_sel.as_deref(), Some(keys[4].as_str()));
+        // Left from the sample back to its parent folder...
+        out_sel(&mut app.state);
+        assert_eq!(app.state.browser_sel.as_deref(), Some(keys[3].as_str()));
+        // ...and Left on the opened folder closes it.
+        out_sel(&mut app.state);
+        assert!(!app.state.browser_open.contains(&keys[3]));
+        // Right on the closed folder opens it where the selection stands, nothing heard yet.
+        assert_eq!(into_sel(&mut app.state), None);
+        assert!(app.state.browser_open.contains(&keys[3]));
+        assert_eq!(app.state.browser_sel.as_deref(), Some(keys[3].as_str()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The arrows in the app's keys: over the browser (or from its search field) they are the browser's, elsewhere
+    /// they are left alone, and Shift+Down keeps its older meaning of sending the next sample to the channel.
+    #[test]
+    fn the_browser_takes_its_arrows_only_over_the_browser() {
+        use winit::keyboard::{Key, NamedKey};
+        let dir = std::env::temp_dir().join(format!("os_browser_arrows_key_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("A Kick.wav");
+        os_engine::wav::write_f32_stereo(&mut std::fs::File::create(&p).unwrap(), 44100, &[0.0; 8]).unwrap();
+        let mut app = App::new(None);
+        app.state.browser_folders.push(dir.clone());
+        app.state.browser_open.insert(view::disk_key(&dir));
+        app.mouse_move(100.0, 400.0);
+        assert!(app.over_browser());
+        let keys: Vec<String> = view::rows(&app.state).into_iter().map(|r| r.key).collect();
+        // Down takes the first row; Right opens the closed root without moving; Down walks into it; Left back out.
+        assert!(app.browser_key(&Key::Named(NamedKey::ArrowDown), false, false));
+        assert_eq!(app.state.browser_sel.as_deref(), Some(keys[0].as_str()));
+        assert!(app.browser_key(&Key::Named(NamedKey::ArrowRight), false, false));
+        assert!(app.state.browser_open.contains(&keys[0]));
+        assert_eq!(app.state.browser_sel.as_deref(), Some(keys[0].as_str()), "opening keeps the row");
+        assert!(app.browser_key(&Key::Named(NamedKey::ArrowDown), false, false));
+        assert_ne!(app.state.browser_sel.as_deref(), Some(keys[0].as_str()));
+        assert!(app.browser_key(&Key::Named(NamedKey::ArrowLeft), false, false));
+        assert_eq!(app.state.browser_sel.as_deref(), Some(keys[0].as_str()));
+        // From the search field the Up / Down walk goes on (the results).
+        app.state.browser_search_focus = true;
+        app.state.browser_sel = None;
+        assert!(app.browser_key(&Key::Named(NamedKey::ArrowDown), false, false));
+        assert_eq!(app.state.browser_sel.as_deref(), Some(keys[0].as_str()));
+        app.state.browser_search_focus = false;
+        // With the pointer off the browser the arrow is somebody else's.
+        app.mouse_move(1500.0, 400.0);
+        app.state.browser_sel = None;
+        assert!(!app.browser_key(&Key::Named(NamedKey::ArrowDown), false, false));
+        assert!(app.state.browser_sel.is_none());
+        // Over the browser again, Shift+Down still sends the next sample to the selected channel (and selects it).
+        app.mouse_move(100.0, 400.0);
+        app.shift = true;
+        assert!(app.browser_key(&Key::Named(NamedKey::ArrowDown), false, false));
+        app.shift = false;
+        let row = view::rows(&app.state).into_iter().find(|r| Some(&r.key) == app.state.browser_sel.as_ref());
+        assert_eq!(row.map(|r| r.label), Some("A Kick".into()));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -489,7 +489,7 @@ every feature marked as done, in progress or not started.
 - ✅ Window positions remembered between sessions
 - ✅ Modular toolbar: an editor for its panels, with factory and user presets
 - 🚧 Own UI scale setting (GUI and toolbar scaling work), one-row toolbar on wide screens
-- ⬜ Hover tooltips
+- ✅ Hover tooltips: the widget kit's bubble shows a control's hint at the cursor
 - ✅ Theme files: workspace picture and grid line strength
 - ⬜ Theme extras: note colour groups
 - 🚧 MCP Server for autonomous AI agents to connect and control (groundwork in review)
@@ -510,6 +510,7 @@ every feature marked as done, in progress or not started.
 - ✅ Browser: drop effects into mixer slots
 - ✅ Browser: reread (Ctrl+R) and only rows that have content
 - ✅ Browser: drag its width, long names scroll on hover, a right-click menu on every row
+- ✅ Browser: the arrow keys walk the tree as FL's do — a sample is heard the moment it is focused, Right replays it from the start, Left and Right open and close the folders
 - ✅ New patterns can be placed right away, shortened pattern clips cut, Ctrl+Space pauses, the piano roll works in song mode
 - ✅ Automatic crossfades between audio clips, with their own handle
 - ✅ Time markers: start, loop, marker loop / skip / pause, played in song mode and in exports
