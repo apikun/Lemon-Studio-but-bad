@@ -78,6 +78,7 @@ mod playlist;
 mod plugin_db;
 mod plugin_manager;
 mod plugin_menu;
+mod plugin_picker;
 mod plugin_popup;
 mod plugin_rebuild;
 mod plugin_scan;
