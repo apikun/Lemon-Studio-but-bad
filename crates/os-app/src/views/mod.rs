@@ -61,6 +61,8 @@ pub struct FrameInfo {
     pub sounding: Vec<(u16, u16)>,
     /// The song position slider's handle is being dragged (it shows the dragged position, not the playhead).
     pub song_pos_drag: bool,
+    /// The mixer track whose fader is being dragged (the Mango skin lights its bar).
+    pub fader_drag: Option<u16>,
     /// What the toolbar editor's drag carries (spec: ui/toolbar-menu.md §8).
     pub bar_drag: Option<crate::toolbar::BarDrag>,
 }
