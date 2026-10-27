@@ -1857,7 +1857,7 @@ fn main() {
         app.startup_form();
     }
     // The windows where the last run left them.
-    layout::restore(&mut app.state);
+    app.state.fl_layout = !layout::restore(&mut app.state);
     // MIDI devices (spec: ui/midi-settings.md §2): the enabled inputs play the selected channel; master sync goes out.
     splash::step(&splash, splash::MIDI, "Opening MIDI devices");
     app.midi = midi_in::MidiIn::open(wake_ui);
