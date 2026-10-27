@@ -129,9 +129,9 @@ const CONTROLS: [Control; 5] = [
 ];
 
 pub const SPEC: &GenSpec = &GenSpec {
-    name: "Lemon Bass",
+    name: "Mango Bass",
     word: "BASS",
-    about: "Lemon Studio's bass guitar",
+    about: "Mango Studio's bass guitar",
     settings: &SETTINGS,
     version: None,
     any_version: false,
@@ -415,7 +415,7 @@ pub struct BassKind;
 impl Kind for BassKind {
     const SPEC: &'static GenSpec = SPEC;
     const CLAP_ID: &'static str = "org.openstudio.lemon-bass";
-    const CLAP_DESCRIPTION: &'static str = "Lemon Studio's bass guitar";
+    const CLAP_DESCRIPTION: &'static str = "Mango Studio's bass guitar";
     const CLAP_FEATURES: &'static [ClapFeature] = &[
         ClapFeature::Instrument,
         ClapFeature::Synthesizer,

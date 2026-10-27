@@ -1,6 +1,6 @@
-# Builds Lemon Studio for Windows and Linux and attaches the portable builds to a GitHub release: a `v*` tag pushed to
-# the repository (or a manual dispatch) becomes a release with `Lemon-Studio-windows-x64.zip` and
-# `Lemon-Studio-linux-x64.zip`. The builds are the ones CI checks (see ci.yml): Windows 10+, x64 — the build Winlator
+# Builds Mango Studio for Windows and Linux and attaches the portable builds to a GitHub release: a `v*` tag pushed to
+# the repository (or a manual dispatch) becomes a release with `Mango-Studio-windows-x64.zip` and
+# `Mango-Studio-linux-x64.zip`. The builds are the ones CI checks (see ci.yml): Windows 10+, x64 — the build Winlator
 # (Wine on Android) runs, since nothing needs the GPU — and Linux on X11 or Wayland, x64.
 name: Release
 
@@ -43,27 +43,30 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item target/release/lemonstudio.exe dist/
+          Copy-Item target/release/mangostudio.exe dist/
           Copy-Item README.md dist/
           Copy-Item THIRD-PARTY-NOTICES.txt dist/
-          Compress-Archive -Path dist/* -DestinationPath Lemon-Studio-windows-x64.zip -Force
+          Compress-Archive -Path dist/* -DestinationPath Mango-Studio-windows-x64.zip -Force
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          name: Lemon Studio ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: Mango Studio ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           body: |
-            Lemon Studio for Windows (x64) and Linux (x64): the portable builds that run on Windows 10 and 11, Linux on
+            Mango Studio for Windows (x64) and Linux (x64): the portable builds that run on Windows 10 and 11, Linux on
             X11 or Wayland, and under Wine — for example Winlator on Android.
 
-            - Unzip and run `lemonstudio` (`lemonstudio.exe` on Windows): no installer, and nothing else to install.
-            - v0.2: the new Lemon Acid (an acid bass, the roadmap's Transistor Bass) joins the instruments, and on a
+            Mango Studio is based on Lemon Studio by ItsAlphaNeon (https://github.com/ItsAlphaNeon/Lemon-Studio), free software
+            under the GPL 3.0 or later.
+
+            - Unzip and run `mangostudio` (`mangostudio.exe` on Windows): no installer, and nothing else to install.
+            - v0.2: the new Mango Acid (an acid bass, the roadmap's Transistor Bass) joins the instruments, and on a
               narrow window the top band scales down to fit, so the output monitor's waveform display stays visible
               (the Wine and Winlator reports).
             - On Winlator, see the README's "Winlator (Android)" section: shared audio mode, Buffer length 1024.
-            - If it will not start, `%APPDATA%\Lemon Studio\panic-log.txt` says why.
-          files: Lemon-Studio-windows-x64.zip
+            - If it will not start, `%APPDATA%\Mango Studio\panic-log.txt` says why.
+          files: Mango-Studio-windows-x64.zip
           fail_on_unmatched_files: true
 
   linux:
@@ -88,25 +91,28 @@ jobs:
       - name: Package
         run: |
           mkdir -p dist
-          cp target/release/lemonstudio dist/
+          cp target/release/mangostudio dist/
           cp README.md dist/
           cp THIRD-PARTY-NOTICES.txt dist/
-          zip -r Lemon-Studio-linux-x64.zip dist
+          zip -r Mango-Studio-linux-x64.zip dist
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          name: Lemon Studio ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: Mango Studio ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           body: |
-            Lemon Studio for Windows (x64) and Linux (x64): the portable builds that run on Windows 10 and 11, Linux on
+            Mango Studio for Windows (x64) and Linux (x64): the portable builds that run on Windows 10 and 11, Linux on
             X11 or Wayland, and under Wine — for example Winlator on Android.
 
-            - Unzip and run `lemonstudio` (`lemonstudio.exe` on Windows): no installer, and nothing else to install.
-            - v0.2: the new Lemon Acid (an acid bass, the roadmap's Transistor Bass) joins the instruments, and on a
+            Mango Studio is based on Lemon Studio by ItsAlphaNeon (https://github.com/ItsAlphaNeon/Lemon-Studio), free software
+            under the GPL 3.0 or later.
+
+            - Unzip and run `mangostudio` (`mangostudio.exe` on Windows): no installer, and nothing else to install.
+            - v0.2: the new Mango Acid (an acid bass, the roadmap's Transistor Bass) joins the instruments, and on a
               narrow window the top band scales down to fit, so the output monitor's waveform display stays visible
               (the Wine and Winlator reports).
             - On Winlator, see the README's "Winlator (Android)" section: shared audio mode, Buffer length 1024.
-            - If it will not start, `%APPDATA%\Lemon Studio\panic-log.txt` says why.
-          files: Lemon-Studio-linux-x64.zip
+            - If it will not start, `%APPDATA%\Mango Studio\panic-log.txt` says why.
+          files: Mango-Studio-linux-x64.zip
           fail_on_unmatched_files: true

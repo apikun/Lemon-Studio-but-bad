@@ -1685,7 +1685,7 @@ impl Logic {
         self.hint = match (ok, channel) {
             (true, false) => "Sent to the playlist".into(),
             (true, true) => "Sent to the selected channel".into(),
-            (false, _) => "Sending needs Lemon Studio".into(),
+            (false, _) => "Sending needs Mango Studio".into(),
         };
     }
 
@@ -1806,7 +1806,7 @@ impl Logic {
 }
 
 fn about() -> String {
-    format!("Tesla {}: Lemon Studio's audio editor and recorder", env!("CARGO_PKG_VERSION"))
+    format!("Tesla {}: Mango Studio's audio editor and recorder", env!("CARGO_PKG_VERSION"))
 }
 
 // ---------------------------------------------------------------------------------------------------------------

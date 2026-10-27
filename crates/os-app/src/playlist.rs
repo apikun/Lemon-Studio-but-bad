@@ -4526,7 +4526,7 @@ pub fn export_tracks(app: &mut App) -> String {
     tracks.sort_unstable();
     tracks.dedup();
     let stem = s.path.as_ref().and_then(|p| p.file_stem()).map_or_else(|| "Untitled".to_string(), |n| n.to_string_lossy().into_owned());
-    let base = s.path.as_ref().and_then(|p| p.parent()).map(|d| d.join("Rendered")).unwrap_or_else(|| std::env::temp_dir().join("Lemon Studio").join("Rendered"));
+    let base = s.path.as_ref().and_then(|p| p.parent()).map(|d| d.join("Rendered")).unwrap_or_else(|| std::env::temp_dir().join("Mango Studio").join("Rendered"));
     let dir = base.join(format!("{stem} tracks"));
     if let Err(e) = std::fs::create_dir_all(&dir) {
         return format!("Export tracks: {e}");
@@ -4611,7 +4611,7 @@ pub fn consolidate(app: &mut App) -> String {
     let mut audio = e.render_all(512);
     let want = (os_engine::laws::tick_to_frame(f64::from(b - a), p.ppq, p.tick_tempo(s.tempo), rate) as usize) * 2;
     audio.resize(want.max(2), 0.0);
-    let dir = s.path.as_ref().and_then(|p| p.parent()).map(|d| d.join("Rendered")).unwrap_or_else(|| std::env::temp_dir().join("Lemon Studio").join("Rendered"));
+    let dir = s.path.as_ref().and_then(|p| p.parent()).map(|d| d.join("Rendered")).unwrap_or_else(|| std::env::temp_dir().join("Mango Studio").join("Rendered"));
     if let Err(e) = std::fs::create_dir_all(&dir) {
         return format!("Consolidate: {e}");
     }

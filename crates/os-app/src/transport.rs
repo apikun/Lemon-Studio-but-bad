@@ -1102,7 +1102,7 @@ impl FeedThread {
     fn spawn(mut feeder: Feeder) -> FeedThread {
         let stop = Arc::new(AtomicBool::new(false));
         let handle = std::thread::Builder::new()
-            .name("lemonstudio-feeder".into())
+            .name("mangostudio-feeder".into())
             .spawn({
                 let stop = stop.clone();
                 move || {
@@ -1764,7 +1764,7 @@ fn audio_thread(rx: Receiver<Cmd>, shared: Arc<Shared>, latest: Arc<Mutex<Option
                 release_paused(&session);
                 match open_live(p, true, &mut library, &mut device) {
                     Ok(s) => live = Some(s),
-                    Err(e) => eprintln!("lemonstudio: live stream for the open plugin editor: {e}"),
+                    Err(e) => eprintln!("mangostudio: live stream for the open plugin editor: {e}"),
                 }
             }
         }

@@ -281,7 +281,7 @@ impl<K: Kind> SmallGen<K> {
 
 impl<K: Kind> Plugin for SmallGen<K> {
     const NAME: &'static str = K::SPEC.name;
-    const VENDOR: &'static str = "Lemon Studio";
+    const VENDOR: &'static str = "Mango Studio";
     const URL: &'static str = "";
     const EMAIL: &'static str = "";
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -462,7 +462,7 @@ mod tests {
                     assert_eq!((s.text)(k, back), t, "{} {} {v}", s.name, set.id);
                 }
             }
-            assert!(s.name.starts_with("Lemon "), "{}", s.name);
+            assert!(s.name.starts_with("Mango "), "{}", s.name);
             // The instrument starts and renders silence at rest.
             let mut d = (s.make)(44100, &s.start());
             let mut l = vec![0.0f32; 480];
@@ -505,7 +505,7 @@ mod tests {
                 assert_ne!(classes[i], classes[j]);
             }
         }
-        assert_eq!(<fruit_kick::LemonKick as Plugin>::NAME, "Lemon Kick");
+        assert_eq!(<fruit_kick::LemonKick as Plugin>::NAME, "Mango Kick");
     }
 
     /// The saved state round-trips through the plugin state, and the editor's live edits reach the sound.
