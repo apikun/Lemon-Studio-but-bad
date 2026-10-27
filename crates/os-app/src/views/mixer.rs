@@ -600,9 +600,8 @@ fn mixer_knob(ui: &mut Ui, cx: f32, cy: f32, r: f32, halo: f32, value: f32, arc:
 
 /// Gain marks beside a fader track (spec: ui/mixer.md §5, measured from FL): 6 px ticks on both sides at 0, −6, −12 and
 /// −18 dB (2 px clear of the track), and faint 4 px rails between consecutive ticks (1 px clear of each tick). They
-/// belong to the track: the handle covers them as it moves.
-/// Gain marks beside a fader's track at 0, -6, -12 and -18 dB: ticks with rails between them; in the Mango skin
-/// (`lemon`) only the ticks, clear of its wider trough.
+/// belong to the track: the handle covers them as it moves. In the Mango skin (`lemon`) only short ticks, clear of its
+/// wider trough.
 fn fader_marks(ui: &mut Ui, mx: f32, track_y1: f32, ly: &Ly, lemon: bool) {
     let ys: Vec<f32> = [0.0, -6.0, -12.0, -18.0]
         .iter()

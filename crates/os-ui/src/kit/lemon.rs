@@ -233,8 +233,19 @@ pub fn knob(c: &mut Canvas, t: &Palette, cx: f32, cy: f32, r: f32, value: f32, b
     }
     let base = if st.hover && !off { Color::rgb(0x505050) } else { Color::rgb(0x454545) };
     c.fill_rect_gradient(Rect::new(cx - disc, cy - disc, 2.0 * disc, 2.0 * disc), base.shade(0.06), base.shade(-0.18), disc);
-    let pc = if off { t.text_faint } else if st.hover { Color::rgb(0xffffff) } else { t.glyph };
     let (p0, p1) = (disc * 0.25, (disc - 1.5).max(1.0));
+    if let KnobLook::Mixer { .. } = look {
+        // The mixer's knobs point with a rounded mango bar, as its faders and the logo's bars.
+        let pc = if off { t.text_faint } else if st.hover { t.brand_lit(brand::HIGHLIGHT) } else { t.brand_lit(brand::MAIN) };
+        let w = (disc * 0.36).clamp(2.2, 4.0);
+        let (p0, p1) = (disc * 0.2 + w / 2.0, (disc - 1.0 - w / 2.0).max(w / 2.0));
+        let (x0, y0, x1, y1) = (cx + p0 * a.cos(), cy + p0 * a.sin(), cx + p1 * a.cos(), cy + p1 * a.sin());
+        c.line(x0, y0, x1, y1, w, pc);
+        c.fill_circle(x0, y0, w / 2.0, pc);
+        c.fill_circle(x1, y1, w / 2.0, pc);
+        return;
+    }
+    let pc = if off { t.text_faint } else if st.hover { Color::rgb(0xffffff) } else { t.glyph };
     c.line(cx + p0 * a.cos(), cy + p0 * a.sin(), cx + p1 * a.cos(), cy + p1 * a.sin(), (disc * 0.22).clamp(1.4, 2.2), pc);
 }
 
