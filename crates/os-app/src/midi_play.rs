@@ -295,6 +295,7 @@ impl App {
             self.midi_end(h, h.up.unwrap_or(64));
         }
         self.sync_live();
+        self.live_note_guidance(row);
         self.transport.note_on(row, play, vel);
         self.midi_play.held.push(Held { key, src, row, play, up: None });
         self.step_edit_down_with(src, play, vel, extra);

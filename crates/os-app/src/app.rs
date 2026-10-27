@@ -1195,6 +1195,10 @@ pub struct App {
     /// Velocity of the next key the mouse sounds (a keyboard click sets it from the click's x; back to the default
     /// after use).
     key_velocity: u8,
+    /// The rack row a live note last could not sound on (the hint bar told why): the same row is not told again
+    /// (spec: ui/typing-keyboard.md, ui/touch-keyboard.md; the Wine / Winlator "no sounds but the metronome" report,
+    /// 2026-10-27: the silence had a reason the hint bar now says).
+    note_guided: Option<usize>,
     /// MIDI controller input, and its held notes: (key, rack row they started on).
     pub midi: crate::midi_in::MidiIn,
     pub(crate) midi_play: crate::midi_play::Play,
@@ -1432,6 +1436,7 @@ impl App {
             mouse_note: None,
             cables_at: None,
             key_velocity: TYPING_VELOCITY,
+            note_guided: None,
             midi: crate::midi_in::MidiIn::none(),
             midi_play: Default::default(),
             midi_out: crate::midi_out::MidiOut::none(),
@@ -2487,6 +2492,7 @@ impl App {
                         // The plugin's own keyboard plays on the live stream, like the typing keyboard.
                         if on {
                             self.sync_live();
+                            self.live_note_guidance(row);
                             self.transport.note_on(row, u16::from(key), vel);
                         } else {
                             self.transport.note_off(row, u16::from(key));
@@ -3614,13 +3620,20 @@ impl App {
     /// to its rate.
     fn follow_device(&mut self) {
         let opens = crate::device::opens();
-        if opens == self.device_opens {
-            return;
+        if opens != self.device_opens {
+            self.device_opens = opens;
+            if let Some(rate) = crate::device::last().map(|i| i.rate) {
+                self.state.settings.rate = Some(rate);
+            }
         }
-        self.device_opens = opens;
+        // The rate follows on every tick, opens count or no: an instance left at another rate stays silent (its
+        // process waits for the activation), which read as "the instruments don't work" on Wine / Winlator
+        // (2026-10-27). One that refuses to restart says so once.
         if let Some(rate) = crate::device::last().map(|i| i.rate) {
-            self.plugins.set_rate(rate);
-            self.state.settings.rate = Some(rate);
+            if let Some(refused) = self.plugins.set_rate(rate) {
+                self.state.message = Some(format!("{refused} of the plugins did not follow the audio rate ({rate} Hz): their sound waits"));
+                self.invalidate();
+            }
         }
     }
 
@@ -6163,6 +6176,7 @@ impl App {
         if let (Some(k), true, Some(row)) = (key, play, row) {
             let k = k.clamp(0, views::piano::TOP_KEY) as u16;
             self.sync_live();
+            self.live_note_guidance(row);
             self.transport.note_on(row, k, std::mem::replace(&mut self.key_velocity, TYPING_VELOCITY));
             self.mouse_note = Some((row, k));
         }
@@ -7096,6 +7110,7 @@ impl App {
         }
         self.sync_live();
         let key = key as u16;
+        self.live_note_guidance(row);
         self.transport.note_on(row, key, TYPING_VELOCITY);
         self.typing_held.push((code, row, key));
         self.step_edit_down(crate::step_edit::Src::Typing(code), key, TYPING_VELOCITY);
@@ -7109,6 +7124,29 @@ impl App {
         if !self.typing_synced {
             self.typing_synced = true;
             self.transport.update(&crate::rack::play_project(&self.state));
+        }
+    }
+
+    /// A live note starts on rack row `row`. When its channel cannot sound yet — no instrument hosted, or a sampler
+    /// without a sample — the hint bar says what to do, once per row: the silence has a reason, and the metronome and
+    /// the tapper still sound, which read as "the program is broken" (the Wine / Winlator report, 2026-10-27).
+    pub(crate) fn live_note_guidance(&mut self, row: usize) {
+        if self.note_guided == Some(row) {
+            return;
+        }
+        let Some(ch) = self.state.project.channels.get(row) else { return };
+        let hosted = self.plugins.hosted.contains_key(&row);
+        let message = if !hosted {
+            Some("The channel has no instrument yet: add one in the channel rack (the plus), or load the plugin")
+        } else if ch.kind == os_model::ChannelKind::Sampler && ch.sample_path.is_none() {
+            Some("Lemon Sampler has no sample to play: drop one from the browser, or add an instrument (the plus)")
+        } else {
+            None
+        };
+        if let Some(m) = message {
+            self.note_guided = Some(row);
+            self.state.message = Some(m.to_string());
+            self.invalidate();
         }
     }
 
@@ -9138,6 +9176,33 @@ mod tests {
         let st = crate::plugins::sampler_state(c);
         let json = String::from_utf8_lossy(&st[8..]).to_string();
         assert!(json.contains("\"envvol_on\":{\"bool\":false}") && json.contains("\"sample-path\":\"\\\"\\\"\""), "{json}");
+    }
+
+    /// A live note on a channel that cannot sound yet says why in the hint bar, once per row (the Wine / Winlator
+    /// "no sounds but the metronome" report, 2026-10-27): the new project's sampler has no sample.
+    #[test]
+    fn a_note_on_a_silent_channel_says_why() {
+        let mut a = App::new(None);
+        // No instance hosted yet: the channel has no instrument to play.
+        a.live_note_guidance(0);
+        assert!(
+            a.state.message.as_deref().is_some_and(|m| m.contains("no instrument yet")),
+            "{:?}",
+            a.state.message
+        );
+        assert_eq!(a.note_guided, Some(0));
+        // The same row is not told again: a message set after it stays.
+        a.state.message = Some("Whatever was last said".into());
+        a.live_note_guidance(0);
+        assert_eq!(a.state.message.as_deref(), Some("Whatever was last said"));
+        // Told again once the row's guidance is rearmed.
+        a.note_guided = None;
+        a.live_note_guidance(0);
+        assert!(
+            a.state.message.as_deref().is_some_and(|m| m.contains("no instrument yet")),
+            "{:?}",
+            a.state.message
+        );
     }
 
     /// The whole window at one scale, for looking at text: `OS_TEXT_SHOT=<file.png> OS_TEXT_SHOT_SCALE=1.25`.
