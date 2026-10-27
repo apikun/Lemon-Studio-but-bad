@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 Artig3nce
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -253,11 +254,10 @@ pub fn paint(ui: &mut Ui, s: &State, r: Rect, f: &FrameInfo) {
         }
         None => {}
     }
-    // Playhead.
-    if f.playing && f.song {
-        let x = g.x_of(f.tick as f32);
-        ui.c.fill_rect(Rect::new(x, grid.y, 1.5, grid.h), t.playhead);
-    }
+    // Playhead: on the song position while playing the song, else on the start position (under the ruler's flag).
+    let x = g.x_of(if f.playing && f.song { f.tick as f32 } else { s.playlist.pos as f32 });
+    // A thin light line through the tracks, after FL's; the flag on the ruler keeps the playhead colour.
+    ui.c.fill_rect(Rect::new(x, grid.y, 1.0, grid.h), t.tx(0xd8e0e4).with_alpha(150));
     ui.c.pop_clip();
 
     // Track headers (§6, §6a).
