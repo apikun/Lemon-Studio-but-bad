@@ -344,6 +344,9 @@ pub enum Action {
     Dlg(crate::dialog::DHit),
     /// The Song info box: a click closes it (spec: flp/events/project-info.md "The Song info box").
     SongInfo,
+    /// Omni Command Palette actions (battlemountain2).
+    ToggleCommandPalette,
+    PaletteClick(usize),
 }
 
 /// Scrollable view axes. Scroll values are in content pixels (see `App::scroll_get`).
@@ -1003,6 +1006,8 @@ pub struct State {
     pub fl_layout: bool,
     /// The screen `fl_default` last laid the windows out on.
     pub fl_screen: (f32, f32),
+    /// Omni Command Palette state (battlemountain2).
+    pub palette: crate::palette::Palette,
     pub rack_pos: (f32, f32),
     pub rack_size: (f32, f32),
     /// Horizontal step scroll of the rack, pixels.
@@ -1402,6 +1407,7 @@ impl App {
                 show_browser: true,
                 fl_layout: false,
                 fl_screen: (0.0, 0.0),
+                palette: Default::default(),
                 rack_pos: (317.0, 195.0),
                 rack_size: views::rack::DEFAULT_SIZE,
                 rack_scroll_x: 0.0,
@@ -3162,6 +3168,17 @@ impl App {
     pub fn toggle_autoscroll(&mut self) {
         let on = crate::autoscroll::toggle();
         self.state.message = Some(if on { "Auto scrolling on" } else { "Auto scrolling off" }.into());
+        self.invalidate();
+    }
+
+    /// Omni Command Palette (Ctrl+K, Phase 4).
+    pub fn toggle_command_palette(&mut self) {
+        self.state.palette.open = !self.state.palette.open;
+        if self.state.palette.open {
+            self.state.palette.query.clear();
+            self.state.palette.selected = 0;
+            self.state.palette.scroll = 0;
+        }
         self.invalidate();
     }
 
@@ -7066,6 +7083,19 @@ impl App {
             return;
         }
         use winit::keyboard::{Key, NamedKey};
+        if self.state.palette.open && crate::palette::key(self, key, ctrl, alt) {
+            return;
+        }
+        // Ctrl+K: Omni Command Palette modal.
+        if let Key::Character(c) = key && ctrl && !alt && !self.shift && c.eq_ignore_ascii_case("k") {
+            self.toggle_command_palette();
+            return;
+        }
+        // So does a box of the settings window's Info page while it is edited, and a cell of File ▸ Browser extra
+        // search folders.
+        if self.info_key(key, ctrl, alt) || self.folder_cell_key(key, ctrl, alt) || self.name_key(key, ctrl, alt) {
+            return;
+        }
         // The Remote control settings box takes Esc (drops it) and Enter (accepts).
         if crate::remote::is_open(&self.state) {
             match key {
@@ -7998,6 +8028,16 @@ impl App {
             Action::Pat(h) => crate::patterns::hit(s, h),
             Action::Dlg(h) => self.dialog_click(h),
             Action::SongInfo => self.close_song_info(),
+            Action::ToggleCommandPalette => {
+                self.toggle_command_palette();
+            }
+            Action::PaletteClick(orig_idx) => {
+                let all = crate::palette::items(&self.state);
+                if let Some(item) = all.get(orig_idx) {
+                    let item = item.clone();
+                    crate::palette::execute(self, &item);
+                }
+            }
             Action::PlPickList => {}
             Action::PlPickAdd => {
                 let at = crate::patterns::box_at_mouse(self.mouse);
@@ -20802,5 +20842,77 @@ mod tests {
         // Delete asks first.
         pl::run(&mut app, Cmd::Pick(PickCmd::Delete, copy));
         assert!(app.state.rack.pending_delete.is_some() || app.state.rack.delete_now.is_some());
+    }
+    #[test]
+    fn command_palette_omni_search_and_execution() {
+        use winit::keyboard::{Key, NamedKey};
+        let mut app = App::new(None);
+        app.state.project = test_project();
+        let mut c = os_ui::Canvas::new(1920, 1080, 1.0).unwrap();
+
+        // 1. Initial State: palette is closed
+        assert!(!app.state.palette.open);
+
+        // 2. Ctrl+K opens the palette
+        app.key(&Key::Character("k".into()), true, false);
+        assert!(app.state.palette.open, "Ctrl+K opened command palette");
+        assert_eq!(app.state.palette.query, "");
+        assert_eq!(app.state.palette.selected, 0);
+
+        // 3. Typing query filters candidates
+        app.key(&Key::Character("m".into()), false, false);
+        app.key(&Key::Character("i".into()), false, false);
+        app.key(&Key::Character("x".into()), false, false);
+        assert_eq!(app.state.palette.query, "mix");
+
+        // Verify items include Focus Mixer and Mixer Tracks
+        let all = crate::palette::items(&app.state);
+        let filtered = crate::palette::filter_items(&all, &app.state.palette.query);
+        assert!(!filtered.is_empty());
+        assert!(filtered.iter().any(|s| s.item.title.contains("Mixer")));
+
+        // 4. Backspace removes last character
+        app.key(&Key::Named(NamedKey::Backspace), false, false);
+        assert_eq!(app.state.palette.query, "mi");
+
+        // 5. Arrow navigation updates selection
+        let count = crate::palette::filter_items(&all, &app.state.palette.query).len();
+        if count > 1 {
+            app.key(&Key::Named(NamedKey::ArrowDown), false, false);
+            assert_eq!(app.state.palette.selected, 1);
+            app.key(&Key::Named(NamedKey::ArrowUp), false, false);
+            assert_eq!(app.state.palette.selected, 0);
+        }
+
+        // 6. Esc key dismisses palette via Level 1 smart_escape
+        app.key(&Key::Named(NamedKey::Escape), false, false);
+        assert!(!app.state.palette.open, "Esc closed command palette");
+
+        // 7. Toggle via Action::ToggleCommandPalette
+        app.act(Action::ToggleCommandPalette);
+        assert!(app.state.palette.open);
+        assert_eq!(app.state.palette.query, "", "Re-opened palette resets query");
+
+        // 8. Paint frame with palette open, verify hits generated
+        frame(&mut app, &mut c, None);
+        assert!(app.hits.iter().any(|h| matches!(h.action, Action::ToggleCommandPalette)), "Backdrop close hit registered");
+        assert!(app.hits.iter().any(|h| matches!(h.action, Action::PaletteClick(_))), "Item row click hits registered");
+
+        // 9. Enter executes the selected command (Focus Playlist / Win::Playlist)
+        // Set query to "Playlist"
+        app.state.palette.query = "Playlist".into();
+        app.state.palette.selected = 0;
+        app.key(&Key::Named(NamedKey::Enter), false, false);
+        assert!(!app.state.palette.open, "Enter closed command palette");
+        assert!(app.state.shown(Win::Playlist), "Focus Playlist executed");
+
+        // 10. Click execution via Action::PaletteClick
+        app.act(Action::ToggleCommandPalette);
+        assert!(app.state.palette.open);
+        // Find "Stop Playback" item index
+        let all = crate::palette::items(&app.state);
+        let stop_idx = all.iter().position(|it| it.title == "Stop Playback").unwrap();
+        app.act(Action::PaletteClick(stop_idx));
+        assert!(!app.state.palette.open, "PaletteClick closed command palette");
     }
 }
