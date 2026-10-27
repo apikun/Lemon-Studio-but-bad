@@ -295,23 +295,32 @@ pub fn window_button_hover(c: &mut Canvas, t: &Palette, b: Rect, close: bool) {
 
 // ---------------------------------------------------------------- DAW parts
 
-/// Step button of the channel rack. `odd` = odd group of four, `dim` = past the pattern end, `playing` = the
-/// step playing now.
+/// Step button of the channel rack, built as FL's in Lemon's colours: a dark border, a face lighter at the top with a
+/// highlight along its cap, a dash below the top edge (lemon at the play position) and a shade along the bottom.
+/// `odd` = odd group of four, `dim` = past the pattern end, `playing` = the step playing now.
 #[allow(clippy::too_many_arguments)]
 pub fn step(c: &mut Canvas, t: &Palette, r: Rect, on: bool, odd: bool, dim: bool, hover: bool, playing: bool) {
-    let rad = r_small(t);
+    let rad = r_small(t).min(3.0);
     let (a, b) = if dim { (t.step_dim_a, t.step_dim_b) } else { (t.step_a, t.step_b) };
     let off = if odd { b } else { a };
     let (main, high) = (t.brand_sel(brand::MAIN), t.brand_sel(brand::HIGHLIGHT));
-    if on {
-        let (top, bottom) = if dim { (main.mix(off, 0.45), main.mix(off, 0.55)) } else { (high.mix(main, 0.5), main) };
-        c.fill_rect_gradient(r, if hover { high } else { top }, bottom, rad);
-        if playing {
-            c.fill_rrect(Rect::new(r.x + 2.0, r.bottom() - 4.0, r.w - 4.0, 2.0), 1.0, t.brand_sel(brand::COLORED_DARK));
-        }
-    } else {
-        c.fill_rrect(r, rad, if hover { off.mix(t.brand_grey(brand::DARK_HIGHLIGHT), 0.4) } else { off });
-    }
+    let face = match (on, dim) {
+        (true, false) => high.mix(main, 0.6),
+        (true, true) => main.mix(off, 0.5),
+        (false, _) => off.shade(0.08),
+    };
+    let face = if hover { face.mix(t.brand_grey(brand::DARK_HIGHLIGHT), 0.3) } else { face };
+    c.fill_rrect(r, rad, face.shade(-0.5));
+    let f = r.inset(1.0);
+    c.fill_rect_gradient(f, face.shade(0.16), face.shade(-0.1), (rad - 1.0).max(1.0));
+    c.fill_rect(Rect::new(f.x + 1.0, f.y, f.w - 2.0, 1.0), face.shade(0.28));
+    let dash = match (playing, on) {
+        (true, true) => t.brand_sel(brand::COLORED_DARK),
+        (true, false) => main,
+        (false, _) => face.shade(-0.5),
+    };
+    c.fill_rrect(Rect::new(f.x + 2.0, f.y + 2.5, f.w - 4.0, 2.0), 1.0, dash);
+    c.fill_rect(Rect::new(f.x + 1.0, f.bottom() - 2.0, f.w - 2.0, 2.0), face.shade(-0.3));
 }
 
 /// Channel name button (rack): `col` = the channel colour. Returns the label colour.
