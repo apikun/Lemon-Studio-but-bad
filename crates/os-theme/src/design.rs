@@ -34,14 +34,18 @@ impl Design {
     pub fn name(self) -> &'static str {
         match self {
             Design::Citrus => "Citrus",
-            Design::Lemon => "Lemon",
+            Design::Lemon => "Mango",
         }
     }
 
-    /// A skin by name; `Classic` (Citrus's old name, still in older `design.txt` files) is Citrus.
+    /// A skin by name; `Classic` (Citrus's old name, still in older `design.txt` files) is Citrus, and `Lemon` (this
+    /// skin's name before Mango Studio, in Lemon Studio's `design.txt`) is Mango.
     pub fn parse(s: &str) -> Option<Design> {
         if s.trim().eq_ignore_ascii_case("classic") {
             return Some(Design::Citrus);
+        }
+        if s.trim().eq_ignore_ascii_case("lemon") {
+            return Some(Design::Lemon);
         }
         Design::ALL.into_iter().find(|d| d.name().eq_ignore_ascii_case(s.trim()))
     }
@@ -179,21 +183,22 @@ pub fn classic_keys() -> Keys {
     }
 }
 
-/// The Lemon brand palette (owner's base colours, 2026-10-12) and the in-between shades derived from it.
+/// The Mango brand palette (Mango Studio's colours, 2026-10-28, after Lemon Studio's 2026-10-12 lemon palette) and
+/// the in-between shades derived from it. The module keeps its name: the skin is the same design in other colours.
 pub mod lemon {
     use crate::Color;
-    /// Main colour (pale yellow): "on" controls, selection, the playhead, lit steps.
-    pub const MAIN: Color = Color::rgb(0xffe066);
+    /// Main colour (mango orange): "on" controls, selection, the playhead, lit steps.
+    pub const MAIN: Color = Color::rgb(0xffa33a);
     /// Highlight: the bright top of lit controls, hover on lit controls, selected notes.
-    pub const HIGHLIGHT: Color = Color::rgb(0xfff1b8);
+    pub const HIGHLIGHT: Color = Color::rgb(0xffd59a);
     /// Dark: the main surface (toolbar).
     pub const DARK: Color = Color::rgb(0x3b3b3b);
     /// Dark highlight: raised faces on hover, hairlines, knob tracks.
     pub const DARK_HIGHLIGHT: Color = Color::rgb(0x666666);
-    /// Coloured dark: glyphs and text on lemon, unlit LEDs, hovered menu rows.
-    pub const COLORED_DARK: Color = Color::rgb(0x473900);
-    /// In-between: a darker lemon for edges of lit controls and meter bodies.
-    pub const DEEP: Color = Color::rgb(0xc9a92c);
+    /// Coloured dark: glyphs and text on mango, unlit LEDs, hovered menu rows.
+    pub const COLORED_DARK: Color = Color::rgb(0x4a2300);
+    /// In-between: a darker mango for edges of lit controls and meter bodies.
+    pub const DEEP: Color = Color::rgb(0xd9731a);
     /// Text on the greys.
     pub const TEXT: Color = Color::rgb(0xececec);
 }
@@ -221,7 +226,7 @@ fn map_of(d: Design) -> Option<DesignMap> {// This code is a part of L e m o n S
         Design::Citrus => None,
         Design::Lemon => Some(DesignMap {
             ramp: LEMON_RAMP,
-            tint: (48.0, 0.0),
+            tint: (30.0, 0.0),
             accent: lemon::MAIN,
             highlight: lemon::MAIN,
             mute: lemon::MAIN,
@@ -317,9 +322,9 @@ fn overrides(d: Design) -> Vec<(&'static str, Color)> {
             ("rack_inset_border", c(0x262626)),
             ("rack_control_border", c(0x222222)),
             ("step_a", c(0x4d4d4d)),
-            ("step_b", c(0x5a4d1f)),
+            ("step_b", c(0x5c3a1f)),
             ("step_dim_a", c(0x3a3a3a)),
-            ("step_dim_b", c(0x3d3827)),
+            ("step_dim_b", c(0x3d3127)),
             ("step_dim_border", c(0x2e2e2e)),
             ("step_on", MAIN),
             ("add_hover", MAIN),

@@ -9839,7 +9839,7 @@ mod tests {
         app.open_settings(THEME);
         let st = &app.state.settings;
         assert_eq!((st.skin_previews.len(), st.theme_previews.len()), (2, PRESETS.len() + 2));
-        assert_eq!(st.themes[..2].iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(), ["Lemon", "Citrus"]);
+        assert_eq!(st.themes[..2].iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(), ["Mango", "Citrus"]);
         assert_eq!((st.skin, st.preset), (1, 1), "Citrus skin, no theme: the Citrus theme's tile");
         // A theme in Citrus, then the Lemon skin keeps it.
         let (name, text) = PRESETS[2];
@@ -9941,11 +9941,11 @@ mod tests {
         app.state.playlist.popup = None;
         // Duplicate, rename, delete.
         app.theme_cmd(ThemeCmd::Duplicate(0));
-        assert_eq!(std::fs::read_to_string(themes.join("Lemon copy.flstheme")).ok().as_deref(), Some(app.state.settings.themes[0].1.as_str()));
+        assert_eq!(std::fs::read_to_string(themes.join("Mango copy.flstheme")).ok().as_deref(), Some(app.state.settings.themes[0].1.as_str()));
         let mine = app.state.settings.themes.iter().position(|(n, _)| n == "Mine").unwrap();
         app.theme_cmd(ThemeCmd::Rename(mine));
         assert_eq!(name(&app).as_deref(), Some("Mine"));
-        app.state.settings.name_edit.as_mut().unwrap().text.set("Lemon copy");
+        app.state.settings.name_edit.as_mut().unwrap().text.set("Mango copy");
         app.key(&Key::Named(NamedKey::Enter), false, false);
         assert!(app.state.settings.name_edit.is_some(), "a clash with another of the user's themes is refused");
         app.key(&Key::Named(NamedKey::Escape), false, false);
