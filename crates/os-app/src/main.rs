@@ -1,5 +1,6 @@
 // Copyright (C) 2026 ItsAlphaNeon
 // Copyright (C) 2026 thacer13
+// Copyright (C) 2026 Artig3nce
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -370,10 +371,35 @@ const BORDER: (f32, f32, f32, f32) = (6.0, 2.0, 6.0, 6.0);
 const TOP_GRIP: f32 = 4.0;
 const CORNER: f32 = 14.0;
 
+/// Height of the main window's monitor in its own logical pixels, 0 until a window has one (`note_monitor`): Auto
+/// scaling reads it.
+static SCREEN_H: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Keeps `SCREEN_H` on the main window's monitor; true when it changed (the scale may have with it).
+fn note_monitor(monitor: Option<&winit::monitor::MonitorHandle>) -> bool {
+    let Some(m) = monitor else { return false };
+    let h = (f64::from(m.size().height) / m.scale_factor()).round() as u32;
+    SCREEN_H.swap(h, std::sync::atomic::Ordering::Relaxed) != h
+}
+
+/// Auto's share of the monitor's scale on a monitor `h` logical px tall: all of it up to 1080, 85 % from 1440 up and in
+/// proportion between, so a larger screen shows FL's density; all of it while the height is unknown (0).
+fn auto_density(h: f64) -> f64 {
+    if h <= 0.0 {
+        return 1.0;
+    }
+    1.0 - 0.15 * ((h - 1080.0) / (1440.0 - 1080.0)).clamp(0.0, 1.0)
+}
+
 /// The UI's scale (device pixels per logical one) on a monitor whose own is `system`: Settings > General > Display >
-/// Main GUI scaling keeps it (System) or replaces it with a percentage (spec: ui/ui-scaling.md §1).
+/// Main GUI scaling follows the monitor's resolution (Auto), keeps its scale (System) or replaces it with a percentage
+/// (spec: ui/ui-scaling.md §1).
 pub(crate) fn gui_scale(system: f64) -> f64 {
-    let pct = prefs::choice(&prefs::MAIN_GUI_SCALING).strip_suffix('%').and_then(|p| p.parse::<f64>().ok());
+    let choice = prefs::choice(&prefs::MAIN_GUI_SCALING);
+    if choice == "Auto" {
+        return system * auto_density(f64::from(SCREEN_H.load(std::sync::atomic::Ordering::Relaxed)));
+    }
+    let pct = choice.strip_suffix('%').and_then(|p| p.parse::<f64>().ok());
     pct.map_or(system, |p| p / 100.0)
 }
 
@@ -741,6 +767,7 @@ impl ApplicationHandler for Shell {
         }
         #[cfg(target_os = "macos")]
         menu_bar::install();
+        note_monitor(window.current_monitor().as_ref());
         self.app.plugins.scale = ui_scale(&window) as f32;
         // Built-in and cached plugins at once, then a background scan (spec: ui/plugin-manager.md §4).
         splash::step(&self.splash, splash::PLUGINS, "Loading plugins");
@@ -1123,6 +1150,11 @@ impl ApplicationHandler for Shell {
                 let monitor = window.current_monitor();
                 if monitor != self.frame_monitor {
                     self.frame = frame_interval(monitor.as_ref().and_then(|m| m.refresh_rate_millihertz()));
+                    // Auto scaling follows the new monitor's resolution from the next paint.
+                    if note_monitor(monitor.as_ref()) {
+                        self.app.invalidate();
+                        window.request_redraw();
+                    }
                     self.frame_monitor = monitor;
                 }
                 // Paint only what changed, then present only that region.
@@ -1921,8 +1953,17 @@ mod tests {
             prefs::set_choice(&prefs::MAIN_GUI_SCALING, i);
             got.push(gui_scale(1.5));
         }
-        assert_eq!(got, [1.5, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0]);
-        prefs::set_choice(&prefs::MAIN_GUI_SCALING, 0);
+        // Auto with no monitor known yet keeps the monitor's scale, like System.
+        assert_eq!(got, [1.5, 1.5, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0]);
+        prefs::set_choice(&prefs::MAIN_GUI_SCALING, 1);
         assert_eq!(gui_scale(1.25), 1.25);
+        prefs::set_choice(&prefs::MAIN_GUI_SCALING, 0);
+    }
+
+    /// Auto scaling (spec: ui/ui-scaling.md §1): FL's density on larger monitors, the monitor's scale up to 1080 px.
+    #[test]
+    fn auto_scaling_follows_the_monitor_height() {
+        let got: Vec<f64> = [0.0, 768.0, 1080.0, 1260.0, 1440.0, 2160.0].map(auto_density).to_vec();
+        assert_eq!(got, [1.0, 1.0, 1.0, 0.925, 0.85, 0.85]);
     }
 }
