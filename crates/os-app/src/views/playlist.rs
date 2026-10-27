@@ -1273,7 +1273,7 @@ fn header(ui: &mut Ui, s: &State, g: &PGeom, row: u16, x: f32, w: f32) {
         let left = if lead { hr.x + k } else { hr.x };
         ui.c.fill_rect(Rect::new(left, hr.bottom() - k, hr.right() - left, k), bottom);
     }
-    ui.hit(hr, Action::PlHeader(row), "Track (double-click: rename, right-click: menu, Shift+wheel: move)");
+    ui.hit(hr, Action::PlHeader(row), "Track (drop an instrument on it: it lands here, double-click: rename, right-click: menu, Shift+wheel: move)");
     if strip {
         return;
     }
