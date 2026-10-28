@@ -4,9 +4,11 @@
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
 //! Mixer behaviour: track selection, mute / solo, routing and send levels, the track / options / layout menus,
-//! adding / moving / deleting tracks, and the effect slots that host plugins.
+//! adding / moving / deleting tracks, the effect slots that host plugins, and the tracks' audio device inputs and
+//! outputs (the input / output combos, the record menu, arming).
 //!
-// spec: ui/mixer.md (every interaction), flp/events/mixer.md (what is stored), audio/gain-laws.md (fader law)
+// spec: ui/mixer.md (every interaction), flp/events/mixer.md (what is stored), audio/gain-laws.md (fader law),
+// audio/track-io.md (audio inputs and outputs)
 
 use std::collections::HashMap;
 
@@ -17,8 +19,7 @@ use crate::knobs::KnobId;
 use crate::playlist::{Cmd, EditTarget, Mark, PItem, Popup};
 
 /// Mixer controls (the view registers them as `Action::Mix`). Controls that are not available yet (title-bar view
-/// buttons, input pin, latency clock, disk recording, output combo, track equalizer) are greyed out with `Ui::off`
-/// instead.
+/// buttons, input pin, latency clocks, track equalizer) are greyed out with `Ui::off` instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MHit {
     /// Anywhere on a strip that is not a control.
@@ -43,8 +44,12 @@ pub enum MHit {
     Scale,
     /// The current track's equaliser graph: a press grabs the band nearest the cursor's frequency.
     EqGraph,
-    /// The current track's input combo: the device's inputs to hear.
+    /// The current track's record-source icon, input combo and output combo (spec: audio/track-io.md §1.1).
+    RecSource,
     Input,
+    Output,
+    /// A strip's disk-record button: arms / disarms the track.
+    Arm(u16),
     /// Clear pattern mixer focus badge.
     ClearPatternFilter,
 }
@@ -98,8 +103,12 @@ pub enum MCmd {
     /// Sidechain input ▸ (Lemon Studio's own): the input of the current track a hosted plugin's sidechain bus hears,
     /// counted from 1, 0 for none (spec: audio/sidechain.md "Hosted plugins' input buses").
     SlotSidechain(u8, usize),
-    /// The input combo's pick: track `n` hears that input of the device before its effects (`None`: none).
-    Input(u16, Option<crate::capture::Input>),
+    /// A track's audio input and output as stored (-1: none), its record source and its monitor mode (spec:
+    /// audio/track-io.md §1.6).
+    Input(u16, i32),
+    Output(u16, i32),
+    RecSource(u16, u8),
+    Monitor(u16, u8),
 }
 
 /// What the plugin host does next tick for a mixer slot (`App::mixer_tick`).
@@ -416,30 +425,170 @@ pub fn hit(app: &mut App, h: MHit) -> Option<String> {
             None
         }
         MHit::Input => {
-            s.playlist.popup = Some(input_menu(s, at.0, at.1 + 10.0));
+            s.playlist.popup = input_menu(s, at.0, at.1 + 10.0);
+            None
+        }
+        MHit::Output => {
+            s.playlist.popup = Some(output_menu(s, at.0, at.1 + 10.0));
+            None
+        }
+        MHit::RecSource => {
+            s.playlist.popup = Some(record_menu(s, at.0, at.1 + 10.0));
+            None
+        }
+        MHit::Arm(n) => {
+            let m = track_mut(s, n)?;
+            m.armed = !m.armed;
+            changed(s);
             None
         }
         MHit::Scale | MHit::EqGraph => None,
     }
 }
 
-/// The input combo's text: the current input of track `n` ("In 1 - In 2", "In 3"), or "(none)".
-pub fn input_label(s: &State, n: u16) -> String {
-    let i = s.project.mixer.iter().find(|m| m.index == n).and_then(|m| m.input.as_ref());
-    i.map_or("(none)".into(), |i| crate::capture::Input { device: i.device.clone(), asio: false, first: i.first, stereo: i.stereo }.label())
+// ---------------------------------------------------------------------------------------------------------
+// Audio inputs and outputs (spec: audio/track-io.md)
+
+/// `settings.txt`'s answer to the External input question once Remember my choice was ticked: "yes" or "no".
+pub const EXT_INPUT_ANSWER: &str = "ext_input_answer";
+
+/// The record sources (event 165) with their menu names and the label under the record-source icon (§2.3).
+pub const REC_SOURCES: [(&str, &str); 6] = [
+    ("External input only", "EXT"),
+    ("External and mixer input", "MIX"),
+    ("Post effects", "FX"),
+    ("Post EQ", "EQ"),
+    ("Post level and panning", "LVL"),
+    ("Post track", "TRK"),
+];
+
+/// The monitor modes (event 166) with their menu names.
+pub const MONITOR_MODES: [(u8, &str); 3] = [(os_model::MONITOR_OFF, "Off"), (os_model::MONITOR_ARMED, "When armed"), (os_model::MONITOR_ON, "On")];
+
+/// The device's inputs as the input menu lists them (§2.1): its stereo pairs, then each input alone, each with its
+/// stored number. None unless an ASIO driver opened inputs.
+pub fn input_choices(d: Option<&crate::device::DeviceInfo>) -> (Vec<(i32, String)>, Vec<(i32, String)>) {
+    let Some(d) = d.filter(|d| d.host == crate::device::ASIO && d.inputs > 0) else { return (Vec::new(), Vec::new()) };
+    let n = usize::from(d.inputs);
+    let name = |c: usize| d.in_names.get(c).cloned().unwrap_or_else(|| format!("In {}", c + 1));
+    let pairs: Vec<(i32, String)> = (0..n / 2).map(|k| (k as i32, format!("{} - {}", name(2 * k), name(2 * k + 1)))).collect();
+    let p = pairs.len() as i32;
+    (pairs, (0..n).map(|c| (p + c as i32, name(c))).collect())
 }
 
-/// The input combo's menu for the current track: (none), then the device's stereo and mono inputs (as FL lists them),
-/// the one it hears marked.
-fn input_menu(s: &State, x: f32, y: f32) -> Popup {
-    let n = s.selected_mixer;
-    let now = s.project.mixer.iter().find(|m| m.index == n).and_then(|m| m.input.clone());
-    let mut items = vec![PItem::new("(none)", Cmd::Mixer(MCmd::Input(n, None))).mark(Mark::Radio(now.is_none()))];
-    items.extend(crate::one_click::listed(|i| {
-        let on = now.as_ref().is_some_and(|t| t.device == i.device && t.first == i.first && t.stereo == i.stereo);
-        PItem::new(i.label(), Cmd::Mixer(MCmd::Input(n, Some(i.clone())))).mark(Mark::Radio(on))
-    }));
+/// The device's outputs as the output menu lists them (§2.1) with their stored numbers: an ASIO driver's stereo pairs
+/// (its one output by its name), else one entry, the device.
+pub fn output_choices(d: Option<&crate::device::DeviceInfo>) -> Vec<(i32, String)> {
+    match d {
+        Some(d) if d.host == crate::device::ASIO => {
+            let name = |c: usize| d.out_names.get(c).cloned().unwrap_or_else(|| format!("Out {}", c + 1));
+            if d.channels == 1 {
+                return vec![(0, name(0))];
+            }
+            (0..d.pairs()).map(|k| (k as i32, format!("{} - {}", name(2 * k), name(2 * k + 1)))).collect()
+        }
+        Some(d) => vec![(0, d.name.clone())],
+        None => vec![(0, "Audio output".into())],
+    }
+}
+
+/// What a combo shows for stored number `v` among `choices`: "(none)", the entry's name, or "(not available)" for a
+/// number the device does not have.
+fn choice_label(v: i32, choices: &[(i32, String)]) -> String {
+    if v < 0 {
+        return "(none)".into();
+    }
+    choices.iter().find(|c| c.0 == v).map_or_else(|| "(not available)".into(), |c| c.1.clone())
+}
+
+/// The input combo's text for track `n`, and whether the device has inputs to choose from.
+pub fn input_label(s: &State, n: u16) -> (String, bool) {
+    let (pairs, monos) = input_choices(crate::device::last().as_ref());
+    let v = track(s, n).map_or(-1, |m| m.audio_in);
+    let all: Vec<(i32, String)> = pairs.into_iter().chain(monos).collect();
+    (choice_label(v, &all), !all.is_empty())
+}
+
+/// The output combo's text for track `n`.
+pub fn output_label(s: &State, n: u16) -> String {
+    let v = track(s, n).map_or(-1, |m| m.audio_out);
+    choice_label(v, &output_choices(crate::device::last().as_ref()))
+}
+
+/// The input menu of the current track (§1.2): `<driver> - stereo` and its pairs, `<driver> - mono` and the inputs,
+/// then "(none)". `None` when the device has no inputs.
+fn input_menu(s: &State, x: f32, y: f32) -> Option<Popup> {
+    let d = crate::device::last();
+    let (pairs, monos) = input_choices(d.as_ref());
+    let driver = d.map(|d| d.name).unwrap_or_default();
+    if pairs.is_empty() && monos.is_empty() {
+        return None;
+    }
+    let t = s.selected_mixer;
+    let item = |(v, name): (i32, String)| PItem::new(name, Cmd::Mixer(MCmd::Input(t, v)));
+    let mut items = Vec::new();
+    if !pairs.is_empty() {
+        items.push(PItem::head(format!("{driver} - stereo")));
+        items.extend(pairs.into_iter().map(item));
+    }
+    items.push(PItem::head(format!("{driver} - mono")));
+    items.extend(monos.into_iter().map(item));
+    items.extend([PItem::sep(), PItem::new("(none)", Cmd::Mixer(MCmd::Input(t, -1)))]);
+    Some(Popup { x, y, items, sub: None, scroll: [0; 2] })
+}
+
+/// The output menu of the current track (§1.2): an ASIO driver's `<driver> - stereo` and its pairs (a Windows device:
+/// its name), then "(none)".
+fn output_menu(s: &State, x: f32, y: f32) -> Popup {
+    let d = crate::device::last();
+    let t = s.selected_mixer;
+    let mut items = Vec::new();
+    if let Some(d) = d.as_ref().filter(|d| d.host == crate::device::ASIO && d.channels > 1) {
+        items.push(PItem::head(format!("{} - stereo", d.name)));
+    }
+    items.extend(output_choices(d.as_ref()).into_iter().map(|(v, name)| PItem::new(name, Cmd::Mixer(MCmd::Output(t, v)))));
+    items.extend([PItem::sep(), PItem::new("(none)", Cmd::Mixer(MCmd::Output(t, -1)))]);
     Popup { x, y, items, sub: None, scroll: [0; 2] }
+}
+
+/// The record-source icon's menu (§1.3): the record source, then the monitor mode, each choice marked.
+fn record_menu(s: &State, x: f32, y: f32) -> Popup {
+    let t = s.selected_mixer;
+    let (source, monitor) = track(s, t).map_or((os_model::REC_POST_EQ, os_model::MONITOR_ARMED), |m| (m.rec_source, m.monitor));
+    let mut items = vec![PItem::head("Record")];
+    for (k, (label, _)) in REC_SOURCES.iter().enumerate() {
+        items.push(PItem::new(*label, Cmd::Mixer(MCmd::RecSource(t, k as u8))).mark(Mark::Radio(usize::from(source) == k)));
+    }
+    items.push(PItem::head("Monitor external input"));
+    for (v, label) in MONITOR_MODES {
+        items.push(PItem::new(label, Cmd::Mixer(MCmd::Monitor(t, v))).mark(Mark::Radio(monitor == v)));
+    }
+    Popup { x, y, items, sub: None, scroll: [0; 2] }
+}
+
+/// Track `t` takes its input alone (the External input question's Yes).
+pub(crate) fn external_only(s: &mut State, t: u16) {
+    if let Some(m) = track_mut(s, t) {
+        m.rec_source = os_model::REC_EXTERNAL;
+        changed(s);
+    }
+}
+
+/// Sets one of track `t`'s input, output, record source or monitor mode (`f`) as an undoable edit, unless it is so
+/// already.
+fn set_io(s: &mut State, t: u16, f: impl Fn(&mut MixerTrack)) -> bool {
+    let Some(m) = track(s, t) else { return false };
+    let mut after = m.clone();
+    f(&mut after);
+    if after == *m {
+        return false;
+    }
+    crate::history::track_io(s, t);
+    if let Some(m) = track_mut(s, t) {
+        f(m);
+    }
+    changed(s);
+    true
 }
 
 // The equaliser graph `g` spans the frequency knob's range left to right (10 Hz .. 16 kHz) and ±18 dB over its
@@ -1224,19 +1373,27 @@ pub fn run(app: &mut App, c: MCmd) -> Option<String> {
             app.audio_logger(n);
             return None;
         }
-        MCmd::Input(n, i) => {
-            let m = track_mut(s, n)?;
-            m.input = i.as_ref().map(|i| os_model::TrackInput { device: i.device.clone(), first: i.first, stereo: i.stereo });
-            changed(s);
-            if let Some(i) = &i {
-                crate::capture::set_last_input(i);
-            }
-            Some(match i {
-                Some(i) => format!("{} hears {} ({})", name(s, n), i.label(), i.device),
-                None => format!("{}: no audio input", name(s, n)),
-            })
-        }
         MCmd::RemoveTeslas => return app.ask_remove_teslas(),
+        MCmd::Input(t, v) => {
+            // An input chosen where there was none asks whether to record it alone (§1.4).
+            let ask = track(s, t).is_some_and(|m| m.audio_in < 0 && v >= 0 && m.rec_source != os_model::REC_EXTERNAL);
+            if set_io(s, t, |m| m.audio_in = v) && ask {
+                app.ask_external(t);
+            }
+            return None;
+        }
+        MCmd::Output(t, v) => {
+            set_io(s, t, |m| m.audio_out = v);
+            None
+        }
+        MCmd::RecSource(t, v) => {
+            set_io(s, t, |m| m.rec_source = v);
+            None
+        }
+        MCmd::Monitor(t, v) => {
+            set_io(s, t, |m| m.monitor = v);
+            None
+        }
         MCmd::RemoveTeslasNow => {
             let gone = teslas(s);
             for &(t, k) in &gone {
@@ -1628,6 +1785,21 @@ impl App {
 
     /// Remove all (audio editor) instances (spec: plugins/tesla/README.md "Recording into Tesla from Lemon Studio"):
     /// asks first, since removed slots can't be brought back yet; with none, says so.
+    /// The External input question for track `t` (spec: audio/track-io.md §1.4), unless Remember my choice answered it.
+    pub(crate) fn ask_external(&mut self, t: u16) {
+        use crate::dialog::{spans, Answer, Kind, Msg, Then};
+        match crate::prefs::text(EXT_INPUT_ANSWER).as_deref() {
+            Some("yes") => external_only(&mut self.state, t),
+            Some("no") => {}
+            _ => {
+                let text = "You've selected an external input. Do you want to switch to External input only to avoid recording internal audio on this track?";
+                let mut m = Msg::new(Kind::Question, "External input", spans(&[text]), &[Answer::Yes, Answer::No], Then::ExtInput(t));
+                m.remember = Some((&crate::messages::EXT_INPUT, false));
+                self.show_msg(m);
+            }
+        }
+    }
+
     pub(crate) fn ask_remove_teslas(&mut self) -> Option<String> {
         let n = teslas(&self.state).len();
         if n == 0 {
@@ -1726,6 +1898,80 @@ mod tests {
         let mut app = App::new(None);
         app.state.project = crate::app::test_project();
         app
+    }
+
+    fn asio(inputs: u16, outputs: u16) -> crate::device::DeviceInfo {
+        crate::device::DeviceInfo {
+            host: crate::device::ASIO,
+            name: "Card".into(),
+            rate: 48000,
+            fixed: Some(256),
+            buffers: None,
+            channels: outputs,
+            inputs,
+            out_names: (1..=outputs).map(|c| format!("Out {c}")).collect(),
+            in_names: vec!["Mic".into(), "Guitar".into(), "In 3".into()].into_iter().take(usize::from(inputs)).collect(),
+            input_latency: None,
+            rates: Vec::new(),
+            sizes: Vec::new(),
+            latency: None,
+            instead: None,
+        }
+    }
+
+    /// spec: audio/track-io.md §2.1: pairs first, then each input alone; outputs in pairs, else one entry.
+    #[test]
+    fn device_inputs_and_outputs_are_numbered_as_stored() {
+        let d = asio(3, 5);
+        let (pairs, monos) = input_choices(Some(&d));
+        assert_eq!(pairs, [(0, "Mic - Guitar".to_string())]);
+        assert_eq!(monos, [(1, "Mic".to_string()), (2, "Guitar".to_string()), (3, "In 3".to_string())]);
+        assert_eq!(output_choices(Some(&d)), [(0, "Out 1 - Out 2".to_string()), (1, "Out 3 - Out 4".to_string())], "a last odd output is not offered");
+        assert_eq!(output_choices(Some(&asio(0, 1))), [(0, "Out 1".to_string())]);
+        let wasapi = crate::device::DeviceInfo { host: "WASAPI", name: "Speakers".into(), ..asio(0, 2) };
+        assert_eq!(input_choices(Some(&wasapi)), (vec![], vec![]), "inputs only under ASIO");
+        assert_eq!(output_choices(Some(&wasapi)), [(0, "Speakers".to_string())]);
+        assert_eq!(choice_label(-1, &pairs), "(none)");
+        assert_eq!(choice_label(4, &monos), "(not available)");
+    }
+
+    /// spec: audio/track-io.md §1.3, §1.4, §2.3: the record menu; choosing an input asks once; the edits undo, arming
+    /// is no edit.
+    #[test]
+    fn choosing_an_input_asks_to_record_it_alone() {
+        use crate::dialog::{Body, DHit};
+        let mut a = app();
+        let menu = record_menu(&a.state, 0.0, 0.0);
+        let marked: Vec<&str> = menu.items.iter().filter(|i| i.mark == Mark::Radio(true)).map(|i| i.label.as_ref()).collect();
+        assert_eq!(marked, ["Post EQ", "When armed"]);
+        run(&mut a, MCmd::Input(1, 0));
+        assert_eq!(track(&a.state, 1).unwrap().audio_in, 0);
+        assert!(matches!(a.state.dialogs.last().map(|d| &d.body), Some(Body::Msg(m)) if m.title == "External input"));
+        a.dialog_click(DHit::Button(0));
+        assert_eq!(track(&a.state, 1).unwrap().rec_source, os_model::REC_EXTERNAL, "Yes");
+        // Another input, or one chosen while the source is External input only: no question.
+        run(&mut a, MCmd::Input(1, 2));
+        assert!(a.state.dialogs.is_empty());
+        // No, remembered: the next track is not asked and keeps its source.
+        run(&mut a, MCmd::Input(2, 1));
+        a.dialog_click(DHit::Remember);
+        a.dialog_click(DHit::Button(1));
+        assert_eq!(crate::prefs::text(EXT_INPUT_ANSWER).as_deref(), Some("no"));
+        run(&mut a, MCmd::Input(3, 1));
+        assert!(a.state.dialogs.is_empty());
+        assert_eq!(track(&a.state, 3).unwrap().rec_source, os_model::REC_POST_EQ);
+        crate::prefs::set_text(EXT_INPUT_ANSWER, "");
+        // The edits undo; arming is kept through them.
+        hit(&mut a, MHit::Arm(3));
+        run(&mut a, MCmd::Monitor(3, os_model::MONITOR_ON));
+        run(&mut a, MCmd::Output(3, 1));
+        crate::history::undo(&mut a.state);
+        crate::history::undo(&mut a.state);
+        let m = track(&a.state, 3).unwrap();
+        assert_eq!((m.audio_out, m.monitor, m.armed), (-1, os_model::MONITOR_ARMED, true));
+        assert!(m.monitored(), "armed with an input");
+        crate::history::undo(&mut a.state);
+        assert!(!track(&a.state, 3).unwrap().monitored(), "no input");
     }
 
     #[test]
@@ -1845,29 +2091,6 @@ mod tests {
         run(&mut a, MCmd::InsertOne(2));
         assert_eq!(name(&a.state, 3), "Two");
         assert!(a.state.project.mixer.iter().enumerate().all(|(i, m)| usize::from(m.index) == i), "indices stay in order");
-    }
-
-    /// The input combo: (none) and the device's stereo and mono inputs; a pick is what the track hears (it goes to
-    /// the engine with the project), shown in the combo and marked in the menu; (none) takes it away.
-    #[test]
-    fn the_input_combo_routes_an_input_into_the_track() {
-        let mut a = app();
-        select(&mut a.state, 3, false);
-        assert_eq!(input_label(&a.state, 3), "(none)");
-        hit(&mut a, MHit::Input);
-        let Some(Popup { items, .. }) = a.state.playlist.popup.take() else { panic!("no input menu") };
-        let labels: Vec<String> = items.iter().map(|p| p.label.to_string()).collect();
-        assert_eq!(labels, ["(none)", "Test ASIO - stereo", "In 1 - In 2", "Test ASIO - mono", "In 1", "In 2"]);
-        assert_eq!(items[0].mark, Mark::Radio(true));
-        let Cmd::Mixer(pick) = items[2].cmd.clone() else { panic!("{:?}", items[2].cmd) };
-        let msg = run(&mut a, pick).unwrap_or_default();
-        assert_eq!(msg, "Insert 3 hears In 1 - In 2 (Test ASIO)");
-        assert_eq!(track(&a.state, 3).unwrap().input, Some(os_model::TrackInput { device: "Test ASIO".into(), first: 0, stereo: true }));
-        assert_eq!(input_label(&a.state, 3), "In 1 - In 2");
-        assert!(a.state.piano.dirty, "the engine gets it");
-        assert_eq!(input_menu(&a.state, 0.0, 0.0).items[2].mark, Mark::Radio(true));
-        run(&mut a, MCmd::Input(3, None));
-        assert_eq!(track(&a.state, 3).unwrap().input, None);
     }
 
     #[test]

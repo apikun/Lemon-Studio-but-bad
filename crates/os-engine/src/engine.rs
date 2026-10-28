@@ -689,8 +689,6 @@ struct MixTrack {
     eq: os_dsp::mixer::TrackEq,
     /// Insert effects in slot order (applied before the fader).
     effects: Vec<FxSlot>,
-    /// The live input it hears before its slots: the first input (0-based) and whether the next makes a pair with it.
-    input: Option<(usize, bool)>,
     /// Slot switches and stored mix levels (0..12800) by slot, for hosted effects attached later.
     slot_on: [bool; 10],
     slot_mix: [i32; 10],
@@ -708,6 +706,40 @@ struct MixTrack {
     /// What the engine itself plays into the track (sampler voices, the metronome) waits here for the latest path
     /// into it (delay compensation).
     pad: pdc::Pad,
+    /// The device input the track hears (-1: none, or not monitored) and the output pair it plays on directly (-1:
+    /// none), numbered as stored (spec: audio/track-io.md §2.1, §2.2).
+    input: i32,
+    output: i32,
+}
+
+/// The audio device's inputs as they arrive, for the mixer tracks that monitor one (spec: audio/track-io.md §2.2).
+pub trait DeviceInput: Send {
+    /// Inputs the device has open.
+    fn channels(&self) -> usize;
+    /// The next `out.len() / channels` frames of every input, interleaved; what has not arrived is silence.
+    fn read(&mut self, out: &mut [f32]);
+}
+
+/// A stream's device: its inputs, and its output pairs, which the master and the tracks' direct outputs play on. With
+/// it the engine hands out `2 × pairs` interleaved channels instead of the master (`Engine::set_device`).
+struct DeviceIo {
+    input: Option<Box<dyn DeviceInput>>,
+    pairs: usize,
+    /// This tick's inputs (interleaved), and what the tracks send to the pairs directly.
+    inputs: Vec<f32>,
+    direct: Vec<f32>,
+}
+
+/// Input number `n` of a device with `channels` inputs as (left, right) channels: the stereo pairs first, then each
+/// input alone, heard on both sides (spec: audio/track-io.md §2.1).
+pub fn input_channels(n: i32, channels: usize) -> Option<(usize, usize)> {
+    let n = usize::try_from(n).ok()?;
+    let pairs = channels / 2;
+    if n < pairs {
+        Some((2 * n, 2 * n + 1))
+    } else {
+        (n - pairs < channels).then_some((n - pairs, n - pairs))
+    }
 }
 
 /// A mixer track's settings as the project stores them.
@@ -814,7 +846,6 @@ impl MixTrack {
             slots_enabled: true,
             eq: os_dsp::mixer::TrackEq::default(),
             effects: Vec::new(),
-            input: None,
             slot_on: [true; 10],
             slot_mix: [12800; 10],
             peak: [0.0; 2],
@@ -832,6 +863,8 @@ impl MixTrack {
             },
             latency: (0.0, 0.0),
             pad: pdc::Pad::default(),
+            input: -1,
+            output: -1,
         }
     }
 
@@ -923,16 +956,6 @@ impl MixTrack {
     }
 }
 
-/// Inputs a frame of live input holds (`LiveInput::read`): a track's input past them is silent.
-pub const LIVE_INPUTS: usize = 8;
-
-/// A device's live inputs (a mixer track's input combo): the engine reads a tick's worth of them as it renders it.
-pub trait LiveInput: Send + Sync {
-    /// The next `frames` frames of every input, [`LIVE_INPUTS`] samples to a frame, into `out` (resized to fit);
-    /// silence for what has not come in.
-    fn read(&self, frames: usize, out: &mut Vec<f32>);
-}
-
 /// Things the engine skipped, so callers can report them.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct EngineReport {
@@ -989,9 +1012,6 @@ pub struct Engine {
     /// A live-only engine that never finishes: its hosted instruments are processed every tick, so notes played in
     /// their own editors sound (`set_awake`).
     awake: bool,
-    /// The device's live inputs, for the tracks that take one (`set_live_input`), and the tick's frames of them.
-    live_in: Option<Arc<dyn LiveInput>>,
-    in_buf: Vec<f32>,
     /// The tail rule has ended the song: a tick at or after its end stayed quiet (spec: audio/timing.md).
     tail_done: bool,
     /// Pause (`pause`): the channels fade out of the mixer and are then held where they are (`held`) while the mixer
@@ -1043,6 +1063,8 @@ pub struct Engine {
     out_frame: u64,
     out_held: bool,
     out_len: u64,
+    /// Playing on a device (`set_device`): `out` holds its output pairs instead of the master.
+    io: Option<DeviceIo>,
     /// Instrument channels: scheduled note ends (tick, channel, key, an audio clip's voice: choked at the clip's end;
     /// `None`: a note, which ends with a note off), live notes waiting for the next tick (channel, key, velocity;
     /// negative = note off), this tick's events.
@@ -1325,7 +1347,7 @@ impl Engine {
             .collect();
 
         let tracks: Vec<MixTrack> = if project.mixer.is_empty() {
-            vec![MixTrack { eq: os_dsp::mixer::TrackEq::new(os_dsp::mixer::EQ_DEFAULT, rate), law: pan_law, ..MixTrack::unity() }]
+            vec![MixTrack { eq: os_dsp::mixer::TrackEq::new(os_dsp::mixer::EQ_DEFAULT, rate), law: pan_law, output: 0, ..MixTrack::unity() }]
         } else {
             project
                 .mixer
@@ -1368,11 +1390,12 @@ impl Engine {
                         slots_enabled: m.slots_enabled,
                         eq: os_dsp::mixer::TrackEq::new(m.eq, rate),
                         effects,
-                        input: m.input.as_ref().map(|i| (usize::from(i.first), i.stereo)),
                         slot_on: m.slot_on,
                         slot_mix: m.slot_mix.map(mix_level),
                         routes,
                         latency: (m.latency_out, m.latency_in),
+                        input: if m.monitored() { m.audio_in } else { -1 },
+                        output: m.audio_out,
                         ..MixTrack::unity()
                     };
                     // At the start of the song every gain is at its target.
@@ -1571,8 +1594,6 @@ impl Engine {
             loop_range: None,
             live_only: false,
             awake: false,
-            live_in: None,
-            in_buf: Vec::new(),
             tail_done: false,
             held: false,
             count_in: 0,
@@ -1602,6 +1623,7 @@ impl Engine {
             out_frame: 0,
             out_held: false,
             out_len: 1,
+            io: None,
             inst_offs: Vec::with_capacity(64),
             inst_shapes: Vec::new(),
             next_voice: 0,
@@ -1799,6 +1821,18 @@ impl Engine {
         (self.insert_fx, self.master_fx) = (insert, master);
     }
 
+    /// Plays on a device with `pairs` stereo output pairs (at least one) and, for the tracks that monitor one, its
+    /// inputs: from then on a tick hands out `2 × pairs` interleaved channels, the master on its output pair and each
+    /// track's direct output added to its own (spec: audio/track-io.md §2.2). Set before the first tick.
+    pub fn set_device(&mut self, pairs: usize, input: Option<Box<dyn DeviceInput>>) {
+        self.io = Some(DeviceIo { input, pairs: pairs.max(1), inputs: Vec::new(), direct: Vec::new() });
+    }
+
+    /// Samples in a frame of what the engine hands out: 2, or 2 × the device's output pairs (`set_device`).
+    pub fn width(&self) -> usize {
+        self.io.as_ref().map_or(2, |io| 2 * io.pairs)
+    }
+
     /// Keeps every mixer track's post-fader output (before its sends) from now on: `take_track_audio` hands it over.
     pub fn set_track_capture(&mut self, on: bool) {
         self.capture = on.then(|| vec![Vec::new(); self.tracks.len()]);
@@ -1922,36 +1956,6 @@ impl Engine {
         self.awake = on;
     }
 
-    /// The device's live inputs the tracks with an input hear (an export has none). A live-only engine with such a
-    /// track never finishes: the input is heard while nothing plays.
-    pub fn set_live_input(&mut self, input: Arc<dyn LiveInput>) {
-        self.live_in = Some(input);
-    }
-
-    /// Some track hears a live input.
-    fn hears_input(&self) -> bool {
-        self.live_in.is_some() && self.tracks.iter().any(|t| t.input.is_some())
-    }
-
-    /// The tick's live input into the tracks that take it, before their slots (after the pause's fade: an input is
-    /// heard while paused too).
-    fn feed_inputs(&mut self, len: usize) {
-        if !self.hears_input() {
-            return;
-        }
-        if let Some(i) = &self.live_in {
-            i.read(len, &mut self.in_buf);
-        }
-        for (t, b) in self.tracks.iter().zip(&mut self.bus) {
-            let Some((first, stereo)) = t.input.filter(|i| i.0 < LIVE_INPUTS) else { continue };
-            let second = if stereo { (first + 1).min(LIVE_INPUTS - 1) } else { first };
-            for (f, fr) in b[..len * 2].chunks_exact_mut(2).enumerate() {
-                fr[0] += self.in_buf[f * LIVE_INPUTS + first];
-                fr[1] += self.in_buf[f * LIVE_INPUTS + second];
-            }
-        }
-    }
-
     /// Note offs now for every note held at the hosted instruments, which this engine then forgets (they do not
     /// sound again when it plays on). For a paused playback while another stream processes the same instruments (live
     /// notes, an open editor): its held notes would ring there for as long as it is paused.
@@ -2044,7 +2048,7 @@ impl Engine {
         if self.out_held {
             return self.out_frame;
         }
-        self.out_frame + (self.out_pos / 2) as u64
+        self.out_frame + (self.out_pos / self.width()) as u64
     }
 
     /// The position being heard in ticks, with the fraction of the tick handed out so far.
@@ -2055,7 +2059,7 @@ impl Engine {
         if self.out_held {
             return self.out_tick;
         }
-        self.out_tick + self.out_pos as f64 / 2.0 / self.out_len as f64
+        self.out_tick + (self.out_pos / self.width()) as f64 / self.out_len as f64
     }
 
     /// The song's end in frames at the project tempo (voices may ring past it).
@@ -2104,7 +2108,7 @@ impl Engine {
     pub fn finished(&self) -> bool {
         let drained = self.out_pos >= self.out.len();
         if self.live_only {
-            if self.awake || self.hears_input() {
+            if self.awake || (self.io.as_ref().is_some_and(|io| io.input.is_some()) && self.tracks.iter().any(|t| t.input >= 0)) {
                 return false;
             }
             // Quiet, not exact zeros: an effect's tail may never reach zero.
@@ -2254,7 +2258,6 @@ impl Engine {
     /// the ticks after it.
     pub fn continue_from(&mut self, old: &mut Engine) {
         self.looping = old.looping;
-        self.live_in = old.live_in.clone();
         self.loop_range = old.loop_range;
         self.truncated_on_transport = old.truncated_on_transport;
         // The metronome carries on, with a click that is sounding (rebuilt at a new rate).
@@ -2273,6 +2276,10 @@ impl Engine {
         };
         self.tick = tick;
         self.frame = self.clock.next_start();
+        // The device, with where its inputs have been read to.
+        if old.io.is_some() {
+            self.io = old.io.take();
+        }
         if self.rate == old.rate {
             self.out = std::mem::take(&mut old.out);
             self.out_pos = old.out_pos;
@@ -2630,11 +2637,11 @@ impl Engine {
             }
             self.render_tick();
         }
-        let from = self.out_pos;
+        let (from, w) = (self.out_pos, self.width());
         self.out_pos = self.out.len();
         let (tick, frame) = match self.out_held {
             true => (self.out_tick, self.out_frame),
-            false => (self.out_tick + from as f64 / 2.0 / self.out_len as f64, self.out_frame + (from / 2) as u64),
+            false => (self.out_tick + (from / w) as f64 / self.out_len as f64, self.out_frame + (from / w) as u64),
         };
         Some((&self.out[from..], tick, frame, self.out_held, self.out_len))
     }
@@ -2756,7 +2763,6 @@ impl Engine {
                 self.fade_in = self.fade_in.saturating_sub(len as u32);
             }
         }
-        self.feed_inputs(len);
         self.tick = tick + 1;
         // A nudge pressed or let go changes the ticks after this one, as a tempo change does.
         let nudge = self.nudge.as_ref().filter(|_| !self.exporting).map_or(0, |n| n.load(std::sync::atomic::Ordering::Relaxed).signum());
@@ -2798,6 +2804,7 @@ impl Engine {
                 self.tail_done = true;
             }
         }
+        self.route_out();
         self.hand_out(tick, start, false, was_done);
         // The file keeps its length: as many frames as the head skipped follow the tick that ended the song.
         if self.tail_done && !was_done && self.pdc.lag > 0 {
@@ -2840,7 +2847,6 @@ impl Engine {
             ch.advance(len as u32);
         }
         self.count_in -= 1;
-        self.feed_inputs(len);
         self.mix(len, &song);
         self.out.clear();
         self.out.extend_from_slice(&self.bus[0][..len * 2]);
@@ -2852,6 +2858,7 @@ impl Engine {
                 f[1] *= g;
             }
         }
+        self.route_out();
         self.hand_out(self.tick, self.frame, true, false);
     }
 
@@ -2866,7 +2873,6 @@ impl Engine {
             b.clear();
             b.resize(len * 2, 0.0);
         }
-        self.feed_inputs(len);
         self.mix(len, &song);
         self.out.clear();
         self.out.extend_from_slice(&self.bus[0][..len * 2]);
@@ -2878,6 +2884,7 @@ impl Engine {
                 f[1] *= g;
             }
         }
+        self.route_out();
         self.hand_out(self.tick, self.frame, true, false);
     }
 
@@ -3323,17 +3330,52 @@ impl Engine {
         }
     }
 
+    /// On a device (`set_device`): the tick's master, in `out`, goes to the master's output pair and joins the tracks'
+    /// direct outputs; `out` then holds every pair (spec: audio/track-io.md §2.2).
+    fn route_out(&mut self) {
+        let Some(io) = self.io.as_mut() else { return };
+        let w = 2 * io.pairs;
+        io.direct.resize(self.out.len() / 2 * w, 0.0);
+        if let Some(p) = usize::try_from(self.tracks[0].output).ok().filter(|&p| p < io.pairs) {
+            for (d, s) in io.direct.chunks_exact_mut(w).zip(self.out.chunks_exact(2)) {
+                d[2 * p] += s[0];
+                d[2 * p + 1] += s[1];
+            }
+        }
+        std::mem::swap(&mut self.out, &mut io.direct);
+    }
+
     /// The mixer over this tick: each track's effects, then its gain / pan (ramped over the tick after an edit), then
     /// its output added into its destinations; the master's output is the song.
     fn mix(&mut self, frames: usize, song: &TransportInfo) {
         let limit = os_dsp::glide::engine_limit(self.rate);
         let mut moved = false;
+        // The device's inputs over this tick, read whether a track hears them or not (a track that starts to monitor
+        // hears what arrives from then on), and the pairs the tracks' direct outputs are added into.
+        if let Some(io) = self.io.as_mut() {
+            io.direct.clear();
+            io.direct.resize(frames * 2 * io.pairs, 0.0);
+            if let Some(i) = io.input.as_mut() {
+                io.inputs.resize(frames * i.channels(), 0.0);
+                i.read(&mut io.inputs);
+            }
+        }
         for &t in &self.order {
             // On the first tick the slot values arrived before delay compensation was worked out.
             if !self.pdc.delivered {
                 self.params.deliver_slots(t, &self.tracks[t].effects);
             }
             let mut buf = std::mem::take(&mut self.bus[t]);
+            // A monitored input joins what reaches the track, before its slots (spec: audio/track-io.md §2.2).
+            if let Some(io) = &self.io {
+                let ch = io.input.as_ref().map_or(0, |i| i.channels());
+                if let Some((l, r)) = input_channels(self.tracks[t].input, ch) {
+                    for (f, x) in buf.chunks_exact_mut(2).zip(io.inputs.chunks_exact(ch)) {
+                        f[0] += x[l];
+                        f[1] += x[r];
+                    }
+                }
+            }
             let rate = self.rate;
             let (dry, l, r) = (&mut self.fx_dry, &mut self.scratch.0, &mut self.scratch.1);
             let busy = (&mut self.busy_until, self.busy_wait, self.exporting, &mut self.missed);
@@ -3382,6 +3424,15 @@ impl Engine {
             for f in buf.chunks_exact(2) {
                 pk[0] = pk[0].max(f[0].abs());
                 pk[1] = pk[1].max(f[1].abs());
+            }
+            // The direct output, after the fader matrix, besides the sends (the master's goes out in `route_out`).
+            if let (Some(io), true) = (self.io.as_mut(), t != 0) {
+                if let Some(p) = usize::try_from(self.tracks[t].output).ok().filter(|&p| p < io.pairs) {
+                    for (d, s) in io.direct.chunks_exact_mut(2 * io.pairs).zip(buf.chunks_exact(2)) {
+                        d[2 * p] += s[0];
+                        d[2 * p + 1] += s[1];
+                    }
+                }
             }
             if let Some(c) = self.capture.as_mut().and_then(|c| c.get_mut(t)) {
                 // Each track's own lateness is skipped at the start (`take_track_audio`).
@@ -7728,33 +7779,84 @@ mod tests {
         assert!(e2.finished(), "silent again once the click is over");
     }
 
-    /// A track with an input hears the live input before its slots (here a stereo pair: inputs 3 and 4), and a stream
-    /// of live notes with one keeps going; a rebuilt engine keeps the input.
-    #[test]
-    fn a_track_hears_its_live_input() {
-        struct Level;
-        impl LiveInput for Level {
-            fn read(&self, frames: usize, out: &mut Vec<f32>) {
-                out.clear();
-                out.extend((0..frames * LIVE_INPUTS).map(|k| (k % LIVE_INPUTS) as f32 / 10.0));
+    /// A device's inputs held at fixed levels.
+    struct Held(Vec<f32>);
+
+    impl DeviceInput for Held {
+        fn channels(&self) -> usize {
+            self.0.len()
+        }
+        fn read(&mut self, out: &mut [f32]) {
+            for f in out.chunks_exact_mut(self.0.len()) {
+                f.copy_from_slice(&self.0);
             }
         }
-        let mut p = project(vec![], vec![]);
-        let input = Some(os_model::TrackInput { device: "In".into(), first: 2, stereo: true });
-        p.mixer = vec![os_model::MixerTrack::new(0), os_model::MixerTrack { input, ..os_model::MixerTrack::new(1) }];
+    }
+
+    /// Plays `p` for a second on a device of `pairs` output pairs whose two inputs hold `inputs`; the last frame.
+    fn on_device(p: &Project, pairs: usize, inputs: [f32; 2]) -> Vec<f32> {
         let mut lib = SampleLibrary::new(None);
-        let mut e = Engine::new(&p, &mut lib, 48000, PlayMode::Pattern(1));
-        e.clear_schedule();
-        assert!(e.finished(), "no input to hear yet");
-        e.set_live_input(Arc::new(Level));
-        assert!(!e.finished(), "the input keeps the stream going");
-        let mut out = vec![0.0; 2 * 4800];
+        let mut e = Engine::new(p, &mut lib, 48000, PlayMode::Pattern(1));
+        e.set_looping(true);
+        e.set_device(pairs, Some(Box::new(Held(inputs.to_vec()))));
+        assert_eq!(e.width(), 2 * pairs);
+        let mut out = vec![0.0; 2 * pairs * 48000];
         e.process(&mut out);
-        let (l, r) = (out[out.len() - 2], out[out.len() - 1]);
-        assert!(l > 0.0 && (r / l - 1.5).abs() < 1e-3, "inputs 3 and 4 at the master: {l} {r}");
-        let mut e2 = Engine::new(&p, &mut lib, 48000, PlayMode::Pattern(1));
-        e2.clear_schedule();
-        e2.continue_from(&mut e);
-        assert!(!e2.finished());
+        out[out.len() - 2 * pairs..].to_vec()
+    }
+
+    fn io_project(input: i32, monitor: u8, armed: bool) -> Project {
+        let mut p = project(vec![], vec![]);
+        p.mixer = (0..3).map(os_model::MixerTrack::new).collect();
+        (p.mixer[1].audio_in, p.mixer[1].monitor, p.mixer[1].armed) = (input, monitor, armed);
+        p
+    }
+
+    // spec: audio/track-io.md §1 "Signal", §2.1: a pair is heard left / right, one input alone on both sides.
+    #[test]
+    fn a_monitored_input_reaches_the_master() {
+        let f = on_device(&io_project(0, os_model::MONITOR_ON, false), 1, [0.5, 0.0]);
+        assert!(f[0] > 0.1 && f[1].abs() < 1e-6, "the pair: {f:?}");
+        let f = on_device(&io_project(2, os_model::MONITOR_ON, false), 1, [0.0, 0.5]);
+        assert!(f[0] > 0.1 && (f[0] - f[1]).abs() < 1e-6, "In 2 on both sides: {f:?}");
+        assert!(on_device(&io_project(-1, os_model::MONITOR_ON, false), 1, [0.5, 0.5]).iter().all(|&s| s == 0.0), "(none)");
+        let mut muted = io_project(0, os_model::MONITOR_ON, false);
+        muted.mixer[1].enabled = false;
+        assert!(on_device(&muted, 1, [0.5, 0.5]).iter().all(|&s| s == 0.0), "muted");
+    }
+
+    // spec: audio/track-io.md §1 "Monitor external input".
+    #[test]
+    fn monitoring_follows_the_setting_and_the_arm() {
+        let heard = |monitor, armed| on_device(&io_project(0, monitor, armed), 1, [0.5, 0.5]).iter().any(|&s| s != 0.0);
+        assert_eq!([heard(os_model::MONITOR_OFF, false), heard(os_model::MONITOR_OFF, true)], [false, false]);
+        assert_eq!([heard(os_model::MONITOR_ARMED, false), heard(os_model::MONITOR_ARMED, true)], [false, true]);
+        assert_eq!([heard(os_model::MONITOR_ON, false), heard(os_model::MONITOR_ON, true)], [true, true]);
+    }
+
+    // spec: audio/track-io.md §1 "Signal": a direct output plays besides the routing; the master's (none) silences it.
+    #[test]
+    fn direct_outputs_play_on_their_pair() {
+        let mut p = io_project(0, os_model::MONITOR_ON, false);
+        p.mixer[1].audio_out = 1;
+        let f = on_device(&p, 2, [0.5, 0.5]);
+        assert!(f[0] > 0.1 && f[2] > 0.1, "the master on pair 1, the track on pair 2: {f:?}");
+        // Both faders at unity: the master hears the track as the pair does.
+        assert!((f[0] - f[2]).abs() < 1e-5, "both at unity: {f:?}");
+        p.mixer[0].audio_out = -1;
+        let f = on_device(&p, 2, [0.5, 0.5]);
+        assert!(f[0] == 0.0 && f[1] == 0.0 && f[2] > 0.1, "{f:?}");
+        // A pair the device does not have plays nowhere.
+        p.mixer[1].audio_out = 5;
+        assert!(on_device(&p, 2, [0.5, 0.5]).iter().all(|&s| s == 0.0));
+        p.mixer[1].enabled = false;
+        p.mixer[1].audio_out = 1;
+        assert!(on_device(&p, 2, [0.5, 0.5]).iter().all(|&s| s == 0.0), "muted");
+    }
+
+    #[test]
+    fn input_numbers_are_pairs_then_single_inputs() {
+        assert_eq!((0..7).map(|n| input_channels(n, 4)).collect::<Vec<_>>(), [Some((0, 1)), Some((2, 3)), Some((0, 0)), Some((1, 1)), Some((2, 2)), Some((3, 3)), None]);
+        assert_eq!([input_channels(-1, 4), input_channels(0, 0), input_channels(0, 1)], [None, None, Some((0, 0))]);
     }
 }
