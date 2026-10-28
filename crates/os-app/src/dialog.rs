@@ -71,6 +71,10 @@ pub enum Then {
     /// The Chop dialog's folder button (spec: ui/piano-chop.md §1).
     ChopPattern,
     PluginFolder,
+    /// Plugins ▸ Add Windows folder...: a folder of Windows plugins for yabridge (`crate::yabridge`).
+    WindowsFolder,
+    /// Plugins ▸ Run Windows installer...: a Windows plugin's installer, run in Wine.
+    WindowsInstaller,
     /// The missing files box (`crate::missing`): Find samples... (Yes) or OK.
     MissingFiles,
     /// The folder the missing samples are looked for in.

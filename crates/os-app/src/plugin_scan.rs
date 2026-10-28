@@ -23,6 +23,8 @@ pub const ARG: &str = "--scan-plugin";
 const TAG: &str = "OSSCAN ";
 /// A scanner still running after this is ended (status `timed out`).
 const TIMEOUT: Duration = Duration::from_secs(30);
+/// The same for a Windows plugin bridged by yabridge: its first load starts Wine, which takes a while.
+const BRIDGED_TIMEOUT: Duration = Duration::from_secs(120);
 /// Scanners running at the same time.
 pub const WORKERS: usize = 4;
 
@@ -106,12 +108,13 @@ pub fn scan_in_child(path: &Path, format: Format) -> Scanned {
             }
         });
     }
-    let line = match rx.recv_timeout(TIMEOUT) {
+    let timeout = if crate::yabridge::is_bridged(path) { BRIDGED_TIMEOUT } else { TIMEOUT };
+    let line = match rx.recv_timeout(timeout) {
         Ok(l) => Some(l),
         Err(mpsc::RecvTimeoutError::Timeout) => {
             let _ = child.kill();
             let _ = child.wait();
-            return Scanned::failed(Status::Timeout, format!("still loading after {} s", TIMEOUT.as_secs()));
+            return Scanned::failed(Status::Timeout, format!("still loading after {} s", timeout.as_secs()));
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => None,
     };
@@ -165,6 +168,8 @@ fn unsupported(path: &Path, format: Format) -> Option<String> {
 /// What the sweep thread tells the UI thread.
 pub enum Msg {
     Progress { done: usize, total: usize, file: String },
+    /// Bridging the Windows plugins went wrong: why.
+    Windows(String),
     Done(Cache),
 }
 
@@ -183,9 +188,10 @@ impl Sweep {
     }
 }
 
-/// Starts a sweep on a background thread: finds the plugin files of `prefs`' folders, scans what `mode` asks for
-/// (keeping `old`'s results for the rest) and sends the new cache.
-pub fn start(prefs: &db::Prefs, old: Cache, mode: Mode) -> Sweep {
+/// Starts a sweep on a background thread: has yabridge bridge the Windows plugins (the usual Wine folders and
+/// `windows`, on Linux), finds the plugin files of `prefs`' folders, scans what `mode` asks for (keeping `old`'s
+/// results for the rest) and sends the new cache.
+pub fn start(prefs: &db::Prefs, old: Cache, mode: Mode, windows: Vec<PathBuf>) -> Sweep {
     let (tx, rx) = mpsc::channel();
     let mut dirs = db::search_dirs(prefs);
     let rescan_errors = prefs.rescan_errors;
@@ -198,6 +204,13 @@ pub fn start(prefs: &db::Prefs, old: Cache, mode: Mode) -> Sweep {
     std::thread::Builder::new()
         .name("plugin scan".into())
         .spawn(move || {
+            if !cfg!(test) && cfg!(target_os = "linux") {
+                let (bridged, error) = crate::yabridge::prepare(&windows);
+                dirs.extend(bridged.into_iter().map(|path| db::SearchDir { path, kind: db::DirKind::Windows, on: true }));
+                if let Some(e) = error {
+                    let _ = tx.send(Msg::Windows(e));
+                }
+            }
             let found = db::discover(&dirs, native);
             let _ = tx.send(Msg::Progress { done: 0, total: 0, file: String::new() });
             let progress = |done: usize, total: usize, p: &Path| {
@@ -234,6 +247,7 @@ impl App {
         let cached = db::Cache::load();
         let found = cached.is_some();
         db.cache = cached.unwrap_or_default();
+        db.windows = crate::yabridge::info();
         self.plugins.merge(&self.state.plugdb.cache);
         self.state.plugdb.rebuild(&self.plugins);
         found
@@ -252,7 +266,8 @@ impl App {
         if first {
             self.state.message = Some("Looking for plugins...".into());
         }
-        self.sweep = Some(start(&self.state.plugdb.prefs, self.state.plugdb.cache.clone(), mode));
+        let windows = std::mem::take(&mut self.state.plugdb.win_add);
+        self.sweep = Some(start(&self.state.plugdb.prefs, self.state.plugdb.cache.clone(), mode, windows));
         self.invalidate();
     }
 
@@ -269,6 +284,7 @@ impl App {
                     }
                     moved = true;
                 }
+                Msg::Windows(e) => self.state.message = Some(format!("Windows plugins: {e}")),
                 Msg::Done(c) => done = Some(c),
             }
         }
@@ -293,6 +309,7 @@ impl App {
         let db = &mut self.state.plugdb;
         db.cache = cache;
         db.progress = None;
+        db.windows = crate::yabridge::info();
         db.rebuild(&self.plugins);
         self.state.message = Some(report.message());
         self.invalidate();

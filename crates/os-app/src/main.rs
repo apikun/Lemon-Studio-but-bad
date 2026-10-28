@@ -139,6 +139,7 @@ mod typein;
 mod views;
 mod wallpaper;
 mod waves;
+mod yabridge;
 mod win_clamp;
 #[cfg(windows)]
 mod file_assoc;

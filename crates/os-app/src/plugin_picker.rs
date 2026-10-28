@@ -371,6 +371,29 @@ mod tests {
 
     /// Typed letters search (the typing keyboard leaves them alone); Backspace and Esc take them back; Enter adds the
     /// first match; Esc with nothing typed closes the picker.
+    /// A Windows plugin bridged by yabridge says so: "(Windows)" in the menus' and browser's label, a tag in the picker.
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn windows_plugins_say_so() {
+        let mut app = app_with(&["Echo Thing"]);
+        let mut win = db::fake("Serum FX", os_host::Kind::Effect);
+        win.desc.path = std::path::PathBuf::from("/home/me/.vst3/yabridge/Serum FX.vst3");
+        app.plugins.effects.push(win);
+        app.state.plugdb.rebuild(&app.plugins);
+        let fx = &app.state.plugdb.lists.fx;
+        assert_eq!(fx.iter().map(|e| (e.label.as_str(), e.windows)).collect::<Vec<_>>(), [("Echo Thing", false), ("Serum FX (Windows)", true)]);
+        app.open_picker(Target::Fx(None));
+        typed_search(&mut app, "serum");
+        let rows = main_rows(&app.state, app.state.picker.as_ref().unwrap());
+        assert!(matches!(&rows[..], [Row::Plugin(f)] if f.windows()), "{rows:?}");
+    }
+
+    fn typed_search(app: &mut App, q: &str) {
+        for c in q.chars() {
+            app.picker_key(&Key::Character(c.to_string().into()), false, false);
+        }
+    }
+
     #[test]
     fn typing_searches() {
         let mut app = app_with(&["CLA-76 Mono", "CLA-76 Stereo", "Echo Thing", "Reverb Room"]);

@@ -1359,6 +1359,8 @@ pub struct App {
     pub(crate) fx_failed: Vec<usize>,
     /// The running plugin scan, and the scan asked for while it runs (spec: ui/plugin-manager.md §4).
     pub(crate) sweep: Option<crate::plugin_scan::Sweep>,
+    /// Install yabridge or a Windows installer running on a background thread: its outcome (`App::windows_tick`).
+    pub(crate) win_job: Option<std::sync::mpsc::Receiver<Result<String, String>>>,
     pub(crate) scan_queued: Option<crate::plugin_db::Mode>,
     /// Wrapped plugin channels (rows) and slots (`fx_key`) whose plugin was not found or did not start (not retried).
     pub(crate) wrap_failed: Vec<usize>,
@@ -1587,6 +1589,7 @@ impl App {
             sampler_failed: Vec::new(),
             fx_failed: Vec::new(),
             sweep: None,
+            win_job: None,
             scan_queued: None,
             wrap_failed: Vec::new(),
             osc3_look: None,
@@ -2080,6 +2083,16 @@ impl App {
                     self.plugin_folder_chosen(p);
                 }
             }
+            Then::WindowsFolder => {
+                if let Some(p) = file {
+                    self.windows_folder_chosen(p);
+                }
+            }
+            Then::WindowsInstaller => {
+                if let Some(p) = file {
+                    self.run_windows_installer(p);
+                }
+            }
             Then::BrowserFolder(row) => {
                 if let Some(p) = file {
                     self.search_folder_chosen(row, p);
@@ -2495,6 +2508,7 @@ impl App {
             self.remap_rows(&|r| (r < len).then_some(r));
         }
         self.scan_tick();
+        self.windows_tick();
         self.loading_tick();
         self.export_tick();
         crate::missing::tick(self);
@@ -5054,6 +5068,9 @@ impl App {
             SAct::Button(views::settings::SHOW_ASIO_PANEL) => self.transport.asio_panel(),
             SAct::Button("Manage plugins") => self.open_settings(views::settings::PLUGINS),
             SAct::Button("Manage messages") => return self.messages_menu(),
+            SAct::Button(views::settings::INSTALL_YABRIDGE) => self.install_yabridge(),
+            SAct::Button(views::settings::RUN_INSTALLER) => self.pick_windows_installer(),
+            SAct::Button(views::settings::ADD_WINDOWS_FOLDER) => self.add_windows_folder(),
             SAct::Button("Find new plugins") => self.start_scan(crate::plugin_db::Mode::Changed),
             SAct::Button("Rescan all") => self.start_scan(crate::plugin_db::Mode::All),
             SAct::Button("Add folder...") => self.add_plugin_folder(),
