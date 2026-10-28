@@ -136,6 +136,8 @@ pub enum Cursor {
     Tool(crate::icons::Icon),
     /// Over a playlist clip that the tool drags (FL's four-way arrow).
     Move,
+    /// FL's pointing hand, over the mixer strips' mute lights, ⇕ / ⇔ buttons and faders (and while a fader is dragged).
+    Pointer,
 }
 
 /// The tools that show their icon as the cursor over the playlist's and piano roll's grids (`App::tool_cursor`); the
@@ -5935,6 +5937,12 @@ impl App {
         };
         match edges {
             0 if self.resize_cursor => Cursor::EwResize,
+            0 if matches!(self.drag, Some(Drag::Fader { .. })) => Cursor::Pointer,
+            0 if self.drag.is_none()
+                && matches!(self.hover, Some(Action::Fader(_) | Action::Mix(crate::mixer::MHit::Led(_) | crate::mixer::MHit::Polarity(_) | crate::mixer::MHit::Swap(_)))) =>
+            {
+                Cursor::Pointer
+            }
             0 => self.tool_cursor(),
             views::rack::EDGE_RIGHT => Cursor::EwResize,
             views::rack::EDGE_BOTTOM => Cursor::NsResize,
@@ -11932,6 +11940,29 @@ mod tests {
         }
         // Bars without rows (channel rack, picker) only scroll.
         assert_eq!(app.rows_get(Scroll::RackY), None);
+    }
+
+    /// The mixer strips' mute lights, ⇕ / ⇔ buttons and faders show FL's pointing hand; the strip around them the arrow.
+    #[test]
+    fn mixer_buttons_show_the_hand() {
+        use crate::mixer::MHit;
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let mut app = App::new(None);
+        app.state.z = vec![Win::Mixer];
+        frame(&mut app, &mut c, None);
+        for a in [Action::Mix(MHit::Led(2)), Action::Mix(MHit::Polarity(2)), Action::Mix(MHit::Swap(2)), Action::Fader(2)] {
+            let r = hit_rect(&app, &a);
+            app.mouse_move(r.x + 1.0, r.y + 1.0);
+            assert_eq!(app.cursor(), Cursor::Pointer, "{a:?}");
+        }
+        // Dragging a fader keeps the hand, off the fader too.
+        app.mouse_down();
+        app.mouse_move(100.0, 300.0);
+        assert_eq!(app.cursor(), Cursor::Pointer, "fader drag");
+        app.mouse_up();
+        let r = hit_rect(&app, &Action::Mix(MHit::Led(2)));
+        app.mouse_move(r.cx(), r.y - 40.0);
+        assert_eq!(app.cursor(), Cursor::Default);
     }
 
     fn hit_rect(app: &App, a: &Action) -> Rect {
