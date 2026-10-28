@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 Artig3nce
 // Copyright (C) 2026 thacer13
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
@@ -408,8 +409,8 @@ fn transport(ui: &mut Ui, c: &Ctx) {
         ui.c.fill_rrect(tb, 5.0, ui.t.s(0x5b5f61));
         ui.c.fill_rrect(tb.inset(1.0), 4.0, ui.t.s(0x5f6466));
     }
-    // Lemon displays show their digits in the brand colour.
-    let digits = if lemon { t.pill } else { t.glyph };
+    // Lemon displays showed their digits in the brand colour; Mango's tempo and time read white, as its text does.
+    let digits = if lemon { t.text } else { t.glyph };
     // While playing, the tempo playback is at: tempo automation moves it (spec: audio/timing.md "Tempo that changes").
     let whole = format!("{}", f.tempo.trunc() as i64);
     let frac = format!(".{:03}", ((f.tempo.fract()) * 1000.0).round() as i64 % 1000);
@@ -482,7 +483,7 @@ fn time(ui: &mut Ui, c: &Ctx) {
     let step_x = tick_x - 8.0 - sw;
     let bar_x = (step_x - 8.0 - bw).max(tp.x + 2.0);
     ui.c.push_clip(tp.inset(1.0));
-    let g = if lemon { t.pill } else { t.glyph };
+    let g = if lemon { t.text } else { t.glyph };
     if let Some(c) = s.rec.count.filter(|c| c.left() > 0) {
         // A recording count-in (spec: ui/recording.md §3): the beats left.
         ui.c.text_center(Font::light(22, 8), Rect::new(tp.x, tp.y + 2.0, tp.w, tp.h - 2.0), g, &format!("REC IN {}", c.left()));

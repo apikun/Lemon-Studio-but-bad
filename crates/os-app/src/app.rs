@@ -14153,6 +14153,60 @@ mod tests {
         assert_eq!(crate::mixer::slot_name(&app.state, t, 0).as_deref(), Some("Test FX"));
     }
 
+    /// A generator dropped on a track header (issue #2): the instrument lands on that track, a new channel and a
+    /// clip of a new pattern named after it at the song position. On the rows it lands at the drop instead.
+    #[test]
+    fn a_generator_dropped_on_a_track_header_lands_on_the_track() {
+        use crate::views::browser::{rows, Item};
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let mut app = App::new(None);
+        app.state.project = test_project();
+        app.plugins = crate::plugins::Plugins::builtins();
+        app.state.plugdb.rebuild(&app.plugins);
+        app.state.z = vec![Win::Playlist];
+        // Bar 2 (ppq 96): where a header drop lands.
+        app.state.playlist.pos = 384;
+        frame(&mut app, &mut c, None);
+        let r0 = hit_rect(&app, &Action::BrowserTab(2));
+        click(&mut app, &mut c, r0);
+        let gi = rows(&app.state).iter().position(|r| r.label == "Generators").expect("generators");
+        let r0 = hit_rect(&app, &Action::BrowserRow(gi));
+        click(&mut app, &mut c, r0);
+        let gi = rows(&app.state).iter().position(|r| r.item == Item::Generator(1)).expect("a generator row");
+        let ch0 = app.state.project.channels.len();
+        let src = hit_rect(&app, &Action::BrowserRow(gi));
+        let dst = hit_rect(&app, &Action::PlHeader(2));
+        app.mouse_move(src.cx(), src.cy());
+        app.mouse_down();
+        app.mouse_move(src.cx() + 30.0, src.cy());
+        app.mouse_move(dst.cx(), dst.cy());
+        app.mouse_up();
+        assert_eq!(app.state.project.channels.len(), ch0 + 1, "the channel");
+        assert_eq!(app.state.project.channels[ch0].name.as_deref(), Some(crate::osc3::LEMON_TRIO));
+        let last = *crate::playlist::clips(&app.state).last().expect("the clip");
+        assert_eq!(last.track, 2, "on the dropped track");
+        assert_eq!(last.position, 384, "at the song position");
+        assert_eq!(last.source, os_model::ClipSource::Pattern(1), "a pattern of its own");
+        assert_eq!(crate::patterns::name_of(&app.state, 1), crate::osc3::LEMON_TRIO);
+        assert_eq!(app.state.message.as_deref(), Some(format!("Added {} on track 3", crate::osc3::LEMON_TRIO).as_str()));
+        // A second drag of the same row onto the rows: at the drop, the next pattern.
+        frame(&mut app, &mut c, None);
+        let gi = rows(&app.state).iter().position(|r| r.item == Item::Generator(1)).expect("the row again");
+        let src = hit_rect(&app, &Action::BrowserRow(gi));
+        let grid = app.pl_grid().expect("grid");
+        let n = crate::playlist::clips(&app.state).len();
+        app.mouse_move(src.cx(), src.cy());
+        app.mouse_down();
+        app.mouse_move(src.cx() + 30.0, src.cy());
+        app.mouse_move(grid.x + 200.0, grid.y + 60.0);
+        app.mouse_up();
+        assert_eq!(app.state.project.channels.len(), ch0 + 2, "the second channel");
+        let last = *crate::playlist::clips(&app.state).last().expect("the second clip");
+        assert_eq!(last.source, os_model::ClipSource::Pattern(2));
+        assert_eq!(crate::patterns::name_of(&app.state, 2), format!("{} #2", crate::osc3::LEMON_TRIO));
+        assert_eq!(crate::playlist::clips(&app.state).len(), n + 1);
+    }
+
     /// The wheel over a mixer effect slot moves the effect a slot a notch, up for wheel up, trading places with its
     /// neighbour (spec: ui/mixer.md §7). With the mouse still, more notches move the same effect, which has left the
     /// cursor; the first and last slots are the ends.

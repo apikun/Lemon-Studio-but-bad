@@ -9,7 +9,7 @@
 <h3>A free and open-source digital audio workstation, written in Rust.</h3>
 
 <p>
-  <a href="https://github.com/apikun/Lemon-Studio-but-bad/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/apikun/Lemon-Studio-but-bad/ci.yml?branch=main&style=flat-square&label=CI"></a>
+  <a href="https://github.com/apikun/Mango-Studio/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/apikun/Mango-Studio/ci.yml?branch=main&style=flat-square&label=CI"></a>
   <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square"></a>
   <img alt="Rust 2024 edition" src="https://img.shields.io/badge/rust-2024_edition-e57324?style=flat-square&logo=rust&logoColor=white">
   <img alt="Platform: Windows | Linux | macOS" src="https://img.shields.io/badge/platform-Windows_%7C_Linux_%7C_macOS-0078d4?style=flat-square">
@@ -31,7 +31,7 @@
 
 <br>
 
-<img alt="Mango Studio with the browser, playlist, channel rack and piano roll open" src="docs/assets/screenshot.webp" width="900">
+<img alt="Mango Studio with the browser, channel rack, playlist and mixer open" src="docs/assets/screenshot.webp" width="900">
 
 </div>
 
@@ -137,8 +137,8 @@ machine to Mango Studio installed with its icon, and Mango Studio's own plugins 
 **Rust**, stable toolchain 1.89 or newer, installed through [rustup](https://rustup.rs/), and a clone of this repository:
 
 ```bash
-git clone https://github.com/apikun/Lemon-Studio-but-bad.git
-cd Lemon-Studio-but-bad
+git clone https://github.com/apikun/Mango-Studio.git
+cd Mango-Studio
 ```
 
 `cargo run -p os-app --release` builds and runs Mango Studio. Before Mango Studio starts, it also rebuilds Mango
@@ -535,6 +535,7 @@ every feature marked as done, in progress or not started.
 - ✅ Clip groups: group, ungroup, select, move and copy together
 - ✅ More playlist shortcuts: zoom on selection, quick slice, snap cycling, insert a bar
 - ✅ Browser: drop effects into mixer slots
+- ✅ Instruments load straight onto the arranger: a generator dropped on the playlist or a track header, or the header menu's Insert instrument ▸, makes the channel and places a clip of a new pattern named after it on that track (issue #2)
 - ✅ Browser: the drop zone shows on the playlist while a sample, pattern or audio/automation channel is dragged over it — a translucent clip at the snapped start, named like the clip will be (issue #4)
 - ✅ Browser: reread (Ctrl+R) and only rows that have content
 - ✅ Browser: drag its width, long names scroll on hover, a right-click menu on every row
