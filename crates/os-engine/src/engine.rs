@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 ravenmarkdev-alt
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -690,6 +691,8 @@ struct MixTrack {
     eq: os_dsp::mixer::TrackEq,
     /// Insert effects in slot order (applied before the fader).
     effects: Vec<FxSlot>,
+    /// The live input it hears before its slots: the first input (0-based) and whether the next makes a pair with it.
+    input: Option<(usize, bool)>,
     /// Slot switches and stored mix levels (0..12800) by slot, for hosted effects attached later.
     slot_on: [bool; 10],
     slot_mix: [i32; 10],
@@ -813,6 +816,7 @@ impl MixTrack {
             slots_enabled: true,
             eq: os_dsp::mixer::TrackEq::default(),
             effects: Vec::new(),
+            input: None,
             slot_on: [true; 10],
             slot_mix: [12800; 10],
             peak: [0.0; 2],
@@ -921,6 +925,16 @@ impl MixTrack {
     }
 }
 
+/// Inputs a frame of live input holds (`LiveInput::read`): a track's input past them is silent.
+pub const LIVE_INPUTS: usize = 8;
+
+/// A device's live inputs (a mixer track's input combo): the engine reads a tick's worth of them as it renders it.
+pub trait LiveInput: Send + Sync {
+    /// The next `frames` frames of every input, [`LIVE_INPUTS`] samples to a frame, into `out` (resized to fit);
+    /// silence for what has not come in.
+    fn read(&self, frames: usize, out: &mut Vec<f32>);
+}
+
 /// Things the engine skipped, so callers can report them.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct EngineReport {
@@ -974,6 +988,9 @@ pub struct Engine {
     /// A live-only engine that never finishes: its hosted instruments are processed every tick, so notes played in
     /// their own editors sound (`set_awake`).
     awake: bool,
+    /// The device's live inputs, for the tracks that take one (`set_live_input`), and the tick's frames of them.
+    live_in: Option<Arc<dyn LiveInput>>,
+    in_buf: Vec<f32>,
     /// The tail rule has ended the song: a tick at or after its end stayed quiet (spec: audio/timing.md).
     tail_done: bool,
     /// Pause (`pause`): the channels fade out of the mixer and are then held where they are (`held`) while the mixer
@@ -1337,6 +1354,7 @@ impl Engine {
                         slots_enabled: m.slots_enabled,
                         eq: os_dsp::mixer::TrackEq::new(m.eq, rate),
                         effects,
+                        input: m.input.as_ref().map(|i| (usize::from(i.first), i.stereo)),
                         slot_on: m.slot_on,
                         slot_mix: m.slot_mix.map(mix_level),
                         routes,
@@ -1535,6 +1553,8 @@ impl Engine {
             loop_range: None,
             live_only: false,
             awake: false,
+            live_in: None,
+            in_buf: Vec::new(),
             tail_done: false,
             held: false,
             count_in: 0,
@@ -1884,6 +1904,36 @@ impl Engine {
         self.awake = on;
     }
 
+    /// The device's live inputs the tracks with an input hear (an export has none). A live-only engine with such a
+    /// track never finishes: the input is heard while nothing plays.
+    pub fn set_live_input(&mut self, input: Arc<dyn LiveInput>) {
+        self.live_in = Some(input);
+    }
+
+    /// Some track hears a live input.
+    fn hears_input(&self) -> bool {
+        self.live_in.is_some() && self.tracks.iter().any(|t| t.input.is_some())
+    }
+
+    /// The tick's live input into the tracks that take it, before their slots (after the pause's fade: an input is
+    /// heard while paused too).
+    fn feed_inputs(&mut self, len: usize) {
+        if !self.hears_input() {
+            return;
+        }
+        if let Some(i) = &self.live_in {
+            i.read(len, &mut self.in_buf);
+        }
+        for (t, b) in self.tracks.iter().zip(&mut self.bus) {
+            let Some((first, stereo)) = t.input.filter(|i| i.0 < LIVE_INPUTS) else { continue };
+            let second = if stereo { (first + 1).min(LIVE_INPUTS - 1) } else { first };
+            for (f, fr) in b[..len * 2].chunks_exact_mut(2).enumerate() {
+                fr[0] += self.in_buf[f * LIVE_INPUTS + first];
+                fr[1] += self.in_buf[f * LIVE_INPUTS + second];
+            }
+        }
+    }
+
     /// Note offs now for every note held at the hosted instruments, which this engine then forgets (they do not
     /// sound again when it plays on). For a paused playback while another stream processes the same instruments (live
     /// notes, an open editor): its held notes would ring there for as long as it is paused.
@@ -2036,7 +2086,7 @@ impl Engine {
     pub fn finished(&self) -> bool {
         let drained = self.out_pos >= self.out.len();
         if self.live_only {
-            if self.awake {
+            if self.awake || self.hears_input() {
                 return false;
             }
             // Quiet, not exact zeros: an effect's tail may never reach zero.
@@ -2186,6 +2236,7 @@ impl Engine {
     /// the ticks after it.
     pub fn continue_from(&mut self, old: &mut Engine) {
         self.looping = old.looping;
+        self.live_in = old.live_in.clone();
         self.loop_range = old.loop_range;
         self.truncated_on_transport = old.truncated_on_transport;
         // The metronome carries on, with a click that is sounding (rebuilt at a new rate).
@@ -2683,6 +2734,7 @@ impl Engine {
                 self.fade_in = self.fade_in.saturating_sub(len as u32);
             }
         }
+        self.feed_inputs(len);
         self.tick = tick + 1;
         // A nudge pressed or let go changes the ticks after this one, as a tempo change does.
         let nudge = self.nudge.as_ref().filter(|_| !self.exporting).map_or(0, |n| n.load(std::sync::atomic::Ordering::Relaxed).signum());
@@ -2766,6 +2818,7 @@ impl Engine {
             ch.advance(len as u32);
         }
         self.count_in -= 1;
+        self.feed_inputs(len);
         self.mix(len, &song);
         self.out.clear();
         self.out.extend_from_slice(&self.bus[0][..len * 2]);
@@ -2791,6 +2844,7 @@ impl Engine {
             b.clear();
             b.resize(len * 2, 0.0);
         }
+        self.feed_inputs(len);
         self.mix(len, &song);
         self.out.clear();
         self.out.extend_from_slice(&self.bus[0][..len * 2]);
@@ -7548,5 +7602,35 @@ mod tests {
         e2.process(&mut rest);
         assert!(rest.iter().any(|&s| s != 0.0));
         assert!(e2.finished(), "silent again once the click is over");
+    }
+
+    /// A track with an input hears the live input before its slots (here a stereo pair: inputs 3 and 4), and a stream
+    /// of live notes with one keeps going; a rebuilt engine keeps the input.
+    #[test]
+    fn a_track_hears_its_live_input() {
+        struct Level;
+        impl LiveInput for Level {
+            fn read(&self, frames: usize, out: &mut Vec<f32>) {
+                out.clear();
+                out.extend((0..frames * LIVE_INPUTS).map(|k| (k % LIVE_INPUTS) as f32 / 10.0));
+            }
+        }
+        let mut p = project(vec![], vec![]);
+        let input = Some(os_model::TrackInput { device: "In".into(), first: 2, stereo: true });
+        p.mixer = vec![os_model::MixerTrack::new(0), os_model::MixerTrack { input, ..os_model::MixerTrack::new(1) }];
+        let mut lib = SampleLibrary::new(None);
+        let mut e = Engine::new(&p, &mut lib, 48000, PlayMode::Pattern(1));
+        e.clear_schedule();
+        assert!(e.finished(), "no input to hear yet");
+        e.set_live_input(Arc::new(Level));
+        assert!(!e.finished(), "the input keeps the stream going");
+        let mut out = vec![0.0; 2 * 4800];
+        e.process(&mut out);
+        let (l, r) = (out[out.len() - 2], out[out.len() - 1]);
+        assert!(l > 0.0 && (r / l - 1.5).abs() < 1e-3, "inputs 3 and 4 at the master: {l} {r}");
+        let mut e2 = Engine::new(&p, &mut lib, 48000, PlayMode::Pattern(1));
+        e2.clear_schedule();
+        e2.continue_from(&mut e);
+        assert!(!e2.finished());
     }
 }

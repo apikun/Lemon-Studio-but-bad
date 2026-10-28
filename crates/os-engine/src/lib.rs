@@ -26,6 +26,6 @@ pub mod voices;
 pub mod wav;
 
 pub use clock::Clock;
-pub use engine::{Engine, EngineReport, PlayMode};
+pub use engine::{Engine, EngineReport, LiveInput, PlayMode, LIVE_INPUTS};
 pub use instrument::{ChannelLevels, ChannelVoicing, HostedEffect, Instrument, NoteLevels, SharedEffect, SharedInstrument, TransportInfo, TuningBend};
 pub use sample::{Sample, SampleLibrary};

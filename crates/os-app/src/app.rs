@@ -1281,6 +1281,11 @@ pub struct App {
     pub warp: Option<(f32, f32)>,
     /// One-click audio recording under way (spec: ui/one-click-recording.md §2).
     pub(crate) audio_rec: Option<crate::one_click::AudioRec>,
+    /// The system input stream the mixer tracks' inputs come from (the device asked for, and the stream), what is
+    /// open for them (`None`: nothing; empty: the ASIO driver's inputs), and when to try a device that did not open.
+    pub(crate) monitor_in: Option<(String, crate::capture::InputStream)>,
+    pub(crate) monitor_key: Option<String>,
+    pub(crate) monitor_retry: Option<std::time::Instant>,
     /// Wheel movement in an open menu short of a whole notch (trackpads).
     menu_notch: f32,
     /// A Shift+press grabbed piano-roll notes: the drag's first move picks up copies of them (`App::pick_up_notes`).
@@ -1526,6 +1531,9 @@ impl App {
             smooth: Default::default(),
             warp: None,
             audio_rec: None,
+            monitor_in: None,
+            monitor_key: None,
+            monitor_retry: None,
             menu_notch: 0.0,
             shift_clone: false,
             auto_close: Default::default(),
@@ -2551,7 +2559,8 @@ impl App {
         self.plugins.idle(|_| None);
         // Open plugin editors are processed while nothing plays: notes from an instrument's own keyboard sound, and an
         // effect's own playback (Tesla) too.
-        let listen = self.plugins.editor_open();
+        // So is the mixer while a track takes an input: it is heard through the track's effects.
+        let listen = self.plugins.editor_open() || self.state.project.mixer.iter().any(|t| t.input.is_some());
         if listen {
             self.sync_live();
         }
