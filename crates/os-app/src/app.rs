@@ -132,7 +132,18 @@ pub enum Cursor {
     NsResize,
     NwseResize,
     NeswResize,
+    /// The playlist's or piano roll's tool, as FL shows it over their grids: the tool's icon (`TOOL_CURSORS`).
+    Tool(crate::icons::Icon),
+    /// Over a playlist clip that the tool drags (FL's four-way arrow).
+    Move,
 }
+
+/// The tools that show their icon as the cursor over the playlist's and piano roll's grids (`App::tool_cursor`); the
+/// Select tool keeps the arrow.
+pub const TOOL_CURSORS: [crate::icons::Icon; 8] = {
+    use crate::icons::Icon;
+    [Icon::Pencil, Icon::Brush, Icon::Delete, Icon::Mute, Icon::Slip, Icon::Slice, Icon::Zoom, Icon::Speaker]
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
@@ -1311,6 +1322,8 @@ pub struct App {
     pub want_drag_window: bool,
     /// Show the horizontal-resize cursor (hovering or dragging a note end).
     pub resize_cursor: bool,
+    /// The mouse is over a playlist clip (not one of its handles): the move cursor for the tools that drag clips.
+    pub over_clip: bool,
     /// Modifier keys held (set by the shell).
     pub ctrl: bool,
     pub shift: bool,
@@ -1552,6 +1565,7 @@ impl App {
             unpinned: None,
             want_drag_window: false,
             resize_cursor: false,
+            over_clip: false,
             ctrl: false,
             shift: false,
             alt: false,
@@ -5525,11 +5539,13 @@ impl App {
                 hint = Cow::Borrowed(BAR_EDGE_HINT);
             }
         }
+        let mut over_clip = false;
         if hover == Some(Action::PlaylistArea) {
             if let Some(g) = self.pl_grid {
                 let s = &self.state;
                 let pg = crate::playlist::PGeom::new(s, g);
                 let hit = crate::playlist::clip_at(s, &pg, x, y);
+                over_clip = hit.is_some_and(|i| crate::playlist::handle_at(s, &pg, i, x, y).is_none());
                 // Automation clips show their points while hovered, audio clips their fade and gain handles (§9a).
                 let auto = hit.filter(|&i| {
                     let c = &crate::playlist::clips(s)[i];
@@ -5569,6 +5585,7 @@ impl App {
         }
         let changed = hover != self.hover || hint != self.hint || resize != self.resize_cursor;
         self.resize_cursor = resize;
+        self.over_clip = over_clip;
         if changed {
             // Repaint the controls that lost / gained hover and the hint panel; large background
             // regions have no hover look.
@@ -5861,6 +5878,34 @@ impl App {
     }
 
     /// Cursor for the current hover / drag.
+    /// Over the playlist's or piano roll's grid, the tool's icon as FL shows it (spec: ui/playlist.md §1); the arrow
+    /// elsewhere and for the Select tool.
+    fn tool_cursor(&self) -> Cursor {
+        use crate::playlist::PlTool;
+        if self.hover == Some(Action::PlaylistArea) && self.over_clip && matches!(self.state.playlist.tool, PlTool::Draw | PlTool::Paint | PlTool::Select) {
+            return Cursor::Move;
+        }
+        let icon = match &self.hover {
+            // The playlist's Draw tool shows the brush (as FL's playlist does); the piano roll's keeps the pencil.
+            Some(Action::PlaylistArea) => match self.state.playlist.tool {
+                crate::playlist::PlTool::Draw => Some(crate::icons::Icon::Brush),
+                t => crate::playlist::PlTool::ALL.iter().position(|&x| x == t).map(|i| views::playlist::TOOL_ICONS[i]),
+            },
+            Some(Action::PianoGrid | Action::PianoNote(_)) => Some(match self.state.piano.tool {
+                Tool::Draw => crate::icons::Icon::Pencil,
+                Tool::Paint => crate::icons::Icon::Brush,
+                Tool::Delete => crate::icons::Icon::Delete,
+                Tool::Mute => crate::icons::Icon::Mute,
+                Tool::Slice => crate::icons::Icon::Slice,
+                Tool::Select => crate::icons::Icon::Select,
+                Tool::Zoom => crate::icons::Icon::Zoom,
+                Tool::Playback => crate::icons::Icon::Speaker,
+            }),
+            _ => None,
+        };
+        icon.filter(|i| TOOL_CURSORS.contains(i)).map_or(Cursor::Default, Cursor::Tool)
+    }
+
     pub fn cursor(&self) -> Cursor {
         let win_edges = match (&self.drag, &self.hover) {
             (Some(Drag::WinResize { edges, .. }), _) => *edges,
@@ -5888,7 +5933,7 @@ impl App {
         };
         match edges {
             0 if self.resize_cursor => Cursor::EwResize,
-            0 => Cursor::Default,
+            0 => self.tool_cursor(),
             views::rack::EDGE_RIGHT => Cursor::EwResize,
             views::rack::EDGE_BOTTOM => Cursor::NsResize,
             _ => Cursor::NwseResize,

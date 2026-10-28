@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 Artig3nce
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -155,6 +156,11 @@ fn shape(icon: Icon) -> &'static TablerIcon {
 /// Draw `icon` centered in `r` with color `c`. The 24-unit Tabler grid is fitted to the shorter side.
 pub fn draw(cv: &mut Canvas, icon: Icon, r: Rect, c: Color) {
     cv.icon(shape(icon), r, c);
+}
+
+/// Draw `icon` like `draw`, its outline stroked `width` px wide whatever its size (the rim of a tool cursor).
+pub fn draw_stroke(cv: &mut Canvas, icon: Icon, r: Rect, c: Color, width: f32) {
+    cv.icon_stroke(shape(icon), r, c, width);
 }
 
 /// Lemon Studio logo (greyscale mark, `logo.rs`) in one tint, fitted into a circle of radius `r`.
