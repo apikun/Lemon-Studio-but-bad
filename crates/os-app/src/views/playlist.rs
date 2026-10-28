@@ -60,7 +60,7 @@ fn cc(t: &os_theme::Palette, v: u32) -> Color {
 }
 /// Tool button centres in the title bar, relative to the window's left edge (§1: 275..442 at x 209).
 const TOOL_X: [f32; 9] = [66.0, 86.0, 108.0, 129.0, 150.0, 171.0, 192.0, 213.0, 233.0];
-const TOOL_ICONS: [Icon; 9] =
+pub(crate) const TOOL_ICONS: [Icon; 9] =
     [Icon::Pencil, Icon::Brush, Icon::Delete, Icon::Mute, Icon::Slip, Icon::Slice, Icon::Select, Icon::Zoom, Icon::Speaker];
 /// Picker item pitch (§1): the measured 30 px rows; taller items show a title strip of this height over their
 /// preview.

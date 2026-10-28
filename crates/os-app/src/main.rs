@@ -132,6 +132,7 @@ mod theme_adjust;
 mod theme_library;
 mod templates;
 mod timesig;
+mod tool_cursor;
 mod tooltip;
 mod transport;
 mod typein;
@@ -170,6 +171,8 @@ struct Shell {
     /// warped. Otherwise (Windows, X11) it is warped back to the anchor after each move.
     pointer_locked: bool,
     cursor: app::Cursor,
+    /// The tools' cursors over the playlist and piano roll (`tool_cursor`), made once the window is open.
+    tool_cursors: Vec<(icons::Icon, winit::window::CustomCursor)>,
     /// Main-window border in device pixels (left, top, right, bottom); zero when maximized.
     inset: (u32, u32, u32, u32),
     /// The border edge under the mouse (drags resize the OS window).
@@ -511,12 +514,19 @@ impl Shell {
         };
         if c != self.cursor {
             self.cursor = c;
+            let icon = |i: CursorIcon| winit::window::Cursor::Icon(i);
             window.set_cursor(match c {
-                app::Cursor::Default => CursorIcon::Default,
-                app::Cursor::EwResize => CursorIcon::EwResize,
-                app::Cursor::NsResize => CursorIcon::NsResize,
-                app::Cursor::NwseResize => CursorIcon::NwseResize,
-                app::Cursor::NeswResize => CursorIcon::NeswResize,
+                app::Cursor::Default => icon(CursorIcon::Default),
+                app::Cursor::EwResize => icon(CursorIcon::EwResize),
+                app::Cursor::NsResize => icon(CursorIcon::NsResize),
+                app::Cursor::NwseResize => icon(CursorIcon::NwseResize),
+                app::Cursor::NeswResize => icon(CursorIcon::NeswResize),
+                app::Cursor::Move => icon(CursorIcon::Move),
+                // A tool's cursor, or the arrow when it could not be made.
+                app::Cursor::Tool(t) => match self.tool_cursors.iter().find(|(i, _)| *i == t) {
+                    Some((_, cc)) => winit::window::Cursor::Custom(cc.clone()),
+                    None => icon(CursorIcon::Default),
+                },
             });
         }
     }
@@ -732,6 +742,16 @@ impl ApplicationHandler for Shell {
             attrs.with_window_icon(linux_icon())
         };
         let window = Rc::new(el.create_window(attrs).unwrap_or_else(|e| fatal("could not open the main window", e.to_string())));
+        // The tools' cursors, at the monitor's scale (32 px at 100 %).
+        let size = (32.0 * window.scale_factor()).round().clamp(24.0, 96.0) as u32;
+        self.tool_cursors = app::TOOL_CURSORS
+            .iter()
+            .filter_map(|&i| {
+                let (rgba, (x, y)) = tool_cursor::image(i, size)?;
+                let source = winit::window::CustomCursor::from_rgba(rgba, size as u16, size as u16, x, y).ok()?;
+                Some((i, el.create_custom_cursor(source)))
+            })
+            .collect();
         #[cfg(target_os = "macos")]
         if frame.is_some_and(|m| m.max) {
             set_maximized(&window, true);
@@ -1906,6 +1926,7 @@ fn main() {
         lock: None,
         pointer_locked: false,
         cursor: app::Cursor::Default,
+        tool_cursors: Vec::new(),
         inset: (0, 0, 0, 0),
         edge: None,
         grab: None,
