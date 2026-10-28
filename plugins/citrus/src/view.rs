@@ -1445,7 +1445,7 @@ fn info(ui: &mut Ui) {
     emblem(ui, mid, Font::condensed(32, 0).bold(), 9.0);
     let v = format!("Version {}", ui.m.version);
     ui.c.text_center(LABEL, Rect::new(0.0, mid.bottom() + 8.0, w, 16.0), DIM, &v);
-    ui.c.text_center(LABEL, Rect::new(0.0, mid.bottom() + 26.0, w, 16.0), DIM, "Lemon Studio's six-operator synthesizer");
+    ui.c.text_center(LABEL, Rect::new(0.0, mid.bottom() + 26.0, w, 16.0), DIM, "Mango Studio's six-operator synthesizer");
     ui.c.text_center(SMALL, Rect::new(0.0, h - 30.0, w, 16.0), FAINT, "Click to return");
     ui.hit(Rect::new(0.0, 0.0, w, h), Target::Cover);
 }

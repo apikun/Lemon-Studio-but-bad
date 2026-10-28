@@ -477,7 +477,7 @@ impl Theme {
     /// Serialize as a theme file listing every token.
     pub fn to_text(&self) -> String {
         let mut s = format!(
-            "# Lemon Studio theme: {}\nhue = {}\nsaturation = {}\nlightness = {}\n",
+            "# Mango Studio theme: {}\nhue = {}\nsaturation = {}\nlightness = {}\n",
             self.name, self.adjust.hue, self.adjust.saturation, self.adjust.lightness
         );
         for name in Palette::NAMES {

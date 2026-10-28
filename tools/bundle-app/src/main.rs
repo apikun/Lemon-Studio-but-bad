@@ -14,9 +14,9 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-const NAME: &str = "Lemon Studio";
-const EXE: &str = "lemonstudio";
-const IDENTIFIER: &str = "io.github.itsalphaneon.lemonstudio";
+const NAME: &str = "Mango Studio";
+const EXE: &str = "mangostudio";
+const IDENTIFIER: &str = "io.github.apikun.mangostudio";
 
 fn main() {
     if !cfg!(target_os = "macos") {

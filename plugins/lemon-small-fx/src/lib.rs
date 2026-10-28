@@ -239,7 +239,7 @@ impl<K: Kind> SmallFx<K> {
 
 impl<K: Kind> Plugin for SmallFx<K> {
     const NAME: &'static str = K::SPEC.name;
-    const VENDOR: &'static str = "Lemon Studio";
+    const VENDOR: &'static str = "Mango Studio";
     const URL: &'static str = "";
     const EMAIL: &'static str = "";
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -341,7 +341,7 @@ mod tests {
                     assert_eq!((s.text)(k, back), t, "{} {} {v}", s.name, set.id);
                 }
             }
-            assert!(s.name.starts_with("Lemon "));
+            assert!(s.name.starts_with("Mango "));
         }
         let ids = [
             <soft_clipper::LemonSoftClipper as ClapPlugin>::CLAP_ID,
@@ -367,7 +367,7 @@ mod tests {
                 assert_ne!(classes[i], classes[j]);
             }
         }
-        assert_eq!(<balance::LemonBalance as Plugin>::NAME, "Lemon Balance");
+        assert_eq!(<balance::LemonBalance as Plugin>::NAME, "Mango Balance");
     }
 
     #[test]

@@ -39,7 +39,7 @@ const RIGHT_WAVE: Color = Color::rgb(0xd4b43c);
 const FLAG: Color = Color::rgb(0xf0a030);
 const LOOP: Color = Color::rgb(0xe0505a);
 const RECORD: Color = Color::rgb(0xe8503c);
-const SEL: Color = Color::rgb(0xffe066);
+const SEL: Color = Color::rgb(0xffa33a);
 
 const CAPTION: Font = Font::condensed(9, 0).bold();
 const VALUE: Font = Font::new(11).bold();
@@ -1146,7 +1146,7 @@ pub fn hint(t: &Target, l: &HintCtx) -> String {
         Target::Menu(MenuId::Options) => "Options".into(),
         Target::Menu(m) => MENUS.iter().find(|(id, _)| id == m).map_or("", |(_, n)| n).to_string(),
         Target::Tool(i) => TOOLS[*i].hint.to_string(),
-        Target::Wordmark => "Tesla: Lemon Studio's audio editor and recorder".into(),
+        Target::Wordmark => "Tesla: Mango Studio's audio editor and recorder".into(),
         Target::Mute => "Mute input".into(),
         Target::Format => "Channels / press to convert".into(),
         Target::Wave => String::new(),

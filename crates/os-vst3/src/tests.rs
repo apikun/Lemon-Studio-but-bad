@@ -26,7 +26,7 @@ fn module(name: &str) -> Option<Arc<Module>> {
 }
 
 fn sampler() -> Option<(Arc<Module>, os_host::SharedPlugin)> {
-    let m = module("Lemon Sampler")?;
+    let m = module("Mango Sampler")?;
     let p = m.clone().create(&m.plugins()[0].id).expect("create");
     Some((m, p))
 }
@@ -83,26 +83,33 @@ fn finds_bundles_and_single_file_modules() {
 
 #[test]
 fn lists_instrument_and_effect_classes() {
-    let Some(m) = module("Lemon Sampler") else { return };
+    let Some(m) = module("Mango Sampler") else { return };
     let d = &m.plugins()[0];
     assert_eq!(m.plugins().len(), 1);
-    assert_eq!(d.name, "Lemon Sampler");
+    assert_eq!(d.name, "Mango Sampler");
     assert!(d.is_instrument(), "{:?}", d.features);
     // Its FUID string spells "OpenStudioSamplr" in hex (the module lays the GUID out so that it reads in order).
     assert_eq!(d.uid(), "vst3:4F70656E53747564696F53616D706C72");
     assert!(!d.vendor.is_empty() && !d.version.is_empty());
-    assert_eq!(d.path, bundle("Lemon Sampler").unwrap());
-    let Some(eq) = module("Lemon Parametric EQ") else { return };
+    assert_eq!(d.path, bundle("Mango Sampler").unwrap());
+    let Some(eq) = module("Mango Parametric EQ") else { return };
     assert!(eq.plugins()[0].is_effect(), "{:?}", eq.plugins()[0].features);
 }
 
-/// An instrument plays notes, saves its state as a `.vstpreset` and loads it into a second instance.
+/// An instrument plays notes, saves its state in FL Studio's wrapper layout and loads it into a second instance.
 #[test]
 fn hosts_lemon_sampler() {
     let Some((m, shared)) = sampler() else { return };
     let mut p = shared.lock().unwrap();
     let wav = tone("os-vst3-test.wav", 4800);
     assert!(p.load_state(&sampler_state(&wav, "")), "a bare component state loads");
+    // As FL Studio writes it for most plugins: no controller chunk, parameter ids the instance does not need.
+    let unused = tone("os-vst3-unused.wav", 4800);
+    let fl = fl_state::FlState { component: sampler_state(&unused, ""), controller: None, params: vec![1, 2, 3] };
+    assert!(p.load_state(&fl.to_bytes()), "FL Studio's layout loads");
+    let back = fl_state::FlState::parse(&p.save_state().unwrap()).unwrap();
+    assert!(String::from_utf8_lossy(&back.component).contains("os-vst3-unused.wav"), "the component got FL's state");
+    assert!(p.load_state(&sampler_state(&wav, "")));
     assert!(p.activate(48000));
     let (mut l, mut r) = (vec![0.0f32; 512], vec![0.0f32; 512]);
     p.note_on(10, 60, 100.0 / 128.0);
@@ -111,15 +118,17 @@ fn hosts_lemon_sampler() {
     assert!(peak(&l) > 0.05, "plays the sample (peak {})", peak(&l));
     assert!(p.active());
     let saved = p.save_state().unwrap();
-    let preset = preset::Preset::parse(&saved).expect("a .vstpreset");
-    assert_eq!(preset.class_id, p.desc().id);
-    assert!(String::from_utf8_lossy(&preset.component).contains("os-vst3-test.wav"));
-    // Another instance takes the saved bytes; a preset of another class is refused.
+    let st = fl_state::FlState::parse(&saved).expect("FL Studio's wrapper layout");
+    assert!(String::from_utf8_lossy(&st.component).contains("os-vst3-test.wav"));
+    assert!(!st.params.is_empty(), "the parameter ids are listed");
+    // Another instance takes the saved bytes, and the same state as a .vstpreset; a preset of another class is refused.
     let q = m.clone().create(&p.desc().id).unwrap();
     let mut q = q.lock().unwrap();
     assert!(q.load_state(&saved));
-    let again = preset::Preset::parse(&q.save_state().unwrap()).unwrap();
+    let again = fl_state::FlState::parse(&q.save_state().unwrap()).unwrap();
     assert!(String::from_utf8_lossy(&again.component).contains("os-vst3-test.wav"));
+    let preset = preset::Preset { class_id: p.desc().id.clone(), component: st.component, controller: Vec::new() };
+    assert!(q.load_state(&preset.to_bytes()));
     let other = preset::Preset { class_id: "0".repeat(32), ..preset }.to_bytes();
     assert!(!q.load_state(&other));
 }
@@ -165,7 +174,7 @@ fn parameters_through_the_hosting_layer() {
     // The value reaches the processor in the next block, and the state.
     let (mut l, mut r) = (vec![0.0f32; 64], vec![0.0f32; 64]);
     p.process(48000, &mut l, &mut r);
-    let saved = preset::Preset::parse(&p.save_state().unwrap()).unwrap();
+    let saved = fl_state::FlState::parse(&p.save_state().unwrap()).unwrap();
     let json = String::from_utf8_lossy(&saved.component).into_owned();
     assert!(json.contains("\"start_offset\":{\"f32\":0.25"), "{json}");
     assert!(infos.iter().any(|i| i.enumerated || i.steps > 0), "stepped parameters are reported");
@@ -233,7 +242,7 @@ fn host_objects_follow_the_interfaces() {
 /// An effect in a mixer slot: the default EQ passes the sound through; the main level raises it.
 #[test]
 fn hosts_an_effect() {
-    let Some(m) = module("Lemon Parametric EQ") else { return };
+    let Some(m) = module("Mango Parametric EQ") else { return };
     let shared = m.clone().create(&m.plugins()[0].id).unwrap();
     let mut p = shared.lock().unwrap();
     assert!(p.activate(48000));
@@ -263,7 +272,7 @@ fn automation_is_sample_accurate() {
     use os_engine::HostedEffect;
     use os_host::Plugin as _;
     use vst3_sys::vst::{IParamValueQueue, IParameterChanges};
-    let Some(m) = module("Lemon Parametric EQ") else { return };
+    let Some(m) = module("Mango Parametric EQ") else { return };
     let mut p = Plugin::new(&m, &m.plugins()[0].id).unwrap();
     assert!(p.activate(48000));
     let index = (0..p.param_count()).find(|&i| p.param_info(i).is_some_and(|i| i.name == "Main level")).expect("main level") as u32;
@@ -313,7 +322,7 @@ fn engine_plays_a_pattern() {
         assert!(p.activate(48000));
     }
     let ch = os_model::Channel {
-        index: 0, kind: os_model::ChannelKind::Plugin, name: None, plugin: Some("Lemon Sampler".into()), plugin_state: None, color: None,
+        index: 0, kind: os_model::ChannelKind::Plugin, name: None, plugin: Some("Mango Sampler".into()), plugin_state: None, color: None,
         enabled: true, volume: 0.78125, pan: 0.0, pitch_cents: 0, mixer_track: 0, sample_path: None,
         layer_children: vec![], envelopes: Default::default(), rack: Default::default(), misc: Default::default(), sound: Default::default(),
     };
@@ -347,7 +356,7 @@ fn mono_portamento_glides_through_the_tuning_expression() {
     }
     let misc = os_model::ChannelMisc { mono: true, porta: true, slide: 1.0, ..Default::default() };
     let ch = os_model::Channel {
-        index: 0, kind: os_model::ChannelKind::Plugin, name: None, plugin: Some("Lemon Sampler".into()), plugin_state: None, color: None,
+        index: 0, kind: os_model::ChannelKind::Plugin, name: None, plugin: Some("Mango Sampler".into()), plugin_state: None, color: None,
         enabled: true, volume: 0.78125, pan: 0.0, pitch_cents: 0, mixer_track: 0, sample_path: None,
         layer_children: vec![], envelopes: Default::default(), rack: Default::default(), misc, sound: Default::default(),
     };
@@ -558,10 +567,11 @@ mod separate {
         let (mut l, mut r) = ones(32);
         p.process_fx(48000, &mut l, &mut r);
         let saved = p.save_state().unwrap();
-        let preset = preset::Preset::parse(&saved).unwrap();
-        assert_eq!(preset.class_id, p.desc().id);
-        assert_eq!(preset.component, 0.25f64.to_le_bytes());
-        assert_eq!(&preset.controller[..4], b"MODE");
+        let st = fl_state::FlState::parse(&saved).unwrap();
+        assert_eq!(st.component, 0.25f64.to_le_bytes());
+        assert_eq!(&st.controller.as_deref().unwrap()[..4], b"MODE");
+        assert_eq!(st.params.len(), p.param_count(), "every parameter's id, in the plugin's order");
+        assert_eq!(st.params.first(), Some(&GAIN));
         // Change both, then restore.
         p.set_param(GAIN, 0.9);
         p.process_fx(48000, &mut l, &mut r);
@@ -575,6 +585,7 @@ mod separate {
         p.process_fx(48000, &mut l, &mut r);
         assert_eq!(l[0], 0.5);
         // Another class's preset is refused; bare component bytes are accepted.
+        let preset = preset::Preset { class_id: p.desc().id.clone(), component: st.component, controller: st.controller.unwrap() };
         let other = preset::Preset { class_id: "0".repeat(32), ..preset };
         assert!(!p.load_state(&other.to_bytes()));
         assert!(p.load_state(&0.5f64.to_le_bytes()));
@@ -1098,7 +1109,7 @@ mod window {
     #[test]
     #[ignore = "shows an offscreen window"]
     fn editor_shots() {
-        for (name, setup) in [("Lemon Sampler", true), ("Lemon Parametric EQ", false)] {
+        for (name, setup) in [("Mango Sampler", true), ("Mango Parametric EQ", false)] {
             let Some(m) = module(name) else { continue };
             let shared = m.clone().create(&m.plugins()[0].id).unwrap();
             let mut p = shared.lock().unwrap();

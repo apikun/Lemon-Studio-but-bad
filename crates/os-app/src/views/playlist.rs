@@ -1316,7 +1316,7 @@ fn header(ui: &mut Ui, s: &State, g: &PGeom, row: u16, x: f32, w: f32) {
             green,
         );
     } else {
-        super::led(ui, led.cx(), led.cy(), on);
+        super::led_small(ui, led.cx(), led.cy(), on);
     }
 }
 

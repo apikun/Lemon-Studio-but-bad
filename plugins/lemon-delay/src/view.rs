@@ -371,7 +371,7 @@ pub fn name(id: &str, m: &dyn Model) -> String {
 /// The hint line for a target.
 pub fn hint(t: &Target, m: &dyn Model) -> String {
     match t {
-        Target::Logo => "Lemon Delay".into(),
+        Target::Logo => "Mango Delay".into(),
         t => format!("{}: {}", name(t.id(), m), m.text(t.id())),
     }
 }

@@ -1696,8 +1696,7 @@ pub fn run(app: &mut App, c: RCmd) -> Option<String> {
             None
         }
         RCmd::Reset(k) => {
-            crate::history::knob(s, k, false);
-            s.set_knob(k, k.default_value());
+            s.reset_knob(k);
             None
         }
         RCmd::CopyValue(k) => {
@@ -2966,7 +2965,7 @@ mod tests {
         app.plugins.available = crate::plugins::builtin();
         let r = sampler_row(&app);
         app.plugin_tick();
-        assert!(app.state.hosted_rows.contains(&r), "Lemon Sampler hosts the row");
+        assert!(app.state.hosted_rows.contains(&r), "Mango Sampler hosts the row");
         let params = |app: &App| {
             let st = app.plugins.state(r).expect("state");
             let json = if st.first() == Some(&b'{') { &st[..] } else { &st[8..] };

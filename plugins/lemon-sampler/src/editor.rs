@@ -1591,7 +1591,7 @@ mod win32 {
                 tracking: false,
                 slot: slot.clone(),
             });
-            let title = wide("Lemon Sampler");
+            let title = wide("Mango Sampler");
             let hwnd = CreateWindowExW(
                 0,
                 class.as_ptr(),

@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 Artig3nce
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -784,10 +785,9 @@ fn row_knob(ui: &mut Ui, cx: f32, cy: f32, value: f32) {
     os_ui::kit::knob(ui.c, ui.t, cx, cy, 7.5, value, false, os_ui::kit::KnobLook::Row, os_ui::kit::State::hover(hov));
 }
 
-/// Enable LED (§3: ring r 5, green ball).
+/// Enable LED: the small round LED of the mixer and the playlist (after FL's).
 fn rack_led(ui: &mut Ui, cx: f32, cy: f32, on: bool) {
-    let hov = ui.hovering(Rect::new(cx - 6.0, cy - 6.0, 12.0, 12.0));
-    os_ui::kit::led(ui.c, ui.t, cx, cy, 5.0, os_ui::kit::State::hover(hov).with_on(on));
+    super::led_small(ui, cx, cy, on);
 }
 
 /// The small green padlock of a locked channel (§10); dimmed when the channel is muted.

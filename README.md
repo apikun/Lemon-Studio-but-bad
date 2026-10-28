@@ -3,21 +3,22 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo-light.png">
-  <img alt="Lemon Studio" src="docs/assets/logo-light.png" width="520">
+  <img alt="Mango Studio" src="docs/assets/logo-light.png" width="520">
 </picture>
 
 <h3>A free and open-source digital audio workstation, written in Rust.</h3>
 
 <p>
-  <a href="https://github.com/ItsAlphaNeon/Lemon-Studio/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/ItsAlphaNeon/Lemon-Studio/ci.yml?branch=main&style=flat-square&label=CI"></a>
+  <a href="https://github.com/apikun/Lemon-Studio-but-bad/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/apikun/Lemon-Studio-but-bad/ci.yml?branch=main&style=flat-square&label=CI"></a>
   <a href="LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square"></a>
   <img alt="Rust 2024 edition" src="https://img.shields.io/badge/rust-2024_edition-e57324?style=flat-square&logo=rust&logoColor=white">
   <img alt="Platform: Windows | Linux | macOS" src="https://img.shields.io/badge/platform-Windows_%7C_Linux_%7C_macOS-0078d4?style=flat-square">
   <img alt="Status: pre-alpha" src="https://img.shields.io/badge/status-pre--alpha-ffe066?style=flat-square">
-  <a href="https://discord.gg/yC2uCuGs3M"><img alt="Discord" src="https://img.shields.io/badge/discord-join_the_server-5865f2?style=flat-square&logo=discord&logoColor=white"></a>
+  <a href="https://discord.gg/yC2uCuGs3M"><img alt="Lemon Studio Discord" src="https://img.shields.io/badge/lemon_studio-discord-5865f2?style=flat-square&logo=discord&logoColor=white"></a>
 </p>
 
 <p>
+  <a href="#credits">Credits</a> ·
   <a href="#overview">Overview</a> ·
   <a href="#capabilities">Capabilities</a> ·
   <a href="#getting-started">Getting started</a> ·
@@ -30,43 +31,58 @@
 
 <br>
 
-<img alt="Lemon Studio with the browser, playlist, channel rack and piano roll open" src="docs/assets/screenshot.webp" width="900">
+<img alt="Mango Studio with the browser, playlist, channel rack and piano roll open" src="docs/assets/screenshot.webp" width="900">
 
 </div>
 
 ---
 
+## Credits
+
+**Mango Studio is a fork of [Lemon Studio](https://github.com/ItsAlphaNeon/Lemon-Studio) by ItsAlphaNeon**, renamed so it
+is not confused with the original. Almost all of its code, design and documentation is ItsAlphaNeon's and the Lemon
+Studio contributors' work, used under the GNU GPL, version 3 or later; their copyright lines stay in every file they
+wrote. Mango Studio does not claim to be Lemon Studio or to be made or endorsed by its author.
+
+What Mango Studio changes from Lemon Studio:
+
+- The name, logo and icons (a mango with an equalizer inside), and the built-in plugins' names (Mango Sampler, Mango Trio, ...).
+  Projects and presets saved with the Lemon names still open: the plugins answer to their old names too.
+- Its settings folder is `Mango Studio`; Lemon Studio's settings are copied there at the first start.
+- An FL-style start layout (channel rack, a full-height playlist, a tall mixer along the bottom), interface scaling that
+  follows the monitor's resolution, FL-style round switches and step buttons, and the playlist's playhead line.
+
 ## Overview
 
-Lemon Studio is a pattern-based music production environment: build patterns in a step sequencer and
+Mango Studio is a pattern-based music production environment: build patterns in a step sequencer and
 piano roll, arrange them on a playlist, and mix them through a routable mixer. It is written from the
 ground up in Rust, with a sample-accurate audio engine, a fast CPU-rendered interface and hosting for
 CLAP, VST3 and VST2 plugins.
 
-Lemon Studio runs on Windows, Linux and macOS, and every change is built and tested on all three. macOS is supported
+Mango Studio runs on Windows, Linux and macOS, and every change is built and tested on all three. macOS is supported
 at the same level as Linux; the few differences are listed in the [macOS notes](#macos).
 
-A central goal is **interoperability**: Lemon Studio opens and saves FL Studio projects (`.flp`). The
-project reader is built to round-trip: anything in a file that Lemon Studio does not understand yet is
+A central goal is **interoperability**: Mango Studio opens and saves FL Studio projects (`.flp`). The
+project reader is built to round-trip: anything in a file that Mango Studio does not understand yet is
 kept and written back unchanged, so a project survives being opened and saved. This support is still
 young, so read the warning below before trying it on real work.
 
 > [!WARNING]
-> **Lemon Studio is pre-alpha software.** It is under active development and is not yet a usable DAW:
+> **Mango Studio is pre-alpha software.** It is under active development and is not yet a usable DAW:
 > expect missing features, rough edges and breaking changes.
 >
 > - **Greyed-out controls are not implemented yet.** Many menus and buttons are already laid out but do
 >   nothing so far; they are drawn dim and say "not available yet".
-> - **No prebuilt binaries** will be published until Lemon Studio reaches a usable state. Until then it
+> - **No prebuilt binaries** will be published until Mango Studio reaches a usable state. Until then it
 >   can only be built from source.
 > - **Only projects saved by FL Studio 24.2 or later open for now** (25 and 26 included). Older projects
 >   are refused with a dialog that explains how to re-save them; support for them is on the roadmap.
 > - **Project-file support is at a very early stage.** Do not overwrite your original `.flp` projects
->   with files saved by Lemon Studio until this support is declared stable. Work on copies and keep backups.
+>   with files saved by Mango Studio until this support is declared stable. Work on copies and keep backups.
 
 ## Capabilities
 
-Where Lemon Studio stands against what a complete DAW offers:
+Where Mango Studio stands against what a complete DAW offers:
 
 | Area | Status | Notes |
 |---|:---:|---|
@@ -74,13 +90,13 @@ Where Lemon Studio stands against what a complete DAW offers:
 | Piano roll | ✅ | Full tool set, velocity and event lanes, quantize (FL's templates), chop (FL's patterns), randomize (melodies and levels), strum, arpeggiate, flam, claw machine, flip, level scaling, limit, LFO and more |
 | Song arrangement | ✅ | Playlist with pattern, audio and automation clips, clip groups, markers and several arrangements |
 | Mixing and routing | ✅ | Mixer tracks, sends, effect slots and meters; sidechain inputs for a project's Fruity Limiter slots and for CLAP and VST3 effects |
-| Plugin hosting | ✅ | CLAP, VST3 and VST2 instruments and effects with their editors; "Create automation clip" in CLAP and VST3 plugins' own parameter menus; a parameter menu for every plugin parameter (automation clips, controller links, typed and set values); on Windows a crashing plugin is stopped instead of closing Lemon Studio; no 32-bit plugins |
+| Plugin hosting | ✅ | CLAP, VST3 and VST2 instruments and effects with their editors; "Create automation clip" in CLAP and VST3 plugins' own parameter menus; a parameter menu for every plugin parameter (automation clips, controller links, typed and set values); on Windows a crashing plugin is stopped instead of closing Mango Studio; no 32-bit plugins |
 | Plugin management | ✅ | Plugin manager with your own search folders, a crash-safe background scan, favourites and hidden plugins; presets of your own and factory presets, import of `.vstpreset`, `.fxp` and `.fxb` files, and preset files dropped onto a plugin |
 | Time-stretching | ✅ | All twelve stretch methods for samples and audio clips, played by one open-source stretcher |
 | Playback engine | 🚧 | Renders ahead of the audio device so edits do not cause dropouts; voice limits, cut groups, glides, layer channels; one audio thread for now |
 | Automation | 🚧 | Clips for channel, mixer and plugin parameters with every curve shape; channel volume and pan moves record into a pattern; not yet recording into automation clips, or clip LFO |
 | Project files | 🚧 | Opens and saves projects from FL Studio 24.2 and later; older versions are on the roadmap. Keep backups |
-| Built-in instruments and effects | 🚧 | Instruments: Lemon Sampler (long samples can play straight from disk), Lemon Trio (three oscillators), Citrus (a six-operator synth that plays Sytrus patches), Lemon Kick (a kick drum), Lemon Boom (a bass drum), Lemon Bass (a bass guitar) and Lemon Acid (an acid bass). Effects: Lemon Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion, Transient Processor, Press (FL's Maximus) and Pulp Filter (FL's Fruity Love Philter). All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Lemon Limiter's sound, sidechain included |
+| Built-in instruments and effects | 🚧 | Instruments: Mango Sampler (long samples can play straight from disk), Mango Trio (three oscillators), Citrus (a six-operator synth that plays Sytrus patches), Mango Kick (a kick drum), Mango Boom (a bass drum), Mango Bass (a bass guitar) and Mango Acid (an acid bass). Effects: Mango Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion, Transient Processor, Press (FL's Maximus) and Pulp Filter (FL's Fruity Love Philter). All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Mango Limiter's sound, sidechain included |
 | Exporting audio | ✅ | Song, pattern or selection to WAV, FLAC, MP3 and OGG at once; bit depth, sample rate, interpolation, dither, mono, tails, stems and WAV markers; a pattern rendered as an audio clip (Quick render, Render and replace) |
 | MIDI file import / export | ✅ | Import into a new project, the open one or a piano roll channel (tracks, channels, tempo changes, time signatures, markers); export a pattern or the song's patterns |
 | Note input | 🚧 | Mouse, computer keyboard, MIDI controllers (velocity curves, sustain pedal, pitch bend, aftertouch) and the touch controller; note recording into patterns with loop record, precount and Start on input; step edit |
@@ -112,28 +128,28 @@ ASIO is a registered trademark of Steinberg Media Technologies GmbH.
 </table>
 
 Per-area details are in [docs/status.md](docs/status.md). The full, item-by-item roadmap is in the
-[Roadmap](#roadmap) section below, and kept on the [Discord server](https://discord.gg/yC2uCuGs3M).
+[Roadmap](#roadmap) section below, and kept on the original Lemon Studio's [Discord server](https://discord.gg/yC2uCuGs3M).
 
 ## Getting started
 
-No prebuilt binaries are provided at this stage: Lemon Studio is built from source. Each platform below goes from a fresh
-machine to Lemon Studio installed with its icon, and Lemon Studio's own plugins installed for any DAW. All three need
+No prebuilt binaries are provided at this stage: Mango Studio is built from source. Each platform below goes from a fresh
+machine to Mango Studio installed with its icon, and Mango Studio's own plugins installed for any DAW. All three need
 **Rust**, stable toolchain 1.89 or newer, installed through [rustup](https://rustup.rs/), and a clone of this repository:
 
 ```bash
-git clone https://github.com/ItsAlphaNeon/Lemon-Studio.git
-cd Lemon-Studio
+git clone https://github.com/apikun/Lemon-Studio-but-bad.git
+cd Lemon-Studio-but-bad
 ```
 
-`cargo run -p os-app --release` builds and runs Lemon Studio. Before Lemon Studio starts, it also rebuilds Lemon
-Studio's own plugins (Lemon Sampler, Lemon Trio, Lemon Parametric EQ, Lemon Limiter, Lemon Reverb, Lemon Delay, Lemon
-Soft Clipper, Lemon Fast Distortion, Lemon Balance, Lemon Stereo Enhancer, Lemon Transient Processor, Lemon Chorus,
-Lemon Stereo Shaper, Citrus, Tesla, Press, Pulp Filter, Lemon Kick, Lemon Boom, Lemon Bass and Lemon Acid) and
-installs the ones that changed as VST3 and CLAP plugins, in the folders where other DAWs find them. Lemon Studio itself
+`cargo run -p os-app --release` builds and runs Mango Studio. Before Mango Studio starts, it also rebuilds Mango
+Studio's own plugins (Mango Sampler, Mango Trio, Mango Parametric EQ, Mango Limiter, Mango Reverb, Mango Delay, Mango
+Soft Clipper, Mango Fast Distortion, Mango Balance, Mango Stereo Enhancer, Mango Transient Processor, Mango Chorus,
+Mango Stereo Shaper, Citrus, Tesla, Press, Pulp Filter, Mango Kick, Mango Boom, Mango Bass and Mango Acid) and
+installs the ones that changed as VST3 and CLAP plugins, in the folders where other DAWs find them. Mango Studio itself
 has every one of them built in and needs no plugin files. A plugin that is new or updated in the repository shows up
 in other DAWs at the next run. The first run builds every plugin, which takes
 a few minutes more; later runs rebuild only what changed. Set `OPENSTUDIO_NO_PLUGIN_BUILD=1` to skip the plugin build. A
-Lemon Studio installed as below builds nothing: after pulling changes, either run the command above once, or build and
+Mango Studio installed as below builds nothing: after pulling changes, either run the command above once, or build and
 install only the plugins with `cargo run -p bundle-plugins -- --install`.
 
 ### Windows
@@ -161,19 +177,19 @@ it can be pinned to the taskbar):
 
 ```powershell
 cargo install --path crates/os-app
-$link = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Lemon Studio.lnk")
+$link = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Mango Studio.lnk")
 $link.TargetPath = "$env:USERPROFILE\.cargo\bin\lemonstudio.exe"
 $link.Save()
 ```
 
-**Plugins:** `cargo run -p os-app --release` installs Lemon Studio's plugins in `%LOCALAPPDATA%\Programs\Common\VST3`
-and `...\CLAP`, where DAWs find them. To build and install them without starting Lemon Studio, run
+**Plugins:** `cargo run -p os-app --release` installs Mango Studio's plugins in `%LOCALAPPDATA%\Programs\Common\VST3`
+and `...\CLAP`, where DAWs find them. To build and install them without starting Mango Studio, run
 `cargo run -p bundle-plugins -- --install`.
 
 **Notes**
 
-- A plugin that crashes is stopped (its slot passes the sound through) instead of closing Lemon Studio.
-- Settings, themes and presets live in `%APPDATA%\Lemon Studio`. `OPENSTUDIO_USER_DIR` overrides the folder.
+- A plugin that crashes is stopped (its slot passes the sound through) instead of closing Mango Studio.
+- Settings, themes and presets live in `%APPDATA%\Mango Studio`. `OPENSTUDIO_USER_DIR` overrides the folder.
 - Plugins are found in `%LOCALAPPDATA%\Programs\Common\{VST3,CLAP}`, `%COMMONPROGRAMFILES%\{VST3,CLAP}` and
   `CLAP_PATH`, plus any folder added in Settings > Plugins. VST2 plugins are found in the folder their installers
   record (`HKEY_LOCAL_MACHINE\SOFTWARE\VST`, `VSTPluginsPath`) and in those of `%PROGRAMFILES%\VSTPlugins`,
@@ -198,14 +214,14 @@ shows how fast it paints.
   waveform display among them — stays visible on a phone's narrow window. A Toolbars scaling percentage chosen by
   hand is kept as it is.
 
-**If it will not start**, or a plugin crashes it, `%APPDATA%\Lemon Studio\panic-log.txt` (in the container:
-`C:\users\<user>\AppData\Roaming\Lemon Studio\panic-log.txt`) holds the last panic's message, and a failure at
+**If it will not start**, or a plugin crashes it, `%APPDATA%\Mango Studio\panic-log.txt` (in the container:
+`C:\users\<user>\AppData\Roaming\Mango Studio\panic-log.txt`) holds the last panic's message, and a failure at
 startup shows a message box instead of closing quietly.
 
 **If the keyboard and playback make no sound** while the metronome and the Tempo tapper do: a new project's channel
 is a sampler with no sample, and a sampler without a sample is silent — the hint bar says so when a note plays on it.
-Drop a sample from the browser onto the channel, or add an instrument with the channel rack's plus (Lemon Trio,
-Lemon Kick, Lemon Bass, Lemon Acid ... all built in). If the hint bar says a plugin did not follow the audio rate,
+Drop a sample from the browser onto the channel, or add an instrument with the channel rack's plus (Mango Trio,
+Mango Kick, Mango Bass, Mango Acid ... all built in). If the hint bar says a plugin did not follow the audio rate,
 or nothing helps, set `OS_DEBUG=1` in the container's environment and run once more: the log names the plugin and
 the rates it was asked for.
 
@@ -214,7 +230,7 @@ the rates it was asked for.
 x64, on X11 or a Wayland desktop.
 
 **Prerequisites:** a C++ compiler and libclang (for the time stretcher), the ALSA development files, the Wayland
-development files (which Lemon Sampler's file dialogs link against when it is built as a plugin) and `pkg-config`:
+development files (which Mango Sampler's file dialogs link against when it is built as a plugin) and `pkg-config`:
 
 ```bash
 # Debian / Ubuntu
@@ -242,26 +258,26 @@ install -Dm644 crates/os-app/assets/lemonstudio.png ~/.local/share/icons/hicolor
 install -Dm644 crates/os-app/assets/lemonstudio.desktop ~/.local/share/applications/lemonstudio.desktop
 ```
 
-**Plugins:** `cargo run -p os-app --release` installs Lemon Studio's plugins in `~/.vst3` and `~/.clap`. To build and
-install them without starting Lemon Studio, run `cargo run -p bundle-plugins -- --install`.
+**Plugins:** `cargo run -p os-app --release` installs Mango Studio's plugins in `~/.vst3` and `~/.clap`. To build and
+install them without starting Mango Studio, run `cargo run -p bundle-plugins -- --install`.
 
 **Notes**
 
-Lemon Studio runs on X11, and on Wayland desktops through XWayland. Plugin editors on Linux are X11 windows, and an X11
+Mango Studio runs on X11, and on Wayland desktops through XWayland. Plugin editors on Linux are X11 windows, and an X11
 window cannot sit inside a native Wayland one; with the main window on X11 too, plugin windows dock inside it as on
 Windows (or detach, from their window menu). A few things differ from Windows for now:
 
 - **Native Wayland** is used only when there is no X server, or when `OPENSTUDIO_WAYLAND=1` is set. Plugin windows are
-  then always separate windows, kept above Lemon Studio while it is the active application; their window menu, Presets
+  then always separate windows, kept above Mango Studio while it is the active application; their window menu, Presets
   list and Misc lists do not open, and files cannot be dropped in from a file manager (the windowing library does not
   support it there).
-- **Scaling:** under XWayland Lemon Studio follows the X11 scale (`Xft.dpi`). If it looks soft on a fractionally scaled
+- **Scaling:** under XWayland Mango Studio follows the X11 scale (`Xft.dpi`). If it looks soft on a fractionally scaled
   Wayland desktop, let X11 applications scale themselves (KDE: Display Configuration > Legacy applications (X11) >
   Apply scaling themselves).
 - **Keys** pressed while a plugin's editor has the keyboard focus do not play the typing keyboard yet, and a sample
-  dragged from Lemon Studio's browser onto a plugin window does not reach the plugin yet.
-- **Lemon Sampler** cannot copy or paste audio through the clipboard yet.
-- **Settings, themes and presets** live in `$XDG_CONFIG_HOME/Lemon Studio` (usually `~/.config/Lemon Studio`).
+  dragged from Mango Studio's browser onto a plugin window does not reach the plugin yet.
+- **Mango Sampler** cannot copy or paste audio through the clipboard yet.
+- **Settings, themes and presets** live in `$XDG_CONFIG_HOME/Mango Studio` (usually `~/.config/Mango Studio`).
   `OPENSTUDIO_USER_DIR` overrides the folder.
 - Plugins are found in `~/.clap`, `/usr/lib/clap`, `/usr/local/lib/clap` and `CLAP_PATH`, in `~/.vst3`,
   `/usr/lib/vst3` and `/usr/local/lib/vst3`, and in `VST_PATH` (else `~/.vst`, `/usr/lib/vst`, `/usr/local/lib/vst` and
@@ -281,7 +297,7 @@ itself is not needed (only to regenerate the app icon, see `tools/logo/macos-ico
 cargo run -p os-app --release
 ```
 
-**Install** Lemon Studio as an app, `Lemon Studio.app` in `~/Applications`, with its icon: it opens from Launchpad,
+**Install** Mango Studio as an app, `Mango Studio.app` in `~/Applications`, with its icon: it opens from Launchpad,
 Spotlight or the Dock (on macOS 26 and later its icon follows the light, dark, tinted and clear icon styles), and the
 Finder opens `.flp` projects with it. Without `--install` the app is only written to `target/bundled/`.
 
@@ -289,32 +305,32 @@ Finder opens `.flp` projects with it. Without `--install` the app is only writte
 cargo run -p bundle-app -- --install
 ```
 
-**Plugins:** `cargo run -p os-app --release` installs Lemon Studio's plugins as bundles, signed ad hoc so that Apple
-silicon loads them, in `~/Library/Audio/Plug-Ins/VST3` and `.../CLAP`. To build and install them without starting Lemon
+**Plugins:** `cargo run -p os-app --release` installs Mango Studio's plugins as bundles, signed ad hoc so that Apple
+silicon loads them, in `~/Library/Audio/Plug-Ins/VST3` and `.../CLAP`. To build and install them without starting Mango
 Studio, run `cargo run -p bundle-plugins -- --install`.
 
 **Notes**
 
 Plugin windows dock inside the main window as on Windows, or detach (from their window menu) into windows of their own
-that stay above Lemon Studio while it is the active application. A few things differ from Windows and Linux:
+that stay above Mango Studio while it is the active application. A few things differ from Windows and Linux:
 
 - **Menu bar:** the window's menus (FILE … HELP) are also in the macOS menu bar, with the same entries.
 - **Keys:** Command stands in for Ctrl in every shortcut (Command+S saves), and
   Control+click is a right click. Quit (Command+Q, the menu bar, the Dock) asks about unsaved changes like closing the
   window does.
 - **Plugin windows:** a minimized detached window is hidden rather than sent to the Dock; its channel's button brings
-  it back. A sample dragged from Lemon Studio's browser onto a plugin window reaches Lemon Sampler only (other plugins
+  it back. A sample dragged from Mango Studio's browser onto a plugin window reaches Mango Sampler only (other plugins
   take dropped files only from the Finder).
 - **FL Studio's factory content** (samples that projects name through `%FLStudioFactoryData%`) is found in the newest
   `/Applications/FL Studio *.app`; `OPENSTUDIO_FACTORY` overrides it.
-- **Settings, themes and presets** live in `~/Library/Application Support/Lemon Studio`. `OPENSTUDIO_USER_DIR`
+- **Settings, themes and presets** live in `~/Library/Application Support/Mango Studio`. `OPENSTUDIO_USER_DIR`
   overrides the folder.
 - Plugins are found in `~/Library/Audio/Plug-Ins/{CLAP,VST3,VST}`, `/Library/Audio/Plug-Ins/{CLAP,VST3,VST}` and
   `CLAP_PATH`, plus any folder added in Settings > Plugins. Audio Units are not supported. On Apple silicon, plugins
   built for Intel Macs only (common among older VST2 plugins) cannot be loaded; VST2 ones are listed as not supported,
   without being tried.
 
-### Using Lemon Studio
+### Using Mango Studio
 
 Open a project directly by passing its path:
 
@@ -329,11 +345,11 @@ render runs without a window, hosting the same plugins the app would and without
 cargo run -p os-app --release -- --render path/to/project.flp out.wav [--rate 48000] [--seconds 30] [--from TICK] [--builtin-only]
 ```
 
-`--builtin-only` hosts only Lemon Studio's own plugins, for a render that is the same on every machine.
+`--builtin-only` hosts only Mango Studio's own plugins, for a render that is the same on every machine.
 Settings > Theme picks the skin (Lemon, or Citrus, the look formerly called Classic) and the theme; the choice is
 remembered.
 
-Lemon Trio and Lemon Parametric EQ were called Lemon 3x Osc and Lemon Parametric EQ 2 before, and earlier all three
+Mango Trio and Mango Parametric EQ were called Mango 3x Osc and Mango Parametric EQ 2 before, and earlier all three
 plugins were called Open Sampler, Open 3x Osc and Open Parametric EQ 2. They keep their plugin IDs, so sessions saved
 with the old names still open with the new plugins. Installing the plugins (by the run from source or
 `bundle-plugins --install`) removes bundles installed under the old names; delete any others you copied yourself, or
@@ -358,12 +374,12 @@ for each of its copyright holders, its SPDX licence identifier and the project's
 | `flp-dump` | Print a project file's event stream and verify that it round-trips |
 | `os-render` | Render a project or pattern offline to a WAV file with the engine alone (no hosted plugins, so it does not sound like the app; `--render` above does) |
 | `os-play` | Play a project through the default audio output |
-| `bundle-plugins` | Build Lemon Studio's own plugins as VST3 and CLAP bundles, and optionally install them (`cargo run -p os-app --release` runs it with `--install`) |
-| `bundle-app` | Build Lemon Studio as a macOS app, and optionally install it |
+| `bundle-plugins` | Build Mango Studio's own plugins as VST3 and CLAP bundles, and optionally install them (`cargo run -p os-app --release` runs it with `--install`) |
+| `bundle-app` | Build Mango Studio as a macOS app, and optionally install it |
 
 ## Architecture
 
-Lemon Studio is a Cargo workspace of focused crates:
+Mango Studio is a Cargo workspace of focused crates:
 
 | Crate | Responsibility |
 |---|---|
@@ -378,36 +394,36 @@ Lemon Studio is a Cargo workspace of focused crates:
 | [`os-clap`](crates/os-clap) | CLAP plugin host |
 | [`os-vst3`](crates/os-vst3) | VST3 plugin host |
 | [`os-vst2`](crates/os-vst2) | VST2 plugin host, on a clean-room description of the interface (no Steinberg SDK) |
-| [`os-hostlink`](crates/os-hostlink) | Host link protocol between Lemon Studio and its own plugins |
-| [`os-plugkit`](crates/os-plugkit) | Shared editor pieces of Lemon Studio's own plugins |
-| [`os-paths`](crates/os-paths) | Where Lemon Studio keeps its settings, themes and presets on each platform |
-| [`lemon-sampler`](plugins/lemon-sampler) | Lemon Sampler instrument (VST3 + CLAP) |
-| [`lemon-3x-osc`](plugins/lemon-3x-osc) | Lemon Trio instrument (VST3 + CLAP) |
-| [`lemon-parametric-eq-2`](plugins/lemon-parametric-eq-2) | Lemon Parametric EQ effect (VST3 + CLAP) |
-| [`lemon-limiter`](plugins/lemon-limiter) | Lemon Limiter effect (VST3 + CLAP) |
-| [`lemon-reverb`](plugins/lemon-reverb) | Lemon Reverb effect (VST3 + CLAP) |
-| [`lemon-delay`](plugins/lemon-delay) | Lemon Delay effect (VST3 + CLAP) |
-| [`lemon-small-fx`](plugins/lemon-small-fx) | What the seven small Lemon effects share: the plugin, its state, the editor and each effect's description |
-| [`lemon-soft-clipper`](plugins/lemon-soft-clipper) | Lemon Soft Clipper effect (VST3 + CLAP) |
-| [`lemon-fast-distortion`](plugins/lemon-fast-distortion) | Lemon Fast Distortion effect (VST3 + CLAP) |
-| [`lemon-balance`](plugins/lemon-balance) | Lemon Balance effect (VST3 + CLAP) |
-| [`lemon-stereo-enhancer`](plugins/lemon-stereo-enhancer) | Lemon Stereo Enhancer effect (VST3 + CLAP) |
-| [`lemon-transient-processor`](plugins/lemon-transient-processor) | Lemon Transient Processor effect (VST3 + CLAP) |
-| [`lemon-chorus`](plugins/lemon-chorus) | Lemon Chorus effect (VST3 + CLAP) |
-| [`lemon-stereo-shaper`](plugins/lemon-stereo-shaper) | Lemon Stereo Shaper effect (VST3 + CLAP) |
+| [`os-hostlink`](crates/os-hostlink) | Host link protocol between Mango Studio and its own plugins |
+| [`os-plugkit`](crates/os-plugkit) | Shared editor pieces of Mango Studio's own plugins |
+| [`os-paths`](crates/os-paths) | Where Mango Studio keeps its settings, themes and presets on each platform |
+| [`lemon-sampler`](plugins/lemon-sampler) | Mango Sampler instrument (VST3 + CLAP) |
+| [`lemon-3x-osc`](plugins/lemon-3x-osc) | Mango Trio instrument (VST3 + CLAP) |
+| [`lemon-parametric-eq-2`](plugins/lemon-parametric-eq-2) | Mango Parametric EQ effect (VST3 + CLAP) |
+| [`lemon-limiter`](plugins/lemon-limiter) | Mango Limiter effect (VST3 + CLAP) |
+| [`lemon-reverb`](plugins/lemon-reverb) | Mango Reverb effect (VST3 + CLAP) |
+| [`lemon-delay`](plugins/lemon-delay) | Mango Delay effect (VST3 + CLAP) |
+| [`lemon-small-fx`](plugins/lemon-small-fx) | What the seven small Mango effects share: the plugin, its state, the editor and each effect's description |
+| [`lemon-soft-clipper`](plugins/lemon-soft-clipper) | Mango Soft Clipper effect (VST3 + CLAP) |
+| [`lemon-fast-distortion`](plugins/lemon-fast-distortion) | Mango Fast Distortion effect (VST3 + CLAP) |
+| [`lemon-balance`](plugins/lemon-balance) | Mango Balance effect (VST3 + CLAP) |
+| [`lemon-stereo-enhancer`](plugins/lemon-stereo-enhancer) | Mango Stereo Enhancer effect (VST3 + CLAP) |
+| [`lemon-transient-processor`](plugins/lemon-transient-processor) | Mango Transient Processor effect (VST3 + CLAP) |
+| [`lemon-chorus`](plugins/lemon-chorus) | Mango Chorus effect (VST3 + CLAP) |
+| [`lemon-stereo-shaper`](plugins/lemon-stereo-shaper) | Mango Stereo Shaper effect (VST3 + CLAP) |
 | [`citrus`](plugins/citrus) | Citrus instrument, a six-operator synthesizer (VST3 + CLAP) |
 | [`tesla`](plugins/tesla) | Tesla, the audio editor and recorder (VST3 + CLAP) |
 | [`press`](plugins/press) | Press effect, a multiband maximiser (VST3 + CLAP) |
 | [`pulp-filter`](plugins/pulp-filter) | Pulp Filter effect, a pattern-controlled multi-filter (VST3 + CLAP) |
-| [`lemon-small-gen`](plugins/lemon-small-gen) | What the three small Lemon generators share: the plugin, its state, the editor and each instrument's description |
-| [`lemon-kick`](plugins/lemon-kick) | Lemon Kick, a kick drum (VST3 + CLAP) |
-| [`lemon-boom`](plugins/lemon-boom) | Lemon Boom, a bass drum (VST3 + CLAP) |
-| [`lemon-bass`](plugins/lemon-bass) | Lemon Bass, a bass guitar (VST3 + CLAP) |
-| [`lemon-acid`](plugins/lemon-acid) | Lemon Acid, an acid bass (VST3 + CLAP) |
+| [`lemon-small-gen`](plugins/lemon-small-gen) | What the three small Mango generators share: the plugin, its state, the editor and each instrument's description |
+| [`lemon-kick`](plugins/lemon-kick) | Mango Kick, a kick drum (VST3 + CLAP) |
+| [`lemon-boom`](plugins/lemon-boom) | Mango Boom, a bass drum (VST3 + CLAP) |
+| [`lemon-bass`](plugins/lemon-bass) | Mango Bass, a bass guitar (VST3 + CLAP) |
+| [`lemon-acid`](plugins/lemon-acid) | Mango Acid, an acid bass (VST3 + CLAP) |
 
 ## Roadmap
 
-The item-by-item roadmap, as it is kept on the [Lemon Studio Discord server](https://discord.gg/yC2uCuGs3M):
+The item-by-item roadmap, as it is kept on the [Lemon Studio Discord server](https://discord.gg/yC2uCuGs3M) (the original project's):
 every feature marked as done, in progress or not started.
 
 ✅ done · 🚧 in progress · ⬜ not started
@@ -421,7 +437,7 @@ every feature marked as done, in progress or not started.
 - ✅ Channel envelopes, note repeat and per-pattern control lanes
 - ✅ Automation clips for channel, mixer and plugin parameters
 - ✅ Channel note rules: max polyphony, mono, portamento glides, cut groups
-- ✅ Glides on every instrument: Lemon Trio and Citrus follow portamento and slides, other plugins get pitch bend
+- ✅ Glides on every instrument: Mango Trio and Citrus follow portamento and slides, other plugins get pitch bend
 - ✅ Live edits reach playback instantly, without clicks
 - ✅ Offline rendering (`os-render`) and low-latency WASAPI output
 - ✅ Render a project without opening a window (`lemonstudio --render`)
@@ -541,40 +557,40 @@ every feature marked as done, in progress or not started.
 - ✅ Plugin presets: factory presets, import (`.vstpreset`, `.fxp` / `.fxb`), drag and drop onto a window, rack row or mixer slot
 - ✅ VST3 plugins' own context menus; parameter menu with Set... and Edit automation clip...
 - ✅ Plugin window Misc tab: levels, polyphony, time, tracking, cut groups, arpeggio, echo, root note
-- ✅ Lemon Sampler plays every sampler channel and audio clip, including factory-library samples
-- ✅ Lemon Sampler plays a project's sample settings, channel filter and note levels
-- ✅ Host link protocol for Lemon Studio's own plugins
+- ✅ Mango Sampler plays every sampler channel and audio clip, including factory-library samples
+- ✅ Mango Sampler plays a project's sample settings, channel filter and note levels
+- ✅ Host link protocol for Mango Studio's own plugins
 - ✅ Crash protection: a plugin that crashes is stopped (its slot passes the sound through) instead of closing the app (Windows)
 - 🚧 Experimental native plugin host (opt-in: effects in mixer slots, editors in the plugin window)
-- ✅ Lemon Sampler: loop points, time stretch, LFOs
-- ✅ Lemon Sampler: disk streaming (Keep on disk)
-- ✅ Every Lemon plugin built into the app: no plugin files needed
+- ✅ Mango Sampler: loop points, time stretch, LFOs
+- ✅ Mango Sampler: disk streaming (Keep on disk)
+- ✅ Every Mango plugin built into the app: no plugin files needed
 - 🚧 More built-in instruments and effects
 
 ### Clean-room plugins
 
 #### Effects
 
-- ✅ Parametric EQ 2 (Lemon Parametric EQ: built into mixer slots, also VST3 and CLAP)
-- ✅ Fruity Limiter (Lemon Limiter: built into the app and mixer slots, also VST3 and CLAP)
-- ✅ Fruity Reeverb 2 (Lemon Reverb: built into mixer slots, also VST3 and CLAP)
-- ✅ Fruity Delay 3 (Lemon Delay: built into mixer slots, also VST3 and CLAP)
-- ✅ Fruity Chorus (Lemon Chorus: built into mixer slots, also VST3 and CLAP)
-- ✅ Fruity Stereo Shaper (Lemon Stereo Shaper: built into mixer slots, also VST3 and CLAP)
-- ✅ Fruity Stereo Enhancer (Lemon Stereo Enhancer: built into mixer slots, also VST3 and CLAP)
-- ✅ Fruity Balance (Lemon Balance: built into mixer slots, also VST3 and CLAP)
-- ✅ Fruity Soft Clipper (Lemon Soft Clipper: built into mixer slots, also VST3 and CLAP)
-- ✅ Fruity Fast Dist (Lemon Fast Distortion: built into mixer slots, also VST3 and CLAP)
-- ✅ Transient Processor (Lemon Transient Processor: built into mixer slots, also VST3 and CLAP)
+- ✅ Parametric EQ 2 (Mango Parametric EQ: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Limiter (Mango Limiter: built into the app and mixer slots, also VST3 and CLAP)
+- ✅ Fruity Reeverb 2 (Mango Reverb: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Delay 3 (Mango Delay: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Chorus (Mango Chorus: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Stereo Shaper (Mango Stereo Shaper: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Stereo Enhancer (Mango Stereo Enhancer: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Balance (Mango Balance: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Soft Clipper (Mango Soft Clipper: built into mixer slots, also VST3 and CLAP)
+- ✅ Fruity Fast Dist (Mango Fast Distortion: built into mixer slots, also VST3 and CLAP)
+- ✅ Transient Processor (Mango Transient Processor: built into mixer slots, also VST3 and CLAP)
 - ✅ Maximus (Press: built into mixer slots, also VST3 and CLAP)
 - ✅ Fruity Love Philter (Pulp Filter: built into mixer slots, also VST3 and CLAP)
 
 #### Synths / Sound generators
 
-- ✅ 3x Osc (Lemon Trio: built into the app, also VST3 and CLAP)
+- ✅ 3x Osc (Mango Trio: built into the app, also VST3 and CLAP)
 - ⬜ Autogun
 - ⬜ BeepMap
-- ✅ BooBass (Lemon Bass: built into the app, also VST3 and CLAP)
+- ✅ BooBass (Mango Bass: built into the app, also VST3 and CLAP)
 - ⬜ Dashboard
 - ⬜ Drumaxx
 - ⬜ Drumpad
@@ -582,7 +598,7 @@ every feature marked as done, in progress or not started.
 - ⬜ FL Slayer
 - ⬜ FLEX
 - ⬜ FPC
-- ✅ Fruit Kick (Lemon Kick: built into the app, also VST3 and CLAP)
+- ✅ Fruit Kick (Mango Kick: built into the app, also VST3 and CLAP)
 - ⬜ Fruity DrumSynth
 - ⬜ Fruity DrumSynth Live
 - ⬜ Fruity DX10
@@ -601,7 +617,7 @@ every feature marked as done, in progress or not started.
 - ⬜ Slapper
 - ✅ Sytrus (Citrus: built into the app, also VST3 and CLAP; plays Sytrus patches)
 - ⬜ Toxic Biohazard
-- ✅ Transistor Bass (Lemon Acid: built into the app, also VST3 and CLAP)
+- ✅ Transistor Bass (Mango Acid: built into the app, also VST3 and CLAP)
 - ⬜ Wave Traveller
 
 #### Audio editors
@@ -610,7 +626,7 @@ every feature marked as done, in progress or not started.
 
 #### Samplers / Players
 
-- ✅ Sampler (Lemon Sampler: built into the app, also VST3 and CLAP)
+- ✅ Sampler (Mango Sampler: built into the app, also VST3 and CLAP)
 - ⬜ DirectWave
 - ⬜ Fruity Slicer
 - ⬜ Fruity Slicer 2
@@ -618,7 +634,7 @@ every feature marked as done, in progress or not started.
 
 #### Drum tools
 
-- ✅ BassDrum (Lemon Boom: built into the app, also VST3 and CLAP)
+- ✅ BassDrum (Mango Boom: built into the app, also VST3 and CLAP)
 
 #### Controllers / Utilities
 
@@ -656,7 +672,7 @@ every feature marked as done, in progress or not started.
 - ✅ Mixer polarity and channel swap buttons
 - ✅ Main volume and main pitch saved with the project
 - ✅ FL Studio 24.2 and 25 playlists read correctly
-- ✅ Lemon Sampler settings saved: envelopes, LFOs, filter, loop points, sample effects
+- ✅ Mango Sampler settings saved: envelopes, LFOs, filter, loop points, sample effects
 - ✅ Channel Misc tab saved for every channel: levels, polyphony, cut groups, layers, arpeggiator, echo, tracking
 - ✅ VST2 plugins saved the way FL Studio 2026 saves them
 - ✅ Project settings saved: time signature, project info and credits, initial values, song or pattern mode, data folder
@@ -667,7 +683,7 @@ every feature marked as done, in progress or not started.
 
 - ✅ GPLv3 licence, README, logo and third-party credits
 - ✅ Contributing rules (clean-room only) and community links in the README
-- ✅ New name and logo: Lemon Studio
+- ✅ New name and logo: Mango Studio
 - ✅ Automatic builds and tests on Windows and Linux for every change
 - ✅ Windows releases: a portable x64 build attached to GitHub releases, runs under Wine (Winlator on Android)
 - 🚧 Pre-alpha: expect breaking changes
@@ -679,27 +695,26 @@ every feature marked as done, in progress or not started.
 - ✅ Copyright and ArtCraft notice in every source file, checked by the tests
 ## Development approach
 
-Lemon Studio is developed independently. File-format and behaviour details needed for
+Mango Studio is developed independently. File-format and behaviour details needed for
 interoperability are first written down as specifications, and the product code is implemented
 from those specifications and public documentation. All artwork, icons and interface graphics
 in this repository are original or come from the openly licensed projects listed below.
-
 ## Contributing
 
-Lemon Studio is not accepting outside contributions yet. Once it does, pull requests will be welcome
-from developers who are comfortable with Rust and the pull-request workflow.
+Pull requests are welcome from developers who are comfortable with Rust and the pull-request workflow. These rules
+come from Lemon Studio and stay:
 
 All contributions must be **clean-room** work. Decompiled code, and code or pseudocode derived from
 decompiled output, will not be accepted in any form: the codebase must contain none of it.
 
 Contributors keep the copyright of their work and license it under the GPL, version 3 or later, like the rest of
-Lemon Studio. In each file you write or substantially change, add a line with your name or username to the copyright
+Mango Studio. In each file you write or substantially change, add a line with your name or username to the copyright
 lines at the top of the header, `Copyright (C) <year> <name>`, and keep the lines already there.
 
 ## Community
 
-Join the [Lemon Studio Discord server](https://discord.gg/yC2uCuGs3M) to follow development and talk
-about the project. Please keep in mind that support is not offered at this stage.
+The original project, Lemon Studio, has a [Discord server](https://discord.gg/yC2uCuGs3M). It is Lemon Studio's, not
+Mango Studio's: please don't ask there for help with Mango Studio.
 
 ## Third-party components
 
@@ -708,8 +723,8 @@ about the project. Please keep in mind that support is not offered at this stage
 | [Cuprum](https://fonts.google.com/specimen/Cuprum) by Jovanny Lemonad | Interface typeface | [SIL Open Font License 1.1](crates/os-ui/fonts/Cuprum/OFL.txt) |
 | [Barlow](https://github.com/jpt/barlow) by The Barlow Project Authors | Interface typeface on Linux and macOS | [SIL Open Font License 1.1](crates/os-ui/fonts/Barlow/OFL.txt) |
 | [Tabler Icons](https://tabler.io/icons) | Interface icons | [MIT](crates/os-ui/icons/TABLER-LICENSE.txt) |
-| [NIH-plug](https://github.com/robbert-vdh/nih-plug) | Plugin framework for Lemon Studio's plugins | ISC |
-| [vst3-sys](https://github.com/RustAudio/vst3-sys) | VST3 interface bindings (plugin hosting and Lemon Studio's plugins) | GPLv3 or later (its com crate MIT) |
+| [NIH-plug](https://github.com/robbert-vdh/nih-plug) | Plugin framework for Mango Studio's plugins | ISC |
+| [vst3-sys](https://github.com/RustAudio/vst3-sys) | VST3 interface bindings (plugin hosting and Mango Studio's plugins) | GPLv3 or later (its com crate MIT) |
 | [vst2sdk](https://github.com/Xaymar/vst2sdk) by Xaymar | Clean-room description of the VST2 interface, which `os-vst2`'s bindings are written from | [BSD 3-Clause](crates/os-vst2/LICENSE-vst2sdk.txt) |
 | [FST](https://git.iem.at/zmoelnig/FST) by IOhannes m zmölnig | Reverse-engineered VST2 interface: the parts vst2sdk leaves out (time info, edit gestures) | GPLv3 or later |
 | [Signalsmith Stretch](https://github.com/Signalsmith-Audio/signalsmith-stretch) by Geraint Luff / Signalsmith Audio Ltd, with Signalsmith Linear | Time stretching and pitch shifting | MIT |
@@ -720,7 +735,7 @@ about the project. Please keep in mind that support is not offered at this stage
 | Rust crates listed in `Cargo.lock` | Various | Their respective licenses |
 
 Their copyright notices and licence texts are collected in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt), which
-goes with every copy of Lemon Studio next to [LICENSE](LICENSE). Its last section, the Rust crates with their licence
+goes with every copy of Mango Studio next to [LICENSE](LICENSE). Its last section, the Rust crates with their licence
 texts, is generated by `cargo run -p notices` (with [cargo-about](https://github.com/EmbarkStudios/cargo-about):
 `cargo install cargo-about --locked --features cli`); `cargo test` fails while a crate that goes into a build is missing
 from it, so run it after changing a dependency.
@@ -729,10 +744,10 @@ ASIO is a registered trademark of Steinberg Media Technologies GmbH.
 
 ## License
 
-Copyright (C) 2026 ItsAlphaNeon and the Lemon Studio contributors. Each source file names its copyright holders in
-its header.
+Copyright (C) 2026 ItsAlphaNeon and the Lemon Studio contributors, and the Mango Studio contributors. Each source
+file names its copyright holders in its header.
 
-Lemon Studio is free software: you can redistribute it and/or modify it under the terms of the
+Mango Studio, like Lemon Studio, is free software: you can redistribute it and/or modify it under the terms of the
 [GNU General Public License](LICENSE), version 3 or (at your option) any later version. It is distributed in the hope
 that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
 A PARTICULAR PURPOSE. See the GNU General Public License for more details.
@@ -747,7 +762,7 @@ rights the GPL gives you.
 
 ## Trademarks
 
-FL Studio is a trademark of Image-Line Software. Lemon Studio is an independent project and is not
+FL Studio is a trademark of Image-Line Software. Mango Studio and Lemon Studio are independent projects and are not
 affiliated with, sponsored by or endorsed by Image-Line Software. FL Studio and its `.flp` file format
 are referred to solely to describe interoperability.
 
@@ -758,5 +773,5 @@ property of their respective owners.
 <br>
 <img alt="" src="docs/assets/mark.png" width="48">
 <br>
-<sub>Copyright © 2026 ItsAlphaNeon and the Lemon Studio contributors. Free software under the GNU GPL, version 3 or later.</sub>
+<sub>Mango Studio, based on Lemon Studio. Copyright © 2026 ItsAlphaNeon and the Lemon Studio contributors, and the Mango Studio contributors. Free software under the GNU GPL, version 3 or later.</sub>
 </div>

@@ -230,7 +230,7 @@ impl FrameWindow {
             c.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, title.as_bytes())?;
             c.change_property8(PropMode::REPLACE, win, a._NET_WM_NAME, a.UTF8_STRING, title.as_bytes())?;
             // The desktop entry's id: the frame is grouped with Lemon Studio and gets its icon.
-            c.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, b"lemonstudio\0lemonstudio\0")?;
+            c.change_property8(PropMode::REPLACE, win, AtomEnum::WM_CLASS, AtomEnum::STRING, b"mangostudio\0mangostudio\0")?;
             c.change_property32(PropMode::REPLACE, win, a.WM_PROTOCOLS, AtomEnum::ATOM, &[a.WM_DELETE_WINDOW, a._NET_WM_PING])?;
             // The process and its host: the window manager can end an unresponsive Lemon Studio from a frame.
             c.change_property32(PropMode::REPLACE, win, a._NET_WM_PID, AtomEnum::CARDINAL, &[std::process::id()])?;

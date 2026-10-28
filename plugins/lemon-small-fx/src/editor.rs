@@ -1058,7 +1058,7 @@ mod tests {
         let m = l.menu(&MenuReq::Param("post".into()));
         assert_eq!(m.find("Reset"), Some(Cmd::Reset("post".into())));
         assert_eq!(m.find("Type in value..."), Some(Cmd::TypeIn("post".into())));
-        assert_eq!(m.find("About Lemon Soft Clipper..."), Some(Cmd::About));
+        assert_eq!(m.find("About Mango Soft Clipper..."), Some(Cmd::About));
         l.vals.edit_plain("post", 10.0);
         l.pick(&MenuReq::Param("post".into()), Cmd::Reset("post".into()), 0.0, 0.0);
         assert_eq!(l.vals.plain("post"), 128.0);
@@ -1072,10 +1072,10 @@ mod tests {
         assert_eq!(l.pick(&MenuReq::Param("post".into()), Cmd::Automate("post".into()), 0.0, 0.0), vec![Act::Automate(1)]);
         let (x, y) = centre(&l, &Target::Logo);
         assert!(matches!(l.down(x, y, Btn::Left, Mods::default(), false).last(), Some(Act::Menu(MenuReq::About, _, _))));
-        assert_eq!(l.hint, "Lemon Soft Clipper");
+        assert_eq!(l.hint, "Mango Soft Clipper");
         assert!(l.wheel(x, y, 1.0, Mods::default()).is_empty());
         let about = l.menu(&MenuReq::About);
-        assert_eq!(about.find("Lemon Studio's soft clipper"), Some(Cmd::None));
+        assert_eq!(about.find("Mango Studio's soft clipper"), Some(Cmd::None));
     }
 
     /// `SMALLFX_PNG=<dir> cargo test -p lemon-small-fx -- --ignored`: the editors at a few settings, as PNGs.
