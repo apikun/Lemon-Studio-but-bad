@@ -1020,7 +1020,25 @@ impl ApplicationHandler for Shell {
                 self.app.mouse_down_middle();
                 self.pending = true;
             }
-            WindowEvent::MouseInput { state: ElementState::Released, button: MouseButton::Right | MouseButton::Middle, .. } => {
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Back | MouseButton::Other(1) | MouseButton::Other(8),
+                ..
+            } => {
+                self.app.mouse_back();
+                self.pending = true;
+                window.request_redraw();
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Forward | MouseButton::Other(2) | MouseButton::Other(9),
+                ..
+            } => {
+                self.app.mouse_forward();
+                self.pending = true;
+                window.request_redraw();
+            }
+            WindowEvent::MouseInput { state: ElementState::Released, .. } => {
                 self.unlock_cursor(&window);
                 self.app.mouse_up();
                 self.pending = true;

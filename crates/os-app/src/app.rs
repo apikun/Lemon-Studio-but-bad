@@ -289,6 +289,9 @@ pub enum Action {
     /// Piano roll: empty grid, a note (index into the pattern's notes), keyboard, velocity panel.
     PianoGrid,
     PianoNote(usize),
+    /// A ghost note of another channel (spec: ui/piano-roll.md §5): the right click switches to its channel; any
+    /// other press acts as on the grid.
+    PianoGhostNote(u16),
     PianoKeys,
     PianoVelocity,
     /// The band between the grid and the event panel (spec: ui/event-panel-splitter.md).
@@ -604,6 +607,7 @@ fn hover_is_visible(a: &Action) -> bool {
             | Action::Swallow
             | Action::PianoGrid
             | Action::PianoNote(_)
+            | Action::PianoGhostNote(_)
             | Action::PianoKeys
             | Action::PianoVelocity
             | Action::PianoRuler
@@ -3305,6 +3309,21 @@ impl App {
     /// Level 5: Background/unfocused floating plugin windows.
     /// Level 6: Channel Rack back to main arrangement workspace.
     /// Returns true if an action was taken / key consumed.
+    /// Mouse side button 4 (Back): what Esc closes, or else undo.
+    pub fn mouse_back(&mut self) {
+        if self.smart_escape() {
+            return;
+        }
+        self.undo_key(false);
+    }
+
+    /// Mouse side button 5 (Forward): redo (Ctrl+Shift+Z).
+    pub fn mouse_forward(&mut self) {
+        let m = crate::history::ctrl_shift_z(&mut self.state);
+        self.say(m);
+        self.invalidate();
+    }
+
     pub fn smart_escape(&mut self) -> bool {
         // --- LEVEL 1: Popups, Dialogs, Menus, In-place Editors, Settings, Searches ---
         if self.state.settings.open && self.state.settings.picker.is_some() {
@@ -5935,7 +5954,11 @@ impl App {
         self.hold = None;
         self.tooltip_pause();
         let (x, y) = self.mouse;
-        let action = self.top_hit(x, y).map(|h| h.action.clone());
+        // A ghost note takes the left button as the grid under it does.
+        let action = self.top_hit(x, y).map(|h| match h.action {
+            Action::PianoGhostNote(_) => Action::PianoGrid,
+            ref a => a.clone(),
+        });
         // A press stops the views easing where they are drawn; a scroll bar's arrow steps on from where its ease is
         // going (`crate::smooth`).
         if !matches!(action, Some(Action::ScrollStep(..))) {
@@ -6100,7 +6123,7 @@ impl App {
                 crate::playlist::PlTool::Draw => Some(crate::icons::Icon::Brush),
                 t => crate::playlist::PlTool::ALL.iter().position(|&x| x == t).map(|i| views::playlist::TOOL_ICONS[i]),
             },
-            Some(Action::PianoGrid | Action::PianoNote(_)) => Some(match self.state.piano.tool {
+            Some(Action::PianoGrid | Action::PianoNote(_) | Action::PianoGhostNote(_)) => Some(match self.state.piano.tool {
                 Tool::Draw => crate::icons::Icon::Pencil,
                 Tool::Paint => crate::icons::Icon::Brush,
                 Tool::Delete => crate::icons::Icon::Delete,
@@ -6326,12 +6349,12 @@ impl App {
         if let Some(c) = action.as_ref().and_then(crate::knobs::Control::of) {
             return self.reset_control(c);
         }
-        if self.ctrl && matches!(action, Some(Action::PianoGrid | Action::PianoNote(_) | Action::PianoKeys)) {
+        if self.ctrl && matches!(action, Some(Action::PianoGrid | Action::PianoNote(_) | Action::PianoGhostNote(_) | Action::PianoKeys)) {
             self.drag = Some(Drag::PianoRowZoom { y0: y, row0: self.state.piano.row_h });
             return;
         }
         let targets: &[Scroll] = match action {
-            Some(Action::PianoGrid | Action::PianoNote(_)) => &[Scroll::PianoX, Scroll::PianoY],
+            Some(Action::PianoGrid | Action::PianoNote(_) | Action::PianoGhostNote(_)) => &[Scroll::PianoX, Scroll::PianoY],
             Some(Action::PianoKeys) => &[Scroll::PianoY],
             Some(Action::PianoVelocity) => &[Scroll::PianoX],
             Some(Action::PlaylistArea) => &[Scroll::PlaylistX, Scroll::PlaylistY],
@@ -6520,6 +6543,12 @@ impl App {
             piano::snapshot(&mut self.state);
             self.drag = Some(Drag::ControlErase { last_x: x });
             self.erase_control_points(x, x);
+            return;
+        }
+        if let Some(Action::PianoGhostNote(channel)) = action {
+            self.state.selected_channel = usize::from(channel);
+            self.state.message = Some(format!("Switched to channel {}", channel + 1));
+            self.damage_piano();
             return;
         }
         if let Some(a @ (Action::PianoNote(_) | Action::PianoGrid)) = action {
@@ -7187,7 +7216,7 @@ impl App {
             piano::zoom_time(&mut self.state, &g, x, dy + dx);
             return Some(Win::PianoRoll);
         }
-        if matches!(area, Some(Action::PianoGrid | Action::PianoNote(_) | Action::PianoKeys | Action::PianoVelocity)) {
+        if matches!(area, Some(Action::PianoGrid | Action::PianoNote(_) | Action::PianoGhostNote(_) | Action::PianoKeys | Action::PianoVelocity)) {
             let Some(g) = self.piano_geom() else { return None };
             if ctrl {
                 // Zoom time around the mouse.
@@ -7374,6 +7403,21 @@ impl App {
         }
         // The plugin picker takes every key while it is open, held Backspace included.
         if self.picker_key(key, ctrl, alt) {
+            return;
+        }
+        // Alt+H: the piano roll's scale highlighting on or off.
+        if let Key::Character(c) = key
+            && alt
+            && !ctrl
+            && c.eq_ignore_ascii_case("h")
+        {
+            let sh = &mut self.state.piano.scale_highlight;
+            sh.enabled = !sh.enabled;
+            let root = crate::views::piano::key_name(i32::from(sh.root));
+            let on = if sh.enabled { "on" } else { "off" };
+            self.state.message = Some(format!("Scale highlighting: {on} ({root} {})", crate::chords::label(sh.scale_idx)));
+            self.damage_piano();
+            self.invalidate();
             return;
         }
         // Ctrl+J: Multilink to controllers (spec: ui/remote-control.md §4).
@@ -8131,7 +8175,7 @@ impl App {
         }
         let s = &mut self.state;
         match a {
-            Action::PianoGrid | Action::PianoNote(_) | Action::PianoVelocity | Action::PianoKeys | Action::PianoRuler | Action::PianoSplitter | Action::Scrollbar(_) | Action::ScrollStep(..) => {}
+            Action::PianoGrid | Action::PianoNote(_) | Action::PianoGhostNote(_) | Action::PianoVelocity | Action::PianoKeys | Action::PianoRuler | Action::PianoSplitter | Action::Scrollbar(_) | Action::ScrollStep(..) => {}
             Action::PianoTool(t) => {
                 s.piano.tool = t;
                 s.piano.overlay = None;
@@ -9889,6 +9933,26 @@ mod tests {
         a.sample_from_plugin(p.clone(), true);
         assert!(a.state.project.channels[row].sample_path.as_deref().is_some_and(|s| s.ends_with(".wav")));
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// Mouse side buttons: Back closes what Esc closes, else undoes; Forward redoes. Alt+H turns the piano roll's
+    /// scale highlighting on and off (off at first).
+    #[test]
+    fn side_buttons_and_scale_highlighting() {
+        use winit::keyboard::Key;
+        let mut app = App::new(None);
+        app.state.menu_open = Some(0);
+        app.mouse_back();
+        assert!(app.state.menu_open.is_none());
+        app.mouse_back();
+        app.mouse_forward();
+        assert!(!app.state.piano.scale_highlight.enabled);
+        app.key(&Key::Character("h".into()), false, true);
+        assert!(app.state.piano.scale_highlight.enabled);
+        app.key(&Key::Character("h".into()), false, true);
+        assert!(!app.state.piano.scale_highlight.enabled);
+        assert!(crate::chords::in_scale(0, crate::chords::FIRST_SCALE, 62));
+        assert!(!crate::chords::in_scale(0, crate::chords::FIRST_SCALE, 61));
     }
 
     #[test]
