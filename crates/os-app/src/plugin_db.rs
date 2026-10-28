@@ -364,6 +364,9 @@ pub enum DirKind {
     Standard(Format),
     /// Added by the user: searched for every format.
     Added,
+    /// A Windows plugin folder bridged by yabridge (`crate::yabridge`): searched for its VST 2 bridges only, the
+    /// Windows plugins themselves left alone.
+    Windows,
 }
 
 /// A folder the scan searches (§2).
@@ -383,6 +386,7 @@ impl SearchDir {
             DirKind::Standard(Format::Vst2) => "VST2",
             DirKind::Standard(Format::Native) => "native",
             DirKind::Added => "All formats",
+            DirKind::Windows => "Windows",
         }
     }
 }
@@ -445,6 +449,7 @@ pub fn discover(dirs: &[SearchDir], native: Vec<PathBuf>) -> Vec<Found> {
             DirKind::Standard(Format::Vst2) => Formats { vst2: true, ..Formats::NONE },
             DirKind::Standard(Format::Native) => Formats::NONE,
             DirKind::Added => Formats { clap: true, vst3: true, vst2: true },
+            DirKind::Windows => Formats { vst2: true, ..Formats::NONE },
         };
         walk(&d.path, 0, formats, &mut walked, &mut seen, &mut out);
     }
@@ -716,6 +721,16 @@ pub fn format_label(f: Format) -> &'static str {
     crate::plugins::format_name(f)
 }
 
+/// The format of a Windows plugin bridged by yabridge, as the plugin table shows it.
+pub fn windows_label(f: Format) -> &'static str {
+    match f {
+        Format::Clap => "CLAP · Windows",
+        Format::Vst3 => "VST3 · Windows",
+        Format::Vst2 => "VST2 · Windows",
+        Format::Native => "native",
+    }
+}
+
 /// Generator categories, then effect categories, in table order (spec: ui/plugin-menu.md §4); "Other" last.
 const GEN_CATS: &[(&str, &[&str])] = &[("Drum", &["drum", "drum-machine"]), ("Sampler", &["sampler", "granular"]), ("Keys", &["piano"]), ("Synth", &["synthesizer", "synth"])];
 const FX_CATS: &[(&str, &[&str])] = &[
@@ -769,6 +784,8 @@ pub struct Entry {
     pub format: Format,
     pub category: &'static str,
     pub favorite: bool,
+    /// A Windows plugin bridged by yabridge (`crate::yabridge::is_bridged`): the lists say so.
+    pub windows: bool,
 }
 
 /// What the plugin menus list: shown plugins only, alphabetical by label.
@@ -790,7 +807,13 @@ fn entries(list: &[Available], prefs: &Prefs, missing: &HashSet<String>) -> Vec<
         .map(|&i| {
             let d = &list[i].desc;
             let twin = shown.iter().any(|&k| k != i && list[k].desc.format != d.format && base_name(&list[k].desc.name) == base_name(&d.name));
-            let label = if twin { format!("{} ({})", strip_marker(&d.name), format_label(d.format)) } else { d.name.clone() };
+            let windows = crate::yabridge::is_bridged(&d.path);
+            let label = match (twin, windows) {
+                (true, true) => format!("{} ({}, Windows)", strip_marker(&d.name), format_label(d.format)),
+                (true, false) => format!("{} ({})", strip_marker(&d.name), format_label(d.format)),
+                (false, true) => format!("{} (Windows)", d.name),
+                (false, false) => d.name.clone(),
+            };
             let vendor = if crate::project_plugins::is_builtin(d) {
                 BUILTIN_VENDOR.to_string()
             } else if d.vendor.trim().is_empty() {
@@ -799,7 +822,7 @@ fn entries(list: &[Available], prefs: &Prefs, missing: &HashSet<String>) -> Vec<
                 d.vendor.trim().to_string()
             };
             let uid = d.uid();
-            Entry { index: i, name: d.name.clone(), label, favorite: prefs.is_favorite(&uid), uid, vendor, format: d.format, category: category(d) }
+            Entry { index: i, name: d.name.clone(), label, favorite: prefs.is_favorite(&uid), uid, vendor, format: d.format, category: category(d), windows }
         })
         .collect();
     v.sort_by_key(|e| e.label.to_lowercase());
@@ -842,6 +865,11 @@ impl Family {
     /// The variant a click or drag adds.
     pub fn entry(&self) -> &Entry {
         &self.variants[self.pick]
+    }
+
+    /// A Windows plugin bridged by yabridge (the variant a click adds).
+    pub fn windows(&self) -> bool {
+        self.entry().windows
     }
 
     /// Whether any variant is starred.
@@ -961,7 +989,7 @@ pub fn table(available: &[Available], effects: &[Available], cache: &Cache, pref
             let note = into[i].map(|j| format!("Listed as {} ({})", list[j].desc.name, format_label(list[j].desc.format))).unwrap_or_default();
             rows.push(TableRow {
                 name: d.name.clone(),
-                format: format_label(d.format),
+                format: if crate::yabridge::is_bridged(&d.path) { windows_label(d.format) } else { format_label(d.format) },
                 kind: kind_label(kind),
                 vendor: if builtin { BUILTIN_VENDOR.into() } else { d.vendor.clone() },
                 status: if builtin { "built in".into() } else { "ok".into() },
@@ -1071,6 +1099,12 @@ pub struct Db {
     pub top: usize,
     /// While a scan runs.
     pub progress: Option<Progress>,
+    /// yabridge and Wine, for Windows plugins (`crate::yabridge::info`, read at startup and after each scan).
+    pub windows: crate::yabridge::Info,
+    /// Windows plugin folders the next scan adds to yabridge's (Add Windows folder...).
+    pub win_add: Vec<PathBuf>,
+    /// While Install yabridge or a Windows installer runs: what the plugin manager says.
+    pub win_busy: Option<String>,
 }
 
 impl Default for Db {
@@ -1086,6 +1120,9 @@ impl Default for Db {
             finding: false,
             top: 0,
             progress: None,
+            windows: crate::yabridge::Info::default(),
+            win_add: Vec::new(),
+            win_busy: None,
         }
     }
 }
