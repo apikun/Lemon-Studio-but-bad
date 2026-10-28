@@ -103,6 +103,17 @@ pub enum Item {
     Preset(String),
 }
 
+/// The browser drag in flight (spec §3): the item and its label following the cursor, and the modifiers at the move
+/// (the playlist's drop-zone ghost previews the drop exactly, so Alt's no-snap travels with it; issue #4).
+#[derive(Debug, Clone, PartialEq)]
+pub struct BrowserDrag {
+    pub item: Item,
+    pub label: String,
+    pub x: f32,
+    pub y: f32,
+    pub alt: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct Row {
     /// Open/closed state key (tab-qualified path).
@@ -875,9 +886,10 @@ pub fn ghost_rect(x: f32, y: f32) -> Rect {
 
 /// The label that follows the cursor during a browser drag (spec §3).
 pub fn paint_ghost(ui: &mut Ui, s: &State) {
-    let Some((label, x, y)) = &s.browser_drag else { return };
+    let Some(d) = &s.browser_drag else { return };
+    let (x, y, label) = (d.x, d.y, &d.label);
     let t = ui.t;
-    let r = ghost_rect(*x, *y);
+    let r = ghost_rect(x, y);
     let f = os_ui::Font::new(15);
     let w = (ui.c.text_width(f, label) + 14.0).min(r.w);
     let r = Rect::new(r.x, r.y, w, r.h);

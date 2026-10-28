@@ -1059,7 +1059,7 @@ pub struct State {
     pub cables: std::cell::RefCell<crate::cable::Cables>,
     pub browser_scroll: f32,
     pub browser_sel: Option<String>,
-    pub browser_drag: Option<(String, f32, f32)>,
+    pub browser_drag: Option<views::browser::BrowserDrag>,
     /// Search text and whether the search box has keyboard focus (spec: ui/browser.md §5).
     pub browser_search: String,
     pub browser_search_focus: bool,
@@ -13510,6 +13510,158 @@ mod tests {
         app.mouse_move(100.0, 300.0);
         app.wheel(0.0, -5.0, false, false);
         assert_eq!(app.state.browser_scroll, 0.0);
+    }
+
+    /// The playlist's drop-zone ghost during a browser drag (issue #4): a pattern dragged over the grid shows where
+    /// the drop would land — the snapped start, the track under the mouse, the pattern's length and its name — the
+    /// drop lands exactly there, and the ghost is gone afterwards.
+    #[test]
+    fn a_browser_drag_shows_the_drop_zone_on_the_playlist() {
+        use crate::views::browser::{rows, Item};
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let mut app = App::new(None);
+        app.state.project = test_project();
+        app.state.file = None;
+        app.state.path = None;
+        app.state.playlist.reset();
+        app.state.z = vec![Win::Playlist];
+        frame(&mut app, &mut c, None);
+        let r0 = hit_rect(&app, &Action::BrowserTab(1));
+        click(&mut app, &mut c, r0);
+        let pi = rows(&app.state).iter().position(|r| r.item == Item::Pattern(1)).expect("pattern row");
+        let src = hit_rect(&app, &Action::BrowserRow(pi));
+        let grid = app.pl_grid().expect("grid");
+        app.mouse_move(src.cx(), src.cy());
+        app.mouse_down();
+        app.mouse_move(src.cx() + 30.0, src.cy());
+        // Over the grid: the ghost at the snapped spot, named like the clip the drop makes.
+        let (x, y) = (grid.x + 173.0, grid.y + 10.0);
+        app.mouse_move(x, y);
+        let g = crate::playlist::PGeom::new(&app.state, grid);
+        let dg = crate::views::playlist::drop_ghost(&app.state, grid, x, y).expect("drop zone");
+        let (track, tick) = (g.track_at(y), crate::playlist::snap_place(&app.state, &g, g.tick_at(x), false));
+        assert_eq!(dg.label, crate::playlist::source_name(&app.state, os_model::ClipSource::Pattern(1)));
+        assert_eq!((dg.rect.x, dg.rect.y), (g.x_of(tick as f32), g.y_of(track)));
+        let w = g.x_of(tick as f32 + crate::playlist::source_len(&app.state, os_model::ClipSource::Pattern(1)) as f32) - g.x_of(tick as f32);
+        assert!((dg.rect.w - w.max(3.0)).abs() < 1.0, "the pattern's length, {} against {w}", dg.rect.w);
+        // The drop lands exactly where the ghost showed, and the ghost is gone.
+        let n0 = crate::playlist::clips(&app.state).len();
+        app.mouse_up();
+        assert!(app.state.browser_drag.is_none());
+        let cs = crate::playlist::clips(&app.state);
+        assert_eq!(cs.len(), n0 + 1);
+        let last = cs.last().unwrap();
+        assert_eq!((last.track, last.position), (track, tick));
+    }
+
+    /// The drop-zone ghost predicts the drop (issue #4): a sample's ghost is its file's stem at the length the drop's
+    /// clip takes; a dragged audio clip channel shows its own ghost; a generator channel's drop places nothing, so
+    /// no ghost, and none off the grid either.
+    #[test]
+    fn the_drop_zone_ghost_predicts_the_drop() {
+        use crate::views::browser::Item;
+        use os_model::ChannelKind;
+        let mut a = App::new(None);
+        a.state.project = test_project();
+        let wav = std::env::temp_dir().join(format!("os-app-drop-ghost-{}.wav", std::process::id()));
+        os_engine::wav::write_f32_stereo(&mut std::fs::File::create(&wav).unwrap(), 48000, &[0.5; 48000]).unwrap();
+        let path = wav.to_string_lossy().into_owned();
+        let grid = os_ui::Rect::new(500.0, 100.0, 1200.0, 600.0);
+        let (x, y) = (grid.x + 100.0, grid.y + 10.0);
+        a.state.browser_drag = Some(views::browser::BrowserDrag { item: Item::Sample(path.clone()), label: "kick.wav".into(), x, y, alt: false });
+        let g = crate::playlist::PGeom::new(&a.state, grid);
+        let dg = crate::views::playlist::drop_ghost(&a.state, grid, x, y).expect("the sample's ghost");
+        let len = crate::playlist::sample_len(&a.state, &path);
+        assert!(len > 0, "the test wav's waveform is loaded");
+        assert_eq!(dg.label, format!("os-app-drop-ghost-{}", std::process::id()));
+        let tick = crate::playlist::snap_place(&a.state, &g, g.tick_at(x), false);
+        assert_eq!(dg.rect.x, g.x_of(tick as f32));
+        // The drop's clip takes the ghost's length, at the ghost's start.
+        let i = crate::playlist::add_audio_clip(&mut a.state, &path, 0, tick).expect("audio clip added");
+        let c = crate::playlist::clips(&a.state)[i];
+        assert_eq!((c.position, c.length), (tick, len));
+        // The new audio clip channel dragged from the rack: its own ghost, its own name.
+        let row = a.state.project.channels.len() - 1;
+        a.state.browser_drag = Some(views::browser::BrowserDrag { item: Item::Channel(row), label: String::new(), x, y, alt: false });
+        let dg = crate::views::playlist::drop_ghost(&a.state, grid, x, y).expect("the channel's ghost");
+        let index = a.state.project.channels[row].index;
+        assert_eq!(dg.label, crate::playlist::source_name(&a.state, os_model::ClipSource::Channel(index)));
+        // A generator channel places no clip on the playlist: no ghost. Off the grid: none either.
+        let gen_row = a.state.project.channels.iter().position(|ch| !matches!(ch.kind, ChannelKind::AudioClip | ChannelKind::Automation)).expect("a generator channel");
+        a.state.browser_drag = Some(views::browser::BrowserDrag { item: Item::Channel(gen_row), label: String::new(), x, y, alt: false });
+        assert!(crate::views::playlist::drop_ghost(&a.state, grid, x, y).is_none());
+        a.state.browser_drag = Some(views::browser::BrowserDrag { item: Item::Sample("x".into()), label: String::new(), x, y, alt: false });
+        assert!(crate::views::playlist::drop_ghost(&a.state, grid, grid.x - 5.0, y).is_none());
+        let _ = std::fs::remove_file(&wav);
+    }
+
+    /// The browser sample's drop-zone ghost through a real drag (issue #4): while the sample moves over the playlist
+    /// grid the ghost is as long as the sample, on the row under the pointer, following it; the release places exactly
+    /// the ghost; a file that will not decode previews nothing and places nothing.
+    #[test]
+    fn browser_sample_ghost_previews_the_drop() {
+        use crate::playlist as pl;
+        use crate::views::browser::rows;
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let dir = std::env::temp_dir().join(format!("os_ghost_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // Half a second of silence: 104 ticks at the test project's tempo (130, 4/4) and ppq 96 — the ghost's length.
+        let path = dir.join("Ghost 01.wav");
+        os_engine::wav::write_f32_stereo(&mut std::fs::File::create(&path).unwrap(), 44100, &vec![0.0; 44100]).unwrap();
+        std::fs::write(dir.join("Bad.wav"), b"x").unwrap();
+        let mut app = App::new(None);
+        app.state.project = test_project();
+        app.state.file = None;
+        app.state.path = None;
+        app.state.playlist.reset();
+        app.state.z = vec![Win::Playlist];
+        frame(&mut app, &mut c, None);
+        app.drop_file(dir.clone());
+        frame(&mut app, &mut c, None);
+        let root = rows(&app.state).iter().position(|r| r.path.as_deref() == Some(dir.as_path())).expect("root row");
+        assert_eq!(rows(&app.state)[root].open, Some(true), "the dropped folder opens as it lands");
+        let i = rows(&app.state).iter().position(|r| r.label == "Ghost 01").expect("sample row");
+        let bad = rows(&app.state).iter().position(|r| r.label == "Bad").expect("bad row");
+        let grid = app.pl_grid().expect("grid");
+        let n0 = crate::playlist::clips(&app.state).len();
+        // Dragging the sample over the grid shows the ghost: as long as the sample, on the row under the pointer.
+        let src = hit_rect(&app, &Action::BrowserRow(i));
+        app.mouse_move(src.cx(), src.cy());
+        app.mouse_down();
+        app.mouse_move(src.cx() + 40.0, src.cy());
+        let (x, y) = (grid.x + 100.0, grid.y + 10.0);
+        app.mouse_move(x, y);
+        let g = pl::PGeom::new(&app.state, grid);
+        let ghost = crate::views::playlist::drop_ghost(&app.state, grid, x, y).expect("ghost over the grid");
+        let len = pl::sample_len(&app.state, path.to_str().unwrap());
+        assert_eq!(len, 104, "half a second at 130 bpm and 96 ppq");
+        let ppt = app.state.playlist_bar_w / f32::from(app.state.project.ppq * 4);
+        assert!((ghost.rect.w - len as f32 * ppt).abs() < 0.01, "the ghost is as long as the sample");
+        assert_eq!(ghost.rect.y, g.y_of(0), "the ghost sits on the row under the pointer");
+        assert!((ghost.rect.h - g.rows.clip_h()).abs() < 0.01);
+        assert_eq!(ghost.label, "Ghost 01", "named like the clip the drop makes");
+        // It follows the pointer, snapped (the raw tick under 100 px snaps forward, under 320 px to a later one).
+        let (x2, y2) = (grid.x + 320.0, grid.y + 10.0);
+        app.mouse_move(x2, y2);
+        let ghost2 = crate::views::playlist::drop_ghost(&app.state, grid, x2, y2).expect("ghost after the move");
+        assert!(ghost2.rect.x - ghost.rect.x > 1.0, "the ghost follows the pointer");
+        // The release places exactly the ghost.
+        app.mouse_up();
+        let clips = crate::playlist::clips(&app.state);
+        assert_eq!(clips.len(), n0 + 1);
+        assert_eq!(g.clip_rect(clips.last().unwrap()), ghost2.rect, "the ghost is what landed");
+        // A file that does not decode: nothing previews and nothing places (the "Could not read" path).
+        let src = hit_rect(&app, &Action::BrowserRow(bad));
+        app.mouse_move(src.cx(), src.cy());
+        app.mouse_down();
+        app.mouse_move(src.cx() + 40.0, src.cy());
+        let (x3, y3) = (grid.x + 200.0, grid.y + 10.0);
+        app.mouse_move(x3, y3);
+        assert!(crate::views::playlist::drop_ghost(&app.state, grid, x3, y3).is_none(), "no ghost for a file that will not decode");
+        app.mouse_up();
+        assert_eq!(crate::playlist::clips(&app.state).len(), n0 + 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Browser options menu and search (spec: ui/browser.md §4, §5).

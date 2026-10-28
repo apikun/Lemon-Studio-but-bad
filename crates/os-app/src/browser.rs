@@ -8,6 +8,7 @@
 // spec: ui/browser.md, ui/browser-commands.md
 
 use os_model::{ChannelKind, ClipSource};
+use os_ui::Rect;
 
 use crate::app::{Action, App, Drag, Win};
 use crate::playlist::{Cmd, Mark, PItem, Popup};
@@ -352,16 +353,29 @@ impl App {
         if !started && (x - m0.0).hypot(y - m0.1) < DRAG_START {
             return;
         }
+        // The playlist's drop-zone ghost (issue #4): damaged where it was (the drag's last place) and where it goes,
+        // so the moving preview leaves no trail.
+        let grid = self.pl_grid();
+        let old_zone = self.state.browser_drag.as_ref().and_then(|d| zone_rect(&self.state, grid, d.x, d.y));
         if !started {
-            self.drag = Some(Drag::Browser { item, label: label.clone(), m0, started: true });
+            self.drag = Some(Drag::Browser { item: item.clone(), label: label.clone(), m0, started: true });
         }
-        if let Some((_, ox, oy)) = self.state.browser_drag {
-            self.damage_rect(view::ghost_rect(ox, oy));
+        self.state.browser_drag = Some(view::BrowserDrag { item: item.clone(), label, x, y, alt: self.alt });
+        for r in old_zone.into_iter().chain(zone_rect(&self.state, grid, x, y)) {
+            self.damage_rect(r.outset(1.0));
         }
-        self.state.browser_drag = Some((label, x, y));
         self.damage_rect(view::ghost_rect(x, y));
     }
+}
 
+/// The drop-zone ghost's rect over the playlist's grid, when the drag at (x, y) would land one (issue #4): None off
+/// the grid, while the playlist is not shown, or where no clip would be placed.
+fn zone_rect(s: &crate::app::State, grid: Option<Rect>, x: f32, y: f32) -> Option<Rect> {
+    let grid = grid.filter(|g| g.contains(x, y) && s.shown(Win::Playlist))?;
+    crate::views::playlist::drop_ghost(s, grid, x, y).map(|dg| dg.rect)
+}
+
+impl App {
     /// Release: drop the dragged item on whatever is under the mouse (spec §3).
     pub(crate) fn browser_drop(&mut self, item: Item, started: bool) {
         self.state.browser_drag = None;
