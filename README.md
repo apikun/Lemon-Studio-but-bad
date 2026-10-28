@@ -147,7 +147,7 @@ cd Mango-Studio
 `cargo run -p os-app --release` builds and runs Mango Studio. Before Mango Studio starts, it also rebuilds Mango
 Studio's own plugins (Mango Sampler, Mango Trio, Mango Parametric EQ, Mango Limiter, Mango Reverb, Mango Delay, Mango
 Soft Clipper, Mango Fast Distortion, Mango Balance, Mango Stereo Enhancer, Mango Transient Processor, Mango Chorus,
-Mango Stereo Shaper, Mango Beat, Citrus, Tesla, Press, Pulp Filter, Mango Kick, Mango Boom, Mango Bass and Mango Acid) and
+Mango Stereo Shaper, Mango Filter, Mango Beat, Citrus, Tesla, Press, Pulp Filter, Mango Kick, Mango Boom, Mango Bass and Mango Acid) and
 installs the ones that changed as VST3 and CLAP plugins, in the folders where other DAWs find them. Mango Studio itself
 has every one of them built in and needs no plugin files. A plugin that is new or updated in the repository shows up
 in other DAWs at the next run. The first run builds every plugin, which takes
@@ -419,6 +419,7 @@ Mango Studio is a Cargo workspace of focused crates:
 | [`lemon-transient-processor`](plugins/lemon-transient-processor) | Mango Transient Processor effect (VST3 + CLAP) |
 | [`lemon-chorus`](plugins/lemon-chorus) | Mango Chorus effect (VST3 + CLAP) |
 | [`lemon-stereo-shaper`](plugins/lemon-stereo-shaper) | Mango Stereo Shaper effect (VST3 + CLAP) |
+| [`lemon-filter`](plugins/lemon-filter) | Mango Filter effect (VST3 + CLAP) |
 | [`mango-beat`](plugins/mango-beat) | Mango Beat effect, a Gross Beat-style time manipulator (VST3 + CLAP) |
 | [`citrus`](plugins/citrus) | Citrus instrument, a six-operator synthesizer (VST3 + CLAP) |
 | [`tesla`](plugins/tesla) | Tesla, the audio editor and recorder (VST3 + CLAP) |

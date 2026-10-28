@@ -283,6 +283,7 @@ pub fn builtin_effects() -> Vec<Available> {
         &lemon_transient_processor::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
         &lemon_chorus::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
         &lemon_stereo_shaper::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
+        &lemon_filter::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
         &tesla::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
         &mango_beat::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
     ];
@@ -1320,6 +1321,7 @@ pub const LINKED_EFFECTS: [&str; 12] = [
     "Mango Transient Processor",
     "Mango Chorus",
     "Mango Stereo Shaper",
+    "Mango Filter",
     TESLA,
     "Mango Beat",
 ];
@@ -1385,7 +1387,7 @@ pub fn current_name(name: &str) -> &str {
 /// (`App::sync_effects`, `App::store_builtin_states`; spec: plugins/lemon-small-effects.md "Opened projects' slots").
 /// Not Lemon Stereo Shaper: the difference output is the mixer slot's alone (spec: plugins/lemon-stereo-shaper.md §5),
 /// so the engine's own Stereo Shaper keeps playing those slots.
-pub const FL_RECREATIONS: [(&str, &str); 9] = [
+pub const FL_RECREATIONS: [(&str, &str); 10] = [
     ("Fruity Limiter", "Mango Limiter"),
     ("Fruity Reeverb 2", "Mango Reverb"),
     ("Fruity Delay 3", "Mango Delay"),
@@ -1395,6 +1397,7 @@ pub const FL_RECREATIONS: [(&str, &str); 9] = [
     ("Fruity Stereo Enhancer", "Mango Stereo Enhancer"),
     ("Transient Processor", "Mango Transient Processor"),
     ("Fruity Chorus", "Mango Chorus"),
+    ("Fruity Filter", "Mango Filter"),
 ];
 
 /// The Lemon effect of `FL_RECREATIONS` that plays slots stored as `file` (any case: files may spell the id
@@ -1416,6 +1419,7 @@ pub fn recreation_state_from_fl(lemon: &str, fl: &[u8]) -> Option<Vec<u8>> {
         "Mango Stereo Enhancer" => small(lemon_small_fx::stereo_enhancer::SPEC, fl),
         "Mango Transient Processor" => small(lemon_small_fx::transient_processor::SPEC, fl),
         "Mango Chorus" => small(lemon_small_fx::chorus::SPEC, fl),
+        "Mango Filter" => small(lemon_small_fx::filter::SPEC, fl),
         _ => return None,
     })
 }
@@ -1434,6 +1438,7 @@ pub fn fl_from_recreation_state(lemon: &str, blob: &[u8]) -> Option<Vec<u8>> {
         "Mango Stereo Enhancer" => small(lemon_small_fx::stereo_enhancer::SPEC, blob),
         "Mango Transient Processor" => small(lemon_small_fx::transient_processor::SPEC, blob),
         "Mango Chorus" => small(lemon_small_fx::chorus::SPEC, blob),
+        "Mango Filter" => small(lemon_small_fx::filter::SPEC, blob),
         _ => None,
     }
 }
