@@ -152,3 +152,7 @@ include!("main_body.rs");
 fn main() {
     main_impl();
 }
+
+// Android runs the cdylib (`crates/os-android`), not this bin; cargo still wants a main.
+#[cfg(target_os = "android")]
+fn main() {}
