@@ -226,9 +226,11 @@ and Touch controller. Kept with the program's settings, not the project. Which w
   plugin, with its response drawn in the editor; a project's Fruity Filter slots play through the same sound, which
   matches FL Studio 2026's exports in the tests (10 of 13 cases sample for sample, the rest below -180 dB)
 - Lemon Flanger and Lemon Phaser as VST3 and CLAP plugins, each with the original's 27 presets as factory presets; a
-  project's Fruity Flanger and Fruity Phaser play through the same sound in the mixer. Both match FL Studio 2026's
-  exports sample for sample in the tests (36 flanger and 35 phaser cases); the phaser's LFO starts as after 512 idle
-  frames, one of the two starts (512 or 1024) FL's exports make
+  project's Fruity Flanger and Fruity Phaser play through the same sound in the mixer. Their sine waves use the true
+  pi, where the original's is a hair off: the flanger still matches FL Studio 2026's exports sample for sample in the
+  tests (36 cases), the phaser in 11 of 35, and the rest within -100 dB, or about 95 dB below the signal where its
+  feedback runs away in the original (to over +110 dBFS); the phaser's LFO starts as after 512 idle frames, one of the
+  two starts (512 or 1024) FL's exports make
 - The Stereo Shaper's difference output plays in the mixer (added to the track it names, from the first tick, without
   delay compensation); Lemon Stereo Shaper as a plugin keeps the setting but has no output for it
 - Lemon Parametric EQ plays FL's Parametric EQ 2 in every quality mode, in a project's mixer slots and as a plugin:
