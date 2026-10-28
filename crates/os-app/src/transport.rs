@@ -995,6 +995,9 @@ struct Feeder {
     rendered: u64,
     /// The engine's voices after the last fill (registered in `Shared::engine_voices`).
     voices: Arc<AtomicU32>,
+    /// When the queue's state last went to the audio log (`audiolog`), so it stays every couple of
+    /// seconds, not every wake.
+    last_logged: Option<Instant>,
 }
 
 /// Frames a stream keeps queued beyond a device block of `block` frames (see `MARGIN_MIN`).
@@ -1055,6 +1058,19 @@ impl Feeder {
             }
         }
         self.voices.store(e.voice_count() as u32, Ordering::Relaxed);
+        // The audio log carries the queue's state every couple of seconds while frames render: how
+        // far ahead the engine is, what the device lost, and the render's load (all three say which
+        // side a "no sound" report fails on).
+        if frames > 0 && self.last_logged.is_none_or(|t| t.elapsed() >= Duration::from_secs(2)) {
+            self.last_logged = Some(Instant::now());
+            crate::audiolog::log(&format!(
+                "queue: {} frames ahead, block {}, underruns {}, load {:.0}%",
+                self.queue.queued() / 2,
+                self.queue.block.load(Ordering::Relaxed),
+                self.shared.underruns.load(Ordering::Relaxed),
+                f32::from_bits(self.shared.load.load(Ordering::Relaxed)) * 100.0
+            ));
+        }
         // A hosted plugin that missed a tick (busy elsewhere) is heard as a gap: a dropout like an empty block.
         let missed = e.take_missed();
         if missed > 0 {
@@ -1875,7 +1891,7 @@ struct At {
     count_in: u32,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
     /// Playback (pattern or song): reports position, peaks and sounding notes; patterns loop.
     Song,
@@ -1965,6 +1981,16 @@ impl Session {
             e.set_nudge(crate::tapper::nudge_flag());
         }
         let engine = Arc::new(Mutex::new(e));
+        let report = engine.lock().map(|e| e.report.clone()).ok();
+        crate::audiolog::log(&format!(
+            "playback start: {:?} at {rate} Hz, {} channels, {} notes queued, plugin channels silent {}, missing samples {}, playing a tone for {}",
+            kind,
+            project.channels.len(),
+            project.patterns.iter().map(|p| p.notes.len()).sum::<usize>(),
+            report.as_ref().map_or(0, |r| r.plugin_channels_silent),
+            report.as_ref().map_or(0, |r| r.missing_samples.len()),
+            report.as_ref().map_or(0, |r| r.substituted),
+        ));
         let done = Arc::new(AtomicBool::new(false));
         let ctl = Arc::new(Ctl { paused: AtomicBool::new(at.paused), held: AtomicBool::new(false), report: AtomicBool::new(song) });
         if kind != Kind::Preview {
@@ -1992,7 +2018,7 @@ impl Feeder {
             v.retain(|w| w.strong_count() > 0);
             v.push(Arc::downgrade(&voices));
         }
-        Feeder { engine, queue, shared, ctl, meters: true, rate, busy: Duration::ZERO, rendered: 0, voices }
+        Feeder { engine, queue, shared, ctl, meters: true, rate, busy: Duration::ZERO, rendered: 0, voices, last_logged: None }
     }
 }
 

@@ -40,6 +40,12 @@ pub fn run(app: AndroidApp) {
         let _ = std::fs::create_dir_all(&ext);
         unsafe { std::env::set_var("OPENSTUDIO_LOG_DIR", &ext) };
     }
+    // The starter kit's samples (the APK's assets) land in the user folder's Sounds, where a new
+    // project's channels play them from: a phone has no other samples to load, and Play with no
+    // notes or samples is silent (the metronome would be the only sound).
+    if let Some(user) = os_paths::user_dir() {
+        extract_kit(&app, &user.join("Sounds").join("Mango Kit"));
+    }
     crate::log_panics();
     // The feeder thread raises its priority through the JVM (`raise_priority`): keep the handle. The VM lives as long
     // as the process, and the pointer is the app's own (android-activity keeps it in its state).
@@ -51,4 +57,28 @@ pub fn run(app: AndroidApp) {
     use winit::platform::android::EventLoopBuilderExtAndroid;
     builder.with_android_app(app);
     crate::run_from(builder, None, true);
+}
+
+/// Copies the starter kit's WAVs out of the APK's assets into `dir` (the user folder's
+/// `Sounds/Mango Kit`), keeping the ones already there: a reinstall's fresh user folder gets the
+/// kit, an update's does not (its files, if the user changed them, stay). The names the starter
+/// project plays are `crate::app::starter_kit`'s.
+#[cfg(target_os = "android")]
+fn extract_kit(app: &AndroidApp, dir: &std::path::Path) {
+    let _ = std::fs::create_dir_all(dir);
+    for name in crate::app::starter_kit() {
+        let to = dir.join(name);
+        if to.is_file() {
+            continue;
+        }
+        let Ok(name) = std::ffi::CString::new(format!("kit/{name}")) else { continue };
+        let Some(mut asset) = app.asset_manager().open(name.as_c_str()) else {
+            continue;
+        };
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        if asset.read_to_end(&mut bytes).is_ok() {
+            let _ = std::fs::write(&to, bytes);
+        }
+    }
 }

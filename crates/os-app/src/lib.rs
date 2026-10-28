@@ -12,6 +12,7 @@
 
 mod app;
 mod audio_cfg;
+mod audiolog;
 mod auto_close;
 mod auto_tools;
 mod autoscroll;
