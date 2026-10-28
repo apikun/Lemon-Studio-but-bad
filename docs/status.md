@@ -216,8 +216,8 @@ and Touch controller. Kept with the program's settings, not the project. Which w
 - Lemon Soft Clipper, Lemon Fast Distortion, Lemon Balance, Lemon Stereo Enhancer, Lemon Transient Processor, Lemon
   Chorus and Lemon Stereo Shaper as VST3 and CLAP plugins; a project's Fruity Soft Clipper, Fruity Fast Dist, Fruity
   Balance, Fruity Stereo Enhancer, Transient Processor, Fruity Chorus and Fruity Stereo Shaper play through the same
-  sound in the mixer. The first four match FL Studio 2026's exports sample for sample in the tests; Transient
-  Processor, Chorus and Stereo Shaper have not been compared with FL 2026's exports yet
+  sound in the mixer. All seven match FL Studio 2026's exports sample for sample in the tests (the Chorus once each
+  export's LFO start phases are known: the original draws them anew for every render)
 - Lemon Filter (Fruity Filter: a resonant low, band and high pass mix, X 2 and the DC remover) as a VST3 and CLAP
   plugin, with its response drawn in the editor; a project's Fruity Filter slots play through the same sound, which
   matches FL Studio 2026's exports in the tests (10 of 13 cases sample for sample, the rest below -180 dB)
