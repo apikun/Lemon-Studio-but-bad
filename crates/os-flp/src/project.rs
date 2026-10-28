@@ -1728,6 +1728,8 @@ fn load_pl_track(events: &[Event], t: &PlTrackLoc, enc: TextEnc) -> PlaylistTrac
         grouped: r.get(46).is_some_and(|&b| b != 0),
         collapsed: r.get(61).is_some_and(|&b| b == 0),
         locked: r.get(47).is_some_and(|&b| b != 0),
+        // FL's track height (spec: flp/events/playlist.md, bytes 13-16): a share of the playlist's row height.
+        height: r.get(13..17).map(|b| f32::from_le_bytes(b.try_into().unwrap())).filter(|h| h.is_finite() && *h > 0.0).map_or(1.0, |h| h.clamp(0.05, 10.0)),
     }
 }
 
@@ -3048,6 +3050,9 @@ pub fn apply(project: &Project, file: &mut FlpFile) -> Result<(), ProjectError> 
             if t.collapsed != old.collapsed {
                 patch_bytes(&mut events[tl.record], 61, &[u8::from(!t.collapsed)]);
             }
+            if t.height != old.height {
+                patch_bytes(&mut events[tl.record], 13, &t.height.to_le_bytes());
+            }
             if t.color != old.color {
                 if let Some(c) = t.color {
                     patch_bytes(&mut events[tl.record], 4, &bgr_from_rgb(c, 0).to_le_bytes());
@@ -3840,7 +3845,7 @@ fn track_record(t: &PlaylistTrack) -> Vec<u8> {
     r[0..4].copy_from_slice(&t.number.to_le_bytes());
     r[4..8].copy_from_slice(&t.color.map_or(0x002D_2C29, |c| bgr_from_rgb(c, 0)).to_le_bytes());
     r[12] = u8::from(t.enabled);
-    r[13..17].copy_from_slice(&1.0f32.to_le_bytes());
+    r[13..17].copy_from_slice(&t.height.to_le_bytes());
     r[17] = if t.number <= 33 { 0xf0 } else { 0xff };
     r[18..21].fill(0xff);
     r[30] = 5;

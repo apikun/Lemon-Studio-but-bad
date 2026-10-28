@@ -740,12 +740,16 @@ impl PlaylistState {
 
 /// Height of a member row of a collapsed group: a thin strip showing its clips as bars (§6a).
 pub const STRIP_H: f32 = 6.0;
+/// The lowest a track's own height goes (its "..." handle; a click shrinks it to this).
+pub const TRACK_MIN: f32 = 20.0;
 
 /// Vertical layout of the tracks (§6a): every track's top in content pixels. Rows are `row_h` tall (`ROW_H` unless
 /// zoomed); members of a collapsed group are `STRIP_H` strips.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rows {
     top: Vec<f32>,
+    /// Members of a collapsed group, drawn as strips.
+    strips: Vec<bool>,
     pub row_h: f32,
 }
 
@@ -755,6 +759,7 @@ impl Rows {
         // On the drawing grid, so tops and heights add up exactly (`PGeom::xs64`).
         let row_h = snap(f64::from(s.playlist.row_h.clamp(ROW_MIN, ROW_MAX)));
         let mut top = Vec::with_capacity(usize::from(TRACKS) + 1);
+        let mut strips = Vec::with_capacity(usize::from(TRACKS));
         let (mut y, mut collapsed) = (0.0, false);
         for t in 0..usize::from(TRACKS) {
             top.push(y);
@@ -763,15 +768,19 @@ impl Rows {
             if !grouped {
                 collapsed = tr.is_some_and(|x| x.collapsed);
             }
-            y += if grouped && collapsed { STRIP_H } else { row_h };
+            let strip = grouped && collapsed;
+            strips.push(strip);
+            // A track's own height (its "..." handle): a share of the row height, never under `TRACK_MIN`.
+            let own = tr.map_or(1.0, |x| x.height);
+            y += if strip { STRIP_H } else if own == 1.0 { row_h } else { snap(f64::from((row_h * own).max(TRACK_MIN))) };
         }
         top.push(y);
-        Rows { top, row_h }
+        Rows { top, strips, row_h }
     }
 
-    /// A clip's height: its row less the 3 px gap.
-    pub fn clip_h(&self) -> f32 {
-        self.row_h - 3.0
+    /// A clip's height on track `t`: its row less the 3 px gap.
+    pub fn clip_h(&self, t: u16) -> f32 {
+        self.height(t) - 3.0
     }
 
     pub fn top(&self, t: u16) -> f32 {
@@ -785,7 +794,7 @@ impl Rows {
 
     /// A collapsed group's member: drawn as a strip.
     pub fn strip(&self, t: u16) -> bool {
-        self.height(t) < self.row_h - 0.5
+        self.strips[usize::from(t.min(TRACKS - 1))]
     }
 
     /// The track at content height `y`.
@@ -869,7 +878,7 @@ impl PGeom {
         if self.rows.strip(c.track) {
             return Rect::new(x, self.y_of(c.track) + 1.0, w, STRIP_H - 2.0);
         }
-        Rect::new(x, self.y_of(c.track), w, self.rows.clip_h())
+        Rect::new(x, self.y_of(c.track), w, self.rows.clip_h(c.track))
     }
 
     /// `clip_rect` for drawing: an edge further than 2048 px outside the grid is pulled in to that distance, so every
@@ -887,7 +896,7 @@ impl PGeom {
     /// The body of a clip below its title strip (automation curves, notes, waveforms).
     pub fn body(&self, c: &Clip) -> Rect {
         let r = self.clip_rect(c);
-        Rect::new(r.x, r.y + TITLE_H, r.w, (self.rows.clip_h() - TITLE_H - 1.0).max(1.0))
+        Rect::new(r.x, r.y + TITLE_H, r.w, (r.h - TITLE_H - 1.0).max(1.0))
     }
 }
 
@@ -2848,6 +2857,9 @@ pub enum PlDrag {
     Gain { clip: usize, y0: f32, db0: f32 },
     /// A crossfade's handle (§9a): later clip `b`, earlier clip `a`, `b`'s gain at the middle when the drag started.
     Crossfade { a: usize, b: usize, y0: f32, m0: f64 },
+    /// Track `row`'s "..." handle: its height `h0` (px) when the press came at `y0`; `moved` once it was dragged (else
+    /// the release shrinks the track or brings it back).
+    TrackSize { row: u16, y0: f32, h0: f32, moved: bool },
 }
 
 /// The handles an audio clip shows while the mouse is over it (§9a).
@@ -3400,6 +3412,15 @@ pub fn drag_move(app: &mut App, d: PlDrag, grid: Rect) {
     let s = &mut app.state;
     let g = PGeom::new(s, grid);
     match d {
+        PlDrag::TrackSize { row, y0, h0, moved } => {
+            if !moved && (y - y0).abs() < 3.0 {
+                return;
+            }
+            set_track_px(s, row, h0 + (y - y0));
+            app.drag = Some(crate::app::Drag::Pl(PlDrag::TrackSize { row, y0, h0, moved: true }));
+            app.invalidate();
+            return;
+        }
         PlDrag::Move { x0, y0, orig, .. } => {
             let mut dt = snap_delta(s, &g, (x - x0) / g.ppt, alt);
             let min_pos = orig.iter().map(|(_, c)| i64::from(c.position)).min().unwrap_or(0);
@@ -3622,6 +3643,18 @@ pub fn drag_end(app: &mut App, d: PlDrag, grid: Rect) {
     {
         s.playlist.lock_len = Some((c.source, c.length));
     }
+    if let PlDrag::TrackSize { row, moved: false, .. } = d {
+        // A click: a track taller than the smallest shrinks to it, the smallest comes back to the others' height.
+        let small = Rows::new(s).height(row) <= TRACK_MIN + 0.5;
+        if small {
+            if let Some(tr) = arr_mut(s).tracks.get_mut(usize::from(row)) {
+                tr.height = 1.0;
+            }
+        } else {
+            set_track_px(s, row, TRACK_MIN);
+        }
+        return;
+    }
     match d {
         PlDrag::Slice { .. } => {
             if let Some(Overlay::Slice { tick, t0, t1 }) = overlay {
@@ -3779,6 +3812,23 @@ pub fn arrangement_menu(s: &State, x: f32, y: f32) -> Popup {
 
 /// Collapses or expands the group led by track `t` or by `t`'s group track (§6a); no-op for an ungrouped track
 /// without members.
+/// Track `t`'s own height in px (kept as a share of the row height, between `TRACK_MIN` and `ROW_MAX`).
+pub fn set_track_px(s: &mut State, t: u16, px: f32) {
+    let row_h = s.playlist.row_h.clamp(ROW_MIN, ROW_MAX);
+    let px = px.clamp(TRACK_MIN, ROW_MAX);
+    if let Some(tr) = arr_mut(s).tracks.get_mut(usize::from(t)) {
+        tr.height = if (px - row_h).abs() < 1.0 { 1.0 } else { px / row_h };
+    }
+}
+
+/// The press on track `t`'s "..." handle (left button): an undo step, then a drag that sizes the track, or a click.
+pub fn press_track_size(app: &mut App, t: u16) {
+    let s = &mut app.state;
+    snapshot(s);
+    let h0 = Rows::new(s).height(t);
+    app.drag = Some(crate::app::Drag::Pl(PlDrag::TrackSize { row: t, y0: app.mouse.1, h0, moved: false }));
+}
+
 pub fn toggle_collapse(s: &mut State, t: u16) {
     let Some(g) = group_track(s, t).or_else(|| is_group_track(s, t).then_some(t)) else { return };
     snapshot(s);

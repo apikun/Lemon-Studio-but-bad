@@ -478,7 +478,7 @@ mod tests {
         assert_eq!(pl::clips(&app.state).to_vec(), vec![orig], "one undo step");
         // Empty grid: the usual new clip, and nothing more while held.
         app.paint(&mut c, None);
-        let empty = (g.grid.x + 10.0, y + 3.0 * g.rows.clip_h());
+        let empty = (g.grid.x + 10.0, y + 3.0 * g.rows.clip_h(0));
         press(&mut app, empty.0, empty.1);
         assert!(app.hold.is_none());
         app.hold_tick(Instant::now() + Duration::from_millis(2500));

@@ -1411,7 +1411,7 @@ fn header(ui: &mut Ui, s: &State, g: &PGeom, row: u16, x: f32, w: f32) {
     }
     // The LED and "…" keep their distance from the row's bottom when the track height changes (Alt+wheel); short
     // rows drop the "…" and keep the name clear of the LED.
-    let short = g.rows.row_h < pl::ROW_H - 8.0;
+    let short = h < pl::ROW_H - 8.0;
     let led = Rect::new(hr.right() - 19.0, (h - gap - 15.0).max(1.0) + hr.y, 14.0, 14.0);
     ui.hit(led, Action::PlLed(row), "Mute track (right-click / Ctrl+click: solo)");
     let text = if colored.is_some() { ui.t.tx(0xdce8f0) } else { t.text_faint };
@@ -1421,9 +1421,13 @@ fn header(ui: &mut Ui, s: &State, g: &PGeom, row: u16, x: f32, w: f32) {
         let name_w = if short { hr.w - 26.0 } else { hr.w - 4.0 };
         ui.c.text_clip(Font::new(16), hr.x + 2.0, hr.y + 1.0, name_w, text, &pl::track_name(s, row));
     }
+    // The "..." handle (FL's): drag to size this track, click to shrink it or bring it back. A short track keeps it
+    // as its bottom edge.
+    let grip = if short { Rect::new(hr.x, hr.bottom() - 5.0, (hr.w - 24.0).max(8.0), 5.0) } else { Rect::new(hr.x, led.y - 2.0, 26.0, 16.0) };
+    let hov = ui.hit(grip, Action::PlTrackSize(row), "Track height: drag to size this track, click to shrink it or bring it back");
     if !short {
         // Under the start of the name.
-        ui.c.text(Font::new(14), hr.x + 2.0, led.y - 6.0, text.shade(-0.2), "...");
+        ui.c.text(Font::new(14), hr.x + 2.0, led.y - 6.0, if hov { text } else { text.shade(-0.2) }, "...");
     }
     let info = pl::track_info(s, row);
     if lead {
