@@ -12687,6 +12687,73 @@ mod tests {
         assert_eq!(app.state.project.automation(ch).unwrap().points[0].value, 0.25);
     }
 
+    /// The point menu's Shape ▸ (issue #29): the first point offers none, the second fills the segment with the
+    /// shape's wave between the two levels as one undo step.
+    #[test]
+    fn point_menu_fills_a_segment_with_a_shape() {
+        use crate::auto_tools::AutoShape;
+        use crate::playlist::{self as pl, Cmd};
+        let mut app = App::new(None);
+        let ch = pl::create_automation(&mut app.state, 0, "Auto", 0.25);
+        let beats = app.state.project.automation(ch).unwrap().points[1].beat;
+        // The menu's first point (it ends no segment) and the second's shape list.
+        let labels = |s: &State, i: usize| {
+            pl::point_menu(s, ch, i, 0.0, 0.0)
+                .items
+                .iter()
+                .find(|it| it.label == "Shape")
+                .map(|it| it.children.iter().map(|c| c.label.to_string()).collect::<Vec<_>>())
+        };
+        assert_eq!(labels(&app.state, 0), None);
+        assert_eq!(labels(&app.state, 1), Some(vec!["Sine".into(), "Triangle".into(), "Saw up".into(), "Saw down".into(), "Square".into()]));
+        // A rise, then the square wave: low and high half-waves between the two levels.
+        pl::move_point(&mut app.state, ch, 1, beats, 0.75);
+        pl::run(&mut app, Cmd::PointShape(ch, 1, AutoShape::Square));
+        let k = f64::from(crate::auto_tools::waves(beats));
+        let a = app.state.project.automation(ch).unwrap();
+        assert_eq!(a.points.len(), 2 * k as usize + 1, "{:?}", a.points.iter().map(|p| (p.beat, p.value)).collect::<Vec<_>>());
+        assert_eq!((a.points[0].beat, a.points[0].value), (0.0, 0.25));
+        assert!((a.points[1].beat - beats / (2.0 * k)).abs() < 1e-9 && a.points[1].value == 0.75, "the first edge is up: {:?}", a.points[1]);
+        assert!((a.points[2].beat - beats / k).abs() < 1e-9 && a.points[2].value == 0.25, "the drop shares the next edge's beat: {:?}", a.points[2]);
+        let last = a.points.last().unwrap();
+        assert!((last.beat - beats).abs() < 1e-9 && last.value == 0.75);
+        assert_eq!(last.mode, os_model::AutoMode::Single, "the end point heads a straight segment");
+        // One undo step takes the wave off.
+        crate::history::undo(&mut app.state);
+        assert_eq!(app.state.project.automation(ch).unwrap().points.len(), 2);
+    }
+
+    /// The automation clip menu's LFO ▸ (issue #29): the wave replaces the curve over the clip's window as one undo
+    /// step, leaving the curve's value at the window's start and the point past it.
+    #[test]
+    fn the_clip_menu_bakes_an_lfo_over_the_window() {
+        use crate::playlist::{self as pl, Cmd};
+        use crate::lfo::Shape;
+        let mut app = App::new(None);
+        let ch = pl::create_automation(&mut app.state, 0, "Auto", 0.25);
+        let ci = pl::clips(&app.state).iter().position(|c| c.source == os_model::ClipSource::Channel(ch)).expect("the clip");
+        let (a_beat, b_beat) = pl::window(&app.state, &pl::clips(&app.state)[ci]);
+        let labels = |s: &State| {
+            pl::clip_menu(s, ci, 0.0, 0.0)
+                .items
+                .iter()
+                .find(|it| it.label == "LFO")
+                .map(|it| it.children.iter().map(|c| c.label.to_string()).collect::<Vec<_>>())
+        };
+        assert_eq!(labels(&app.state), Some(vec!["Sine".into(), "Triangle".into(), "Square".into()]));
+        pl::run(&mut app, Cmd::ClipLfo(ci, Shape::Sine));
+        let want = crate::auto_tools::lfo_points(a_beat, b_beat, Shape::Sine, 0.25, 0.25, 4.0);
+        let a = app.state.project.automation(ch).unwrap();
+        assert_eq!(a.points.len(), want.len() + 1, "the wave and the point past the window");
+        assert_eq!((a.points[0].beat, a.points[0].value), (a_beat, 0.25), "the wave leaves the curve's value");
+        let last = a.points.last().unwrap();
+        assert_eq!((last.beat, last.value), (b_beat, 0.25), "the window's end keeps its point");
+        assert!(a.points.windows(2).all(|w| w[0].beat <= w[1].beat), "sorted");
+        assert!(a.points.iter().all(|p| (0.0..=0.5).contains(&p.value)), "the wave swings 0.25 ± 0.25");
+        crate::history::undo(&mut app.state);
+        assert_eq!(app.state.project.automation(ch).unwrap().points.len(), 2);
+    }
+
     /// The CPU panel opens Settings > Audio; its combos open menus over the window and a choice becomes the audio
     /// settings (spec: ui/main-window.md "CPU panel", ui/settings.md "Audio").
     #[test]
