@@ -69,7 +69,7 @@ mod tests {
         app.paint(&mut c, None);
         let g = app.pl_grid().expect("the grid");
         let tools = [
-            (PlTool::Draw, Cursor::Tool(Icon::Brush)),
+            (PlTool::Draw, Cursor::Tool(Icon::Pencil)),
             (PlTool::Paint, Cursor::Tool(Icon::Brush)),
             (PlTool::Slice, Cursor::Tool(Icon::Slice)),
             (PlTool::Select, Cursor::Default),
