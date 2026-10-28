@@ -1648,9 +1648,11 @@ fn popup_list(ui: &mut Ui, items: &[pl::PItem], x: f32, y: f32, screen: (f32, f3
             ui.c.text_right(font.italic(), right, rr.y + 3.0 + dy, sc, it.key);
         }
         if !it.children.is_empty() {
+            // As bright as the label, so it shows on the dark menus; dim when the entry is.
             let ax = rr.right() - 11.0;
-            ui.c.line(ax, my - 3.5, ax + 3.5, my, 1.2, t.menu_pop_dim);
-            ui.c.line(ax + 3.5, my, ax, my + 3.5, 1.2, t.menu_pop_dim);
+            let ink = if live { t.menu_pop_text } else { t.menu_pop_dim };
+            ui.c.line(ax, my - 3.5, ax + 3.5, my, 1.5, ink);
+            ui.c.line(ax + 3.5, my, ax, my + 3.5, 1.5, ink);
         }
     }
     if bar_h > 0.0 {
