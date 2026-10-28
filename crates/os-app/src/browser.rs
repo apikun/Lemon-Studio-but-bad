@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 ravenmarkdev-alt
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -44,9 +45,40 @@ impl App {
                 s.playlist.popup = if open { None } else { Some(Popup { x, y, items: options_menu(s), sub: None, scroll: [0; 2] }) };
             }
             Action::BrowserSearch => s.browser_search_focus = true,
+            Action::BrowserPlugFilter(i) => {
+                s.browser_plug_filter = i;
+                s.browser_plug_cat = None;
+                s.browser_scroll = 0.0;
+            }
+            Action::BrowserPlugCat(c) => {
+                s.browser_plug_cat = c;
+                s.browser_scroll = 0.0;
+            }
+            Action::BrowserPlugStar(i) => {
+                let Some(f) = crate::views::plugin_panel::list(s).into_iter().nth(i) else { return true };
+                crate::plugin_menu::run(self, crate::plugin_menu::PlugCmd::Star { effect: f.effect, index: f.entry().index });
+            }
             Action::BrowserRow(i) => {
                 let Some(row) = view::rows(s).into_iter().nth(i) else { return true };
                 select(s, &row.key);
+                // The plugin browser: a second press on the same plugin adds it, as its row menu's Add does.
+                if s.browser_tab == view::PLUGIN_TAB {
+                    let now = std::time::Instant::now();
+                    let double = s.browser_plug_click.as_ref().is_some_and(|(k, t)| *k == row.key && now.duration_since(*t).as_millis() < 400);
+                    s.browser_plug_click = if double { None } else { Some((row.key.clone(), now)) };
+                    if double {
+                        let m = match row.item {
+                            Item::Generator(i) => crate::plugin_menu::add_generator(self, i, None),
+                            Item::Effect(i) => crate::plugin_menu::add_effect(self, i, None),
+                            _ => None,
+                        };
+                        if m.is_some() {
+                            self.state.message = m;
+                        }
+                        self.invalidate();
+                        return true;
+                    }
+                }
                 if row.open.is_some() && !s.browser_open.remove(&row.key) {
                     s.browser_open.insert(row.key.clone());
                 }
@@ -351,8 +383,17 @@ impl App {
         }
         let (x, y) = self.mouse;
         let win = self.top_hit(x, y).and_then(|h| h.win);
+        // A drop on a track header (issue #2): the track it names, and where on it the instrument lands — the song
+        // position, snapped like a drop on the rows (a header has no place of its own).
+        let head = self.top_hit(x, y).and_then(|h| match h.action { Action::PlHeader(t) => Some(t), _ => None });
         let grid = self.pl_grid().filter(|g| g.contains(x, y) && win == Some(Win::Playlist));
         let alt = self.alt;
+        let on_header = head.filter(|_| grid.is_none()).map(|track| {
+            (track, self.pl_grid().map_or(0, |grid| {
+                let g = pl::PGeom::new(&self.state, grid);
+                pl::snap_place(&self.state, &g, self.state.playlist.pos as f32, alt)
+            }))
+        });
         let s = &mut self.state;
         // Snapped playlist position under the mouse.
         let spot = grid.map(|grid| {
@@ -400,9 +441,15 @@ impl App {
                     self.sample_to_rack(path, y);
                 }
             }
-            // As if picked in the F8 menu (spec: ui/plugin-menu.md §5): a new channel at the bottom of the rack.
+            // On the playlist — a track row or its header (issue #2) — the instrument lands there: the channel as
+            // the F8 menu adds it, plus a clip of a new pattern named after it on that track, at the drop (on a
+            // header, at the song position). On the rack: a new channel at the bottom (spec: ui/plugin-menu.md §5).
             Item::Generator(i) => {
-                if spot.is_some() || win == Some(Win::ChannelRack) {
+                if let Some((track, tick)) = spot.or(on_header) {
+                    if let Some(m) = crate::plugin_menu::add_generator_on_track(self, i, track, tick) {
+                        self.state.message = Some(m);
+                    }
+                } else if win == Some(Win::ChannelRack) {
                     if let Some(m) = crate::plugin_menu::add_generator(self, i, None) {
                         self.state.message = Some(m);
                     }
@@ -752,6 +799,10 @@ pub fn row_menu(s: &crate::app::State, row: &view::Row) -> Vec<PItem> {
             items.push(if s.hosted_rows.contains(&key) { it } else { it.off() });
         }
         Item::None | Item::File(_) | Item::Param(..) => {}
+    }
+    // The plugin browser's variants and star.
+    if s.browser_tab == view::PLUGIN_TAB {
+        items.extend(crate::views::plugin_panel::row_menu(s, row));
     }
     if let Some(path) = &row.path {
         sep(&mut items);

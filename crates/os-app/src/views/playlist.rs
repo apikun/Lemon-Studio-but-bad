@@ -1273,7 +1273,7 @@ fn header(ui: &mut Ui, s: &State, g: &PGeom, row: u16, x: f32, w: f32) {
         let left = if lead { hr.x + k } else { hr.x };
         ui.c.fill_rect(Rect::new(left, hr.bottom() - k, hr.right() - left, k), bottom);
     }
-    ui.hit(hr, Action::PlHeader(row), "Track (double-click: rename, right-click: menu, Shift+wheel: move)");
+    ui.hit(hr, Action::PlHeader(row), "Track (drop an instrument on it: it lands here, double-click: rename, right-click: menu, Shift+wheel: move)");
     if strip {
         return;
     }
@@ -1365,6 +1365,8 @@ pub fn paint_overlays(ui: &mut Ui, s: &State) {
         let cw = ui.c.text_width(Font::new(14), &e.text).min(r.w - 10.0);
         ui.c.fill_rect(Rect::new(r.x + 5.0 + cw, r.y + 3.0, 1.0, 14.0), t.text);
     }
+    // The plugin picker, above everything else.
+    super::plugin_picker::paint(ui, s);
 }
 
 // Row heights follow the display scale like FL's popup menus (spec: ui/ui-scaling.md §2).

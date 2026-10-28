@@ -41,6 +41,9 @@ pub const MIXER_VOLUME: &str = "Mixer track volume";
 pub const PLUGIN_PARAMETER: &str = "Plugin parameter";
 /// A generator added to the rack (`add_channel`).
 pub const ADD_CHANNEL: &str = "Add channel";
+/// An instrument loaded straight onto an arranger track (`crate::plugin_menu::add_generator_on_track`): the channel,
+/// its pattern and the track's clip in one step.
+pub const ADD_TO_TRACK: &str = "Add instrument to track";
 /// Channels deleted from the rack (`delete_channels`).
 pub const DELETE_CHANNEL: &str = "Delete channel";
 /// A value of Settings > Project changed (`project_settings`, `timebase`).

@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 ravenmarkdev-alt
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -16,8 +17,8 @@ use crate::knobs::KnobId;
 use crate::playlist::{Cmd, EditTarget, Mark, PItem, Popup};
 
 /// Mixer controls (the view registers them as `Action::Mix`). Controls that are not available yet (title-bar view
-/// buttons, input pin, latency clock, disk recording, input / output combos, track equalizer) are greyed out with
-/// `Ui::off` instead.
+/// buttons, input pin, latency clock, disk recording, output combo, track equalizer) are greyed out with `Ui::off`
+/// instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MHit {
     /// Anywhere on a strip that is not a control.
@@ -42,6 +43,8 @@ pub enum MHit {
     Scale,
     /// The current track's equaliser graph: a press grabs the band nearest the cursor's frequency.
     EqGraph,
+    /// The current track's input combo: the device's inputs to hear.
+    Input,
 }
 
 /// Menu commands (`Cmd::Mixer`).
@@ -93,6 +96,8 @@ pub enum MCmd {
     /// Sidechain input ▸ (Lemon Studio's own): the input of the current track a hosted plugin's sidechain bus hears,
     /// counted from 1, 0 for none (spec: audio/sidechain.md "Hosted plugins' input buses").
     SlotSidechain(u8, usize),
+    /// The input combo's pick: track `n` hears that input of the device before its effects (`None`: none).
+    Input(u16, Option<crate::capture::Input>),
 }
 
 /// What the plugin host does next tick for a mixer slot (`App::mixer_tick`).
@@ -357,13 +362,17 @@ pub fn hit(app: &mut App, h: MHit) -> Option<String> {
             if slot_name(s, t, i).is_some() {
                 s.mixer.pending.push(FxReq::Toggle { track: t, slot: i });
             } else {
-                s.playlist.popup = Some(effect_menu(s, i, at.0, at.1));
+                pick_effect(s, i);
             }
             None
         }
         MHit::SlotArrow(i) => {
             let t = s.selected_mixer;
-            s.playlist.popup = Some(if slot_name(s, t, i).is_some() { slot_menu(s, i, at.0, at.1) } else { effect_menu(s, i, at.0, at.1) });
+            if slot_name(s, t, i).is_some() {
+                s.playlist.popup = Some(slot_menu(s, i, at.0, at.1));
+            } else {
+                pick_effect(s, i);
+            }
             None
         }
         MHit::SlotLed(i) => {
@@ -374,8 +383,31 @@ pub fn hit(app: &mut App, h: MHit) -> Option<String> {
             changed(s);
             None
         }
+        MHit::Input => {
+            s.playlist.popup = Some(input_menu(s, at.0, at.1 + 10.0));
+            None
+        }
         MHit::Scale | MHit::EqGraph => None,
     }
+}
+
+/// The input combo's text: the current input of track `n` ("In 1 - In 2", "In 3"), or "(none)".
+pub fn input_label(s: &State, n: u16) -> String {
+    let i = s.project.mixer.iter().find(|m| m.index == n).and_then(|m| m.input.as_ref());
+    i.map_or("(none)".into(), |i| crate::capture::Input { device: i.device.clone(), asio: false, first: i.first, stereo: i.stereo }.label())
+}
+
+/// The input combo's menu for the current track: (none), then the device's stereo and mono inputs (as FL lists them),
+/// the one it hears marked.
+fn input_menu(s: &State, x: f32, y: f32) -> Popup {
+    let n = s.selected_mixer;
+    let now = s.project.mixer.iter().find(|m| m.index == n).and_then(|m| m.input.clone());
+    let mut items = vec![PItem::new("(none)", Cmd::Mixer(MCmd::Input(n, None))).mark(Mark::Radio(now.is_none()))];
+    items.extend(crate::one_click::listed(|i| {
+        let on = now.as_ref().is_some_and(|t| t.device == i.device && t.first == i.first && t.stereo == i.stereo);
+        PItem::new(i.label(), Cmd::Mixer(MCmd::Input(n, Some(i.clone())))).mark(Mark::Radio(on))
+    }));
+    Popup { x, y, items, sub: None, scroll: [0; 2] }
 }
 
 // The equaliser graph `g` spans the frequency knob's range left to right (10 Hz .. 16 kHz) and ±18 dB over its
@@ -436,14 +468,18 @@ pub fn right(app: &mut App, h: MHit) -> bool {
         // The slot's plugin menu, like a left click (spec: ui/plugin-menu.md §1).
         MHit::SlotArrow(i) => {
             let t = s.selected_mixer;
-            s.playlist.popup = Some(if slot_name(s, t, i).is_some() { slot_menu(s, i, at.0, at.1) } else { effect_menu(s, i, at.0, at.1) });
+            if slot_name(s, t, i).is_some() {
+                s.playlist.popup = Some(slot_menu(s, i, at.0, at.1));
+            } else {
+                pick_effect(s, i);
+            }
         }
         MHit::SlotName(i) => {
             let t = s.selected_mixer;
             if slot_name(s, t, i).is_some() {
                 s.mixer.pending.push(FxReq::Show { track: t, slot: i });
             } else {
-                s.playlist.popup = Some(effect_menu(s, i, at.0, at.1));
+                pick_effect(s, i);
             }
         }
         MHit::SlotLed(i) => {
@@ -1044,11 +1080,10 @@ pub fn layout_menu(s: &State, x: f32, y: f32) -> Popup {
     Popup { x, y, items, sub: None, scroll: [0; 2] }
 }
 
-/// Empty slot: the effect list (§7.1), the plugin menu for this slot (spec: ui/plugin-menu.md).
-pub fn effect_menu(s: &State, slot: u8, x: f32, y: f32) -> Popup {
-    let mut items = vec![PItem::not_yet("Plugin database").key(crate::shortcuts::menu_key("Plugin database", "Shift+F8")), PItem::sep()];
-    items.extend(crate::plugin_menu::items(s, crate::plugin_menu::Target::Fx(Some(slot)), false));
-    Popup { x, y, items, sub: None, scroll: [0; 2] }
+/// Empty slot: the effect list (§7.1), the plugin picker for this slot (`crate::plugin_picker`).
+fn pick_effect(s: &mut State, slot: u8) {
+    s.playlist.popup = None;
+    s.picker = Some(crate::plugin_picker::Picker::new(crate::plugin_menu::Target::Fx(Some(slot))));
 }
 
 /// Filled slot ▸ (§7.2).
@@ -1148,6 +1183,18 @@ pub fn run(app: &mut App, c: MCmd) -> Option<String> {
         MCmd::AudioEditorRecord(n) => {
             app.audio_logger(n);
             return None;
+        }
+        MCmd::Input(n, i) => {
+            let m = track_mut(s, n)?;
+            m.input = i.as_ref().map(|i| os_model::TrackInput { device: i.device.clone(), first: i.first, stereo: i.stereo });
+            changed(s);
+            if let Some(i) = &i {
+                crate::capture::set_last_input(i);
+            }
+            Some(match i {
+                Some(i) => format!("{} hears {} ({})", name(s, n), i.label(), i.device),
+                None => format!("{}: no audio input", name(s, n)),
+            })
         }
         MCmd::RemoveTeslas => return app.ask_remove_teslas(),
         MCmd::RemoveTeslasNow => {
@@ -1758,6 +1805,29 @@ mod tests {
         run(&mut a, MCmd::InsertOne(2));
         assert_eq!(name(&a.state, 3), "Two");
         assert!(a.state.project.mixer.iter().enumerate().all(|(i, m)| usize::from(m.index) == i), "indices stay in order");
+    }
+
+    /// The input combo: (none) and the device's stereo and mono inputs; a pick is what the track hears (it goes to
+    /// the engine with the project), shown in the combo and marked in the menu; (none) takes it away.
+    #[test]
+    fn the_input_combo_routes_an_input_into_the_track() {
+        let mut a = app();
+        select(&mut a.state, 3, false);
+        assert_eq!(input_label(&a.state, 3), "(none)");
+        hit(&mut a, MHit::Input);
+        let Some(Popup { items, .. }) = a.state.playlist.popup.take() else { panic!("no input menu") };
+        let labels: Vec<String> = items.iter().map(|p| p.label.to_string()).collect();
+        assert_eq!(labels, ["(none)", "Test ASIO - stereo", "In 1 - In 2", "Test ASIO - mono", "In 1", "In 2"]);
+        assert_eq!(items[0].mark, Mark::Radio(true));
+        let Cmd::Mixer(pick) = items[2].cmd.clone() else { panic!("{:?}", items[2].cmd) };
+        let msg = run(&mut a, pick).unwrap_or_default();
+        assert_eq!(msg, "Insert 3 hears In 1 - In 2 (Test ASIO)");
+        assert_eq!(track(&a.state, 3).unwrap().input, Some(os_model::TrackInput { device: "Test ASIO".into(), first: 0, stereo: true }));
+        assert_eq!(input_label(&a.state, 3), "In 1 - In 2");
+        assert!(a.state.piano.dirty, "the engine gets it");
+        assert_eq!(input_menu(&a.state, 0.0, 0.0).items[2].mark, Mark::Radio(true));
+        run(&mut a, MCmd::Input(3, None));
+        assert_eq!(track(&a.state, 3).unwrap().input, None);
     }
 
     #[test]

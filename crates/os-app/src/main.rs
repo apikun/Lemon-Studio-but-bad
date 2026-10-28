@@ -63,6 +63,7 @@ mod mixer;
 mod osc3;
 mod citrus;
 mod monitor;
+mod palette;
 mod params;
 mod piano;
 mod piano_snap;
@@ -78,6 +79,7 @@ mod playlist;
 mod plugin_db;
 mod plugin_manager;
 mod plugin_menu;
+mod plugin_picker;
 mod plugin_popup;
 mod plugin_rebuild;
 mod plugin_scan;
@@ -1787,8 +1789,29 @@ fn log_panics() {
     }));
 }
 
+/// X11 and XWayland: the folders libXcursor looks for cursor themes in, when `XCURSOR_PATH` does not say. Its built-in
+/// list can lack the user's own `~/.local/share/icons`, where desktops install cursor themes: then it finds no theme
+/// and loads no cursor at all, and the window's resize cursors (note ends, window edges, splitters) never show,
+/// while Qt and GTK programs, which look for themes themselves, show them. This adds the XDG icon folders to its list.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn cursor_search_path() {
+    if std::env::var_os("XCURSOR_PATH").is_some() {
+        return;
+    }
+    let home = std::env::var("HOME").unwrap_or_default();
+    let data_home = std::env::var("XDG_DATA_HOME").ok().filter(|d| !d.is_empty()).unwrap_or_else(|| format!("{home}/.local/share"));
+    let data_dirs = std::env::var("XDG_DATA_DIRS").ok().filter(|d| !d.is_empty()).unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    let mut dirs = vec![format!("{data_home}/icons"), format!("{home}/.icons")];
+    dirs.extend(data_dirs.split(':').filter(|d| !d.is_empty()).map(|d| format!("{d}/icons")));
+    dirs.push("/usr/share/pixmaps".into());
+    // SAFETY: at the very start of `main`, before any thread is started that could read the environment.
+    unsafe { std::env::set_var("XCURSOR_PATH", dirs.join(":")) };
+}
+
 fn main() {
     log_panics();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    cursor_search_path();
     let args: Vec<String> = std::env::args().skip(1).collect();
     // A plugin scanner process (spec: ui/plugin-manager.md §4): loads one file, prints its plugins, ends.
     if args.first().map(String::as_str) == Some(plugin_scan::ARG) {

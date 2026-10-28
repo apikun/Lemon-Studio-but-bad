@@ -1335,6 +1335,9 @@ pub struct MixerTrack {
     /// The track's icon (event 95) as the file numbers it; `None` = no icon (spec: flp/events/mixer.md "Track blocks",
     /// flp/engine-events.md "The mixer"). It stays with its track; Lemon Studio does not draw it.
     pub icon: Option<u16>,
+    /// The audio input the track hears before its effects (the input combo), `None` for none. Lemon Studio does not
+    /// keep it in the project file yet.
+    pub input: Option<TrackInput>,
     /// Position of the file's track block this track was loaded from (`None` = made in Lemon Studio). When tracks are
     /// moved, deleted or trimmed, the writer takes the track's effect-slot events from that block (spec:
     /// flp/events/mixer.md "Removing tracks"). Bookkeeping, not part of the track: tracks that differ only here are
@@ -1365,6 +1368,7 @@ impl PartialEq for MixerTrack {
             latency_out,
             latency_in,
             icon,
+            input,
             origin: _,
         } = self;
         *index == o.index
@@ -1386,6 +1390,7 @@ impl PartialEq for MixerTrack {
             && *latency_out == o.latency_out
             && *latency_in == o.latency_in
             && *icon == o.icon
+            && *input == o.input
     }
 }
 
@@ -1415,9 +1420,19 @@ impl MixerTrack {
             latency_out: 0.0,
             latency_in: 0.0,
             icon: None,
+            input: None,
             origin: None,
         }
     }
+}
+
+/// A mixer track's audio input: the device's input `first` (0-based), alone or with the next one as a stereo pair.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrackInput {
+    /// The device it was picked on (the ASIO driver, or a system input device), as the audio settings name it.
+    pub device: String,
+    pub first: u16,
+    pub stereo: bool,
 }
 
 /// A plugin in a mixer slot: its name and its opaque saved state.

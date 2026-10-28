@@ -1,13 +1,14 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 ravenmarkdev-alt
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
 //! The plugin database: the user's plugin choices (search folders, favourites, hidden plugins, combining formats), the
-//! scan cache, finding plugin files, the sweep that scans the files that changed, and the lists the plugin menus and
-//! the plugin manager show.
+//! scan cache, finding plugin files, the sweep that scans the files that changed, and the lists the plugin menus, the
+//! plugin browser and the plugin manager show.
 // spec: ui/plugin-manager.md, ui/plugin-menu.md
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
@@ -75,6 +76,8 @@ pub struct Prefs {
     /// Plugin uids (`format:id`).
     pub favorites: Vec<String>,
     pub hidden: Vec<String>,
+    /// The plugins added last, newest first (the plugin browser's Recent).
+    pub recent: Vec<String>,
 }
 
 impl Default for Prefs {
@@ -90,9 +93,13 @@ impl Default for Prefs {
             standard_off: Vec::new(),
             favorites: Vec::new(),
             hidden: Vec::new(),
+            recent: Vec::new(),
         }
     }
 }
+
+/// How many plugins Recent keeps.
+const RECENT_MAX: usize = 12;
 
 const PREFS_FILE: &str = "plugins.json";
 const CACHE_FILE: &str = "plugin_cache.json";
@@ -151,6 +158,13 @@ impl Prefs {
     /// Shows or hides plugin `uid` in the plugin menus.
     pub fn toggle_hidden(&mut self, uid: &str) {
         toggle(&mut self.hidden, uid);
+    }
+
+    /// Plugin `uid` was just added to the project: first in Recent, which keeps `RECENT_MAX`.
+    pub fn note_recent(&mut self, uid: &str) {
+        self.recent.retain(|u| u != uid);
+        self.recent.insert(0, uid.to_string());
+        self.recent.truncate(RECENT_MAX);
     }
 
     /// Adds search folder `path` (on); false when it is listed already (added or standard).
@@ -790,6 +804,87 @@ fn entries(list: &[Available], prefs: &Prefs, missing: &HashSet<String>) -> Vec<
         .collect();
     v.sort_by_key(|e| e.label.to_lowercase());
     v
+}
+
+/// Channel layouts and versions that plugin families add to their names ("CLA-76 Mono", "H-Reverb Stereo/5.1",
+/// "Abbey Road Plates Live Mono").
+const VARIANT_WORDS: [&str; 11] = ["mono", "stereo", "live", "quad", "lcr", "5.0", "5.1", "6.0", "6.1", "7.0", "7.1"];
+
+/// `name` without its trailing variant words (`VARIANT_WORDS`, alone or joined by '/'); a name that is nothing but
+/// variant words keeps its first.
+pub fn variant_base(name: &str) -> &str {
+    let name = name.trim();
+    let mut end = name.len();
+    while let Some(i) = name[..end].rfind(' ') {
+        let word = &name[i + 1..end];
+        if !word.split('/').all(|w| VARIANT_WORDS.iter().any(|v| w.eq_ignore_ascii_case(v))) {
+            break;
+        }
+        end = name[..i].trim_end().len();
+    }
+    &name[..end]
+}
+
+/// A plugin family as the plugin browser lists it: the plugins of one kind and vendor whose names differ only in
+/// variant words, under one name.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Family {
+    pub name: String,
+    pub vendor: String,
+    pub category: &'static str,
+    pub effect: bool,
+    /// The variants, alphabetical; `pick` is the one a click or drag adds.
+    pub variants: Vec<Entry>,
+    pub pick: usize,
+}
+
+impl Family {
+    /// The variant a click or drag adds.
+    pub fn entry(&self) -> &Entry {
+        &self.variants[self.pick]
+    }
+
+    /// Whether any variant is starred.
+    pub fn favorite(&self) -> bool {
+        self.variants.iter().any(|e| e.favorite)
+    }
+
+    /// What variant `e` adds to the family's name ("Live Mono"); its whole label when it adds nothing.
+    pub fn variant_label<'a>(&self, e: &'a Entry) -> &'a str {
+        e.label.strip_prefix(self.name.as_str()).map(str::trim).filter(|v| !v.is_empty()).unwrap_or(&e.label)
+    }
+}
+
+/// Which variant of a family a click adds, lowest first: no variant words or plain stereo, then mono in stereo out,
+/// mono, the live versions, surround.
+fn pick_rank(e: &Entry, base: &str) -> u8 {
+    let name = strip_marker(&e.name);
+    let tail = name.get(base.len()..).unwrap_or("").trim().to_lowercase();
+    let (live, surround) = (tail.contains("live"), tail.contains('.'));
+    match () {
+        _ if tail.is_empty() || tail == "stereo" => 0,
+        _ if surround => 4,
+        _ if live => 3,
+        _ if tail.contains("stereo") => 1,
+        _ => 2,
+    }
+}
+
+/// The families of `list` (one kind, as `Lists` holds it), alphabetical. A family of one plugin keeps its label.
+pub fn families(list: &[Entry], effect: bool) -> Vec<Family> {
+    let mut by: BTreeMap<(String, String), Vec<&Entry>> = BTreeMap::new();
+    for e in list {
+        by.entry((variant_base(strip_marker(&e.name)).to_lowercase(), e.vendor.to_lowercase())).or_default().push(e);
+    }
+    by.into_values()
+        .map(|mut es| {
+            es.sort_by_key(|e| e.label.to_lowercase());
+            let name = if es.len() == 1 { es[0].label.clone() } else { variant_base(strip_marker(&es[0].name)).to_string() };
+            let pick = (0..es.len()).min_by_key(|&i| (pick_rank(es[i], &name), i)).unwrap_or(0);
+            let (vendor, category) = (es[0].vendor.clone(), es[0].category);
+            Family { name, vendor, category, effect, variants: es.into_iter().cloned().collect(), pick }
+        })
+        .collect()
 }
 
 /// Plugin table columns (§2 group 3).

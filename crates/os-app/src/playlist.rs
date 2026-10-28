@@ -2515,7 +2515,7 @@ pub fn paste_label(s: &State) -> String {
     }
 }
 
-pub fn track_menu(s: &State, t: u16, x: f32, y: f32) -> Popup {
+pub fn track_menu(s: &State, t: u16, x: f32, y: f32, tick: u32) -> Popup {
     let on = track_on(s, t);
     let colors: Vec<PItem> = [
         ("Default", None),
@@ -2533,6 +2533,9 @@ pub fn track_menu(s: &State, t: u16, x: f32, y: f32) -> Popup {
         PItem::head("Track"),
         PItem::new("Rename...", Cmd::TrackRename(t)),
         PItem::sub("Color", colors),
+        // The instruments straight onto the track (issue #2): the pick adds the channel and a clip of a new
+        // pattern here, at the song position.
+        PItem::sub("Insert instrument", crate::plugin_menu::items_on_track(s, t, tick, true)),
         PItem::sep(),
         PItem::new("Mute", Cmd::TrackMute(t)).mark(Mark::Check(!on)),
         PItem::new("Solo", Cmd::TrackSolo(t)).mark(Mark::Check(s.playlist.solo.as_ref().is_some_and(|x| x.0 == t))),
@@ -3641,10 +3644,19 @@ pub fn press_markers(app: &mut App, grid: Rect, right: bool) {
 
 /// Track header press (§6): name area selects (double-click renames); right-click opens the track menu.
 pub fn press_header(app: &mut App, t: u16, right: bool, at: (f32, f32)) {
+    let grid = app.pl_grid();
+    let alt = app.alt;
+    let (mx, my) = app.mouse;
     let s = &mut app.state;
     s.playlist.popup = None;
     if right {
-        s.playlist.popup = Some(track_menu(s, t, app.mouse.0, app.mouse.1));
+        // The menu's Insert instrument ▸ adds at the song position (a header has no place of its own), snapped like
+        // a drop on the rows.
+        let tick = grid.map_or(0, |grid| {
+            let g = PGeom::new(s, grid);
+            snap_place(s, &g, s.playlist.pos as f32, alt)
+        });
+        s.playlist.popup = Some(track_menu(s, t, mx, my, tick));
         return app.invalidate();
     }
     let now = std::time::Instant::now();
