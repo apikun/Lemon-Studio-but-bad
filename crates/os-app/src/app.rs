@@ -6145,11 +6145,11 @@ impl App {
             return Cursor::Move;
         }
         let icon = match &self.hover {
-            // The playlist's Draw tool shows the brush (as FL's playlist does); the piano roll's keeps the pencil.
-            Some(Action::PlaylistArea) => match self.state.playlist.tool {
-                crate::playlist::PlTool::Draw => Some(crate::icons::Icon::Brush),
-                t => crate::playlist::PlTool::ALL.iter().position(|&x| x == t).map(|i| views::playlist::TOOL_ICONS[i]),
-            },
+            // The playlist's tools show their own icons: the pencil for Draw, the brush for Paint.
+            Some(Action::PlaylistArea) => crate::playlist::PlTool::ALL
+                .iter()
+                .position(|&x| x == self.state.playlist.tool)
+                .map(|i| views::playlist::TOOL_ICONS[i]),
             Some(Action::PianoGrid | Action::PianoNote(_) | Action::PianoGhostNote(_)) => Some(match self.state.piano.tool {
                 Tool::Draw => crate::icons::Icon::Pencil,
                 Tool::Paint => crate::icons::Icon::Brush,
