@@ -1164,7 +1164,24 @@ fn raise_priority() {
     }
 }
 
-#[cfg(not(any(windows, target_os = "macos")))]
+/// Android: `android.os.Process.setThreadPriority(THREAD_PRIORITY_URGENT_AUDIO)` for the calling thread, the
+/// priority the framework grants a native audio app's own threads without root. A JVM that is not there yet, or one
+/// that refuses (an OEM's restriction), leaves the thread as it was.
+#[cfg(target_os = "android")]
+fn raise_priority() {
+    use jni::objects::JValue;
+    // THREAD_PRIORITY_URGENT_AUDIO, what AudioTrack's own threads ask for.
+    const URGENT_AUDIO: i32 = -19;
+    let Some(vm) = crate::mobile::audio_vm() else { return };
+    let Ok(mut env) = vm.attach_current_thread() else { return };
+    let ask = env.call_static_method("android/os/Process", "setThreadPriority", "(I)V", &[JValue::Int(URGENT_AUDIO)]);
+    // A pending exception would sit on the thread for everything after this: clear it.
+    if ask.is_err() {
+        let _ = env.exception_clear();
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "android")))]
 fn raise_priority() {}
 
 /// The sample library for engines whose sampler channels Lemon Sampler instances play. They stretch for themselves

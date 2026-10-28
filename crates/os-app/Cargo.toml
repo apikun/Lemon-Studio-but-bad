@@ -75,6 +75,9 @@ midir = "0.11"
 winit = { version = "0.30", features = ["android-native-activity"] }
 # The activity's handle, for the private data folder (`mobile::run`).
 android-activity = { version = "0.6", features = ["native-activity"] }
+# The JVM handle (`vm_as_ptr`) raises the feeder thread's priority (`raise_priority`), the way
+# android.os.Process.setThreadPriority does for native audio apps. The version android-activity uses.
+jni = "0.21"
 
 [target.'cfg(windows)'.dependencies]
 # ASIO output (`device::asio`), built from the ASIO SDK's host files in `asiosdk` (`.cargo/config.toml`).

@@ -26,3 +26,10 @@ debug = "line-tables-only"
 
 [profile.dev.package."*"]
 opt-level = 3
+
+# cpal 0.18.2 with one Android change (see vendor/cpal/src/host/aaudio/mod.rs): the AAudio stream
+# asks for the low-latency performance mode, which upstream only does under its `realtime` feature —
+# and that feature's alsa-sys and audio_thread_priority cannot build on Android. Desktop targets
+# compile this tree exactly as upstream's.
+[patch.crates-io]
+cpal = { path = "vendor/cpal" }

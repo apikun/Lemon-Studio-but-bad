@@ -8,8 +8,19 @@
 //! after that is the desktop run (`main_body::run_from`): one stream, one window, the same
 //! project model. Touch as mouse is `crate::touch`.
 
+use std::sync::OnceLock;
+
 use android_activity::AndroidApp;
+use jni::JavaVM;
 use winit::event_loop::EventLoop;
+
+/// The app's JVM, for native threads that ask Android for a priority (`raise_priority`), set at entry.
+static JAVA_VM: OnceLock<JavaVM> = OnceLock::new();
+
+/// The JVM `raise_priority` uses; `None` before `run` (and a desktop build never asks).
+pub(crate) fn audio_vm() -> Option<&'static JavaVM> {
+    JAVA_VM.get()
+}
 
 /// The NativeActivity's app thread runs this: the app lives as long as the activity does.
 pub fn run(app: AndroidApp) {
@@ -30,6 +41,12 @@ pub fn run(app: AndroidApp) {
         unsafe { std::env::set_var("OPENSTUDIO_LOG_DIR", &ext) };
     }
     crate::log_panics();
+    // The feeder thread raises its priority through the JVM (`raise_priority`): keep the handle. The VM lives as long
+    // as the process, and the pointer is the app's own (android-activity keeps it in its state).
+    // SAFETY: the pointer is the live JVM of this process, still owned by android-activity.
+    if let Ok(vm) = (unsafe { JavaVM::from_raw(app.vm_as_ptr().cast()) }) {
+        let _ = JAVA_VM.set(vm);
+    }
     let mut builder = EventLoop::<()>::with_user_event();
     use winit::platform::android::EventLoopBuilderExtAndroid;
     builder.with_android_app(app);

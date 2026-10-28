@@ -38,8 +38,12 @@ pub struct AudioCfg {
 pub const SMALLEST: u32 = 0;
 
 /// The buffer length until one is chosen. Linux: 512 frames, since devices' own lengths there are often short enough
-/// to pop; elsewhere the device's own.
-pub const DEFAULT_BUFFER: Option<u32> = if cfg!(target_os = "linux") { Some(512) } else { None };
+/// to pop. Android: 512 frames too, because AAudio's own (about two bursts, under ten milliseconds) is a budget the
+/// engine's synthesis does not fit in on a phone's CPU, and without a length the stream's capacity stays at those two
+/// bursts (the dynamic tuning grows one burst per underrun, never beyond it) — so every block was an underrun and
+/// playback crackled like an emulator's; at 512 the stream opens with twice the length as capacity. Elsewhere the
+/// device's own.
+pub const DEFAULT_BUFFER: Option<u32> = if cfg!(any(target_os = "linux", target_os = "android")) { Some(512) } else { None };
 
 impl Default for AudioCfg {
     fn default() -> AudioCfg {
@@ -145,7 +149,7 @@ impl AudioCfg {
         match self.buffer {
             Some(SMALLEST) => s += "buffer=smallest\n",
             Some(b) => s += &format!("buffer={b}\n"),
-            // The device's own length, where the default is another (Linux).
+            // The device's own length, where the default is another (Linux, Android).
             None if DEFAULT_BUFFER.is_some() => s += "buffer=device\n",
             None => {}
         }
