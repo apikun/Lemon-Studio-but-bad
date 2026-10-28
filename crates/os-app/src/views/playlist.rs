@@ -257,8 +257,8 @@ pub fn paint(ui: &mut Ui, s: &State, r: Rect, f: &FrameInfo) {
     }
     // The drop zone of a browser drag (issue #4): a translucent clip where the drop would land, at the snapped
     // start, named like the clip will be. Under the playhead, after FL's.
-    if let Some((_, x, y)) = s.browser_drag {
-        if let Some(dg) = drop_ghost(s, grid, x, y) {
+    if let Some(d) = &s.browser_drag {
+        if let Some(dg) = drop_ghost(s, grid, d.x, d.y) {
             let rad = lk::r_btn(t).min(dg.rect.w / 2.0).min(dg.rect.h / 2.0);
             ui.c.fill_rrect(dg.rect, rad, t.tx(0xffffff).with_alpha(26));
             ui.c.stroke_rrect(dg.rect, rad, 1.0, t.tx(0xd0d8dc).with_alpha(130));
@@ -321,20 +321,28 @@ pub struct DropGhost {
 }
 
 /// What a browser drag at (x, y) over `grid` would place, for the drop zone's ghost (issue #4): the clip the drop
-/// makes at the snapped start (`alt`: no snap, as a drop makes), or None off `grid` or for an item that places no
-/// clip (an effect, a preset, a parameter, a file). A sample's length is the whole sample at the tempo, 0 until its
-/// waveform is loaded; a pattern's and an audio or automation channel's their own (`pl::source_len`).
+/// makes at the snapped start (`alt`: no snap, as a drop makes), or None off `grid`, with no drag in flight, or for
+/// an item that places no clip (an effect, a preset, a parameter, a file). A sample's length is the whole sample at
+/// the tempo, 0 until its waveform is loaded; a pattern's and an audio or automation channel's their own
+/// (`pl::source_len`).
 pub fn drop_ghost(s: &State, grid: Rect, x: f32, y: f32) -> Option<DropGhost> {
-    let (item, alt) = s.browser_drag_item.as_ref()?;
+    let d = s.browser_drag.as_ref()?;
+    let item = &d.item;
+    let alt = d.alt;
     if !grid.contains(x, y) {
         return None;
     }
     let g = PGeom::new(s, grid);
-    let (track, tick) = (g.track_at(y), pl::snap_place(s, &g, g.tick_at(x), *alt));
+    let (track, tick) = (g.track_at(y), pl::snap_place(s, &g, g.tick_at(x), alt));
     let (length, label) = match item {
         Item::Sample(path) => {
             let label = std::path::Path::new(path).file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            (pl::sample_len(s, path), label)
+            // An unreadable sample places nothing (the drop reports "Could not read"): no ghost either.
+            let len = pl::sample_len(s, path);
+            if len == 0 {
+                return None;
+            }
+            (len, label)
         }
         Item::Pattern(n) => {
             let src = ClipSource::Pattern(*n);
