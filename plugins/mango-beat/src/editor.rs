@@ -610,7 +610,7 @@ pub(crate) static WAKE_SLOT: std::sync::OnceLock<os_plugkit::gui::Slot> = std::s
 mod repaint {
     pub(crate) fn notify_editor() {
         #[cfg(windows)]
-        crate::window::win32::post_changed(super::HWND_SLOT.load(Ordering::Acquire));
+        crate::window::win32::post_changed(super::HWND_SLOT.load(std::sync::atomic::Ordering::Acquire));
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         if let Some(slot) = super::WAKE_SLOT.get() {
             os_plugkit::gui::notify(slot);

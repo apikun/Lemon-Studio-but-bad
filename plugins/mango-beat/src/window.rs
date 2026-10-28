@@ -11,7 +11,7 @@
 #[cfg(windows)]
 pub(crate) mod win32 {
     use std::ffi::c_void;
-    use std::sync::atomic::{AtomicIsize, Ordering};
+    use std::sync::atomic::Ordering;
     use std::sync::Arc;
 
     use nih_plug::prelude::GuiContext;
