@@ -14065,10 +14065,8 @@ mod tests {
         frame(&mut app, &mut c, None);
         let r0 = hit_rect(&app, &Action::BrowserTab(2));
         click(&mut app, &mut c, r0);
-        let gi = rows(&app.state).iter().position(|r| r.label == "Generators").expect("generators");
-        let r0 = hit_rect(&app, &Action::BrowserRow(gi));
-        click(&mut app, &mut c, r0);
-        let gi = rows(&app.state).iter().position(|r| r.item == Item::Generator(1)).expect("a generator row");
+        // The Plugin database tab is a plugin browser: the generators are listed at once, no folder to open.
+        let gi = rows(&app.state).iter().position(|r| matches!(r.item, Item::Generator(_)) && r.label == crate::osc3::LEMON_TRIO).expect("a generator row");
         let ch0 = app.state.project.channels.len();
         let src = hit_rect(&app, &Action::BrowserRow(gi));
         let dst = hit_rect(&app, &Action::PlHeader(2));
@@ -14087,7 +14085,9 @@ mod tests {
         assert_eq!(app.state.message.as_deref(), Some(format!("Added {} on track 3", crate::osc3::LEMON_TRIO).as_str()));
         // A second drag of the same row onto the rows: at the drop, the next pattern.
         frame(&mut app, &mut c, None);
-        let gi = rows(&app.state).iter().position(|r| r.item == Item::Generator(1)).expect("the row again");
+        // Later than a double click: the plugin browser takes two presses on a row within 400 ms as one, adding it.
+        app.state.browser_plug_click = None;
+        let gi = rows(&app.state).iter().position(|r| matches!(r.item, Item::Generator(_)) && r.label == crate::osc3::LEMON_TRIO).expect("the row again");
         let src = hit_rect(&app, &Action::BrowserRow(gi));
         let grid = app.pl_grid().expect("grid");
         let n = crate::playlist::clips(&app.state).len();
