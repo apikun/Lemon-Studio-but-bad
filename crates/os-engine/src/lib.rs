@@ -15,6 +15,7 @@
 //! - [`wav`]: writing renders to disk.
 
 pub mod clock;
+pub mod drums;
 pub mod effects;
 pub mod engine;
 pub mod envelope;

@@ -1916,6 +1916,9 @@ fn main() {
     // Default template and Startup project").
     if start {
         splash::step(&splash, splash::PROJECT, "Opening project");
+        if let Some(Err(e)) = crate::templates::root().map(|r| crate::templates::ensure_starter(&r)) {
+            eprintln!("[templates] the Starter kit was not made: {e}");
+        }
         app.startup_project();
         // Ask for data folder "On startup": the New project form over it (spec: ui/data-folder.md §7).
         app.startup_form();
