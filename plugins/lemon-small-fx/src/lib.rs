@@ -3,7 +3,8 @@
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
 //! Lemon Studio's small effects as VST3 / CLAP plugins (nih-plug): Lemon Soft Clipper, Lemon Fast Distortion, Lemon
-//! Balance, Lemon Stereo Enhancer, Lemon Transient Processor, Lemon Chorus, Lemon Stereo Shaper and Lemon Filter. Each is a handful
+//! Balance, Lemon Stereo Enhancer, Lemon Transient Processor, Lemon Chorus, Lemon Stereo Shaper, Lemon Filter,
+//! Lemon Flanger and Lemon Phaser. Each is a handful
 //! of settings over a sound of
 //! `os_engine::effects`, so they share
 //! everything but their description: the plugin, its parameters and saved state ([`params`]), the Pith editor
@@ -12,7 +13,9 @@
 //!
 // spec: plugins/lemon-small-effects.md (§1 how they are built, §5 parameters and state), the plugin pages
 // (plugins/lemon-soft-clipper.md, lemon-fast-distortion.md, lemon-balance.md, lemon-stereo-enhancer.md,
-// lemon-transient-processor.md, lemon-chorus.md, lemon-stereo-shaper.md, lemon-filter.md), plugins/plugin-formats.md
+// lemon-transient-processor.md, lemon-chorus.md, lemon-stereo-shaper.md, lemon-filter.md,
+// lemon-flanger.md, lemon-phaser.md),
+// plugins/plugin-formats.md
 #![allow(semicolon_in_expressions_from_non_local_macros)]
 
 pub mod balance;
@@ -20,7 +23,9 @@ pub mod chorus;
 pub mod editor;
 pub mod fast_distortion;
 pub mod filter;
+pub mod flanger;
 pub mod params;
+pub mod phaser;
 pub mod soft_clipper;
 pub mod stereo_enhancer;
 pub mod stereo_shaper;
@@ -314,7 +319,7 @@ impl<K: Kind> Vst3Plugin for SmallFx<K> {
 mod tests {
     use super::*;
 
-    pub const SPECS: [&Spec; 8] = [
+    pub const SPECS: [&Spec; 10] = [
         soft_clipper::SPEC,
         fast_distortion::SPEC,
         balance::SPEC,
@@ -323,6 +328,8 @@ mod tests {
         chorus::SPEC,
         stereo_shaper::SPEC,
         filter::SPEC,
+        flanger::SPEC,
+        phaser::SPEC,
     ];
 
     /// Every effect: ids unique, starts inside the ranges, a control per setting, the plugin ids distinct.
@@ -355,6 +362,8 @@ mod tests {
             <chorus::LemonChorus as ClapPlugin>::CLAP_ID,
             <stereo_shaper::LemonStereoShaper as ClapPlugin>::CLAP_ID,
             <filter::LemonFilter as ClapPlugin>::CLAP_ID,
+            <flanger::LemonFlanger as ClapPlugin>::CLAP_ID,
+            <phaser::LemonPhaser as ClapPlugin>::CLAP_ID,
         ];
         let classes = [
             <soft_clipper::LemonSoftClipper as Vst3Plugin>::VST3_CLASS_ID,
@@ -365,6 +374,8 @@ mod tests {
             <chorus::LemonChorus as Vst3Plugin>::VST3_CLASS_ID,
             <stereo_shaper::LemonStereoShaper as Vst3Plugin>::VST3_CLASS_ID,
             <filter::LemonFilter as Vst3Plugin>::VST3_CLASS_ID,
+            <flanger::LemonFlanger as Vst3Plugin>::VST3_CLASS_ID,
+            <phaser::LemonPhaser as Vst3Plugin>::VST3_CLASS_ID,
         ];
         for i in 0..ids.len() {
             for j in i + 1..ids.len() {
