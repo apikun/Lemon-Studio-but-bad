@@ -745,8 +745,8 @@ impl ApplicationHandler for Shell {
             attrs.with_window_icon(linux_icon())
         };
         let window = Rc::new(el.create_window(attrs).unwrap_or_else(|e| fatal("could not open the main window", e.to_string())));
-        // The tools' cursors, at the monitor's scale (32 px at 100 %).
-        let size = (32.0 * window.scale_factor()).round().clamp(24.0, 96.0) as u32;
+        // The tools' cursors, at the monitor's scale (26 px at 100 %).
+        let size = (26.0 * window.scale_factor()).round().clamp(20.0, 80.0) as u32;
         self.tool_cursors = app::TOOL_CURSORS
             .iter()
             .filter_map(|&i| {
