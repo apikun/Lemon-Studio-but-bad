@@ -229,6 +229,7 @@ const PAT_CMDS: &[Item] = &[
 
 const VIEW_ITEMS: &[Item] = &[
     head("Windows"),
+    it("Command palette", "Ctrl+Shift+Space").on(),
     it("Playlist", "F5").on().tick(),
     it("Piano roll", "F7").on().tick(),
     it("Channel rack", "F6").on().tick(),
@@ -405,7 +406,7 @@ pub fn works(menu: usize, item: &Item) -> bool {
     item.works
         || ((menu == OPTIONS_MENU || menu == ADD_MENU) && crate::views::settings::tab_for_menu(item.label).is_some())
         || (menu == PATTERNS && crate::patterns::Cmd::from_label(item.label).is_some())
-        || (menu == VIEW && (win_of(item.label).is_some() || matches!(item.label, "Plugin picker" | "Project picker")))
+        || (menu == VIEW && (win_of(item.label).is_some() || matches!(item.label, "Plugin picker" | "Project picker" | "Command palette")))
         || (menu == EDIT_MENU && matches!(item.label, "Undo" | "Redo"))
         || crate::params::menu_handles(item.label)
         || crate::browser::Jump::from_label(menu, item.label).is_some()
@@ -465,6 +466,9 @@ pub fn needs_file(menu: usize, label: &str) -> bool {
 
 fn item_action(menu: usize, i: usize, item: &Item) -> Action {
     if menu == VIEW {
+        if item.label == "Command palette" {
+            return Action::ToggleCommandPalette;
+        }
         if let Some(w) = win_of(item.label) {
             return Action::ToggleWin(w);
         }
