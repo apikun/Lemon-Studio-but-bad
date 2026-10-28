@@ -1213,6 +1213,10 @@ impl Engine {
                 } else {
                     None
                 };
+                let mut sample = sample;
+                if plays_sample && ch.sound.fx.flags & os_model::SampleFx::REVERSE != 0 {
+                    sample = sample.map(|s| std::sync::Arc::new(s.reversed()));
+                }
                 let env_on = ch.kind == ChannelKind::Sampler;
                 let adjust = Adjust::of(ch);
                 let volume = if ch.enabled { laws::channel_gain(ch.volume) * f64::from(adjust.mult) } else { 0.0 };

@@ -32,6 +32,15 @@ impl Sample {
     pub fn frames(&self) -> usize {
         self.left.len()
     }
+
+    /// Reversed audio sample (both stereo channels mirrored).
+    pub fn reversed(&self) -> Self {
+        let mut left = self.left.clone();
+        left.reverse();
+        let mut right = self.right.clone();
+        right.reverse();
+        Sample { rate: self.rate, left, right }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -892,5 +901,18 @@ mod tests {
         assert!(lib.get(placeholder).is_none() && lib.failures.iter().any(|(k, _)| k == placeholder), "no folder: not found");
         drop(first);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn sample_reversed_mirrors_channels() {
+        let s = Sample {
+            rate: 44100,
+            left: vec![0.1, 0.2, 0.3, 0.4],
+            right: vec![0.9, 0.8, 0.7, 0.6],
+        };
+        let rev = s.reversed();
+        assert_eq!(rev.rate, 44100);
+        assert_eq!(rev.left, vec![0.4, 0.3, 0.2, 0.1]);
+        assert_eq!(rev.right, vec![0.6, 0.7, 0.8, 0.9]);
     }
 }
