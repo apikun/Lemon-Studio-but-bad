@@ -8349,7 +8349,12 @@ impl App {
             Action::MenuSub(m, i) => self.open_menu_sub(m, i),
             // Show a hidden window, bring a covered one to the front, hide one already in front
             // (spec: ui/channel-rack.md §5).
-            Action::ToggleWin(Win::Browser) => s.show_browser = !s.show_browser,
+            Action::ToggleWin(Win::Browser) => {
+                s.show_browser = !s.show_browser;
+                if s.show_browser {
+                    crate::win_clamp::keep_all(s);
+                }
+            }
             Action::ToggleWin(Win::Perf) => self.toggle_perf(),
             Action::ToggleWin(Win::Tapper) => self.toggle_tapper(),
             Action::ToggleWin(Win::Touch) => self.toggle_touch(),
@@ -8645,7 +8650,12 @@ impl App {
         } else {
             if !s.shown(Win::Plugin) {
                 let r = views::rack::rect(s);
-                s.plugin_pos = ((r.right() + 8.0).min(1920.0 - 440.0), r.y.min(1080.0 - 210.0));
+                let to = crate::win_clamp::inside(
+                    Rect::new(r.right() + 8.0, r.y, views::channel_win::SIZE.0, views::channel_win::SIZE.1),
+                    s.work_rect(),
+                    views::channel_win::SIZE,
+                );
+                s.plugin_pos = (to.x, to.y);
             }
             s.plugin_channel = i;
             s.raise(Win::Plugin);
@@ -15355,6 +15365,7 @@ mod tests {
         let mut app = App::new(None);
         app.theme = design_theme(design, false);
         app.state.wins.iter_mut().for_each(|w| w.maxed = false);
+        app.state.show_browser = false;
         app.state.z = vec![Win::Playlist, Win::Mixer];
         frame(&mut app, &mut a, None);
         let _ = app.take_damage();
