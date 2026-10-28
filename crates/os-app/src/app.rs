@@ -9467,6 +9467,30 @@ pub(crate) fn empty_project() -> Project {
     template_project(&[])
 }
 
+/// The Starter kit template (from battlemountain2's fork): Kick, Clap, Hat and Snare channels playing the 808 drums in
+/// `dir` (`templates::ensure_starter`), each on its own insert and cutting itself off, at 130 BPM.
+pub(crate) fn starter_project(dir: &std::path::Path) -> Project {
+    let mut p = template_project(&crate::templates::STARTER_DRUMS);
+    for (i, ch) in p.channels.iter_mut().enumerate() {
+        let name = ch.name.clone().unwrap_or_default();
+        ch.sample_path = Some(dir.join(format!("{name}.wav")).to_string_lossy().into_owned());
+        // Cut itself: a new hit stops the last one (spec: flp/events/channels.md "Cut groups").
+        (ch.misc.cut, ch.misc.cut_by) = (i as u32 + 1, i as u32 + 1);
+    }
+    p
+}
+
+/// Project `p` as a new FLP file's bytes, as a save of a project not opened from a file builds it.
+pub(crate) fn new_flp(mut p: Project) -> Result<Vec<u8>, String> {
+    settle_origins(&mut p);
+    if p.arrangements.is_empty() {
+        p.arrangements.push(os_flp::project::default_arrangement());
+    }
+    let mut file = os_flp::project::create(&p).map_err(|e| e.to_string())?;
+    os_flp::project::apply(&p, &mut file).map_err(|e| e.to_string())?;
+    file.to_bytes().map_err(|e| e.to_string())
+}
+
 /// The old five-channel template (tests that need several channels).
 #[cfg(test)]
 pub fn test_project() -> Project {
