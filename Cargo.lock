@@ -2123,6 +2123,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lemon-wavetable"
+version = "0.2.1"
+dependencies = [
+ "nih_plug",
+ "os-hostlink",
+ "os-plugkit",
+ "os-theme",
+ "os-ui",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2954,6 +2965,7 @@ dependencies = [
  "lemon-stereo-enhancer",
  "lemon-stereo-shaper",
  "lemon-transient-processor",
+ "lemon-wavetable",
  "libc",
  "mango-beat",
  "midir",
