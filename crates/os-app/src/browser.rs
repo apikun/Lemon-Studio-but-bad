@@ -351,8 +351,17 @@ impl App {
         }
         let (x, y) = self.mouse;
         let win = self.top_hit(x, y).and_then(|h| h.win);
+        // A drop on a track header (issue #2): the track it names, and where on it the instrument lands — the song
+        // position, snapped like a drop on the rows (a header has no place of its own).
+        let head = self.top_hit(x, y).and_then(|h| match h.action { Action::PlHeader(t) => Some(t), _ => None });
         let grid = self.pl_grid().filter(|g| g.contains(x, y) && win == Some(Win::Playlist));
         let alt = self.alt;
+        let on_header = head.filter(|_| grid.is_none()).map(|track| {
+            (track, self.pl_grid().map_or(0, |grid| {
+                let g = pl::PGeom::new(&self.state, grid);
+                pl::snap_place(&self.state, &g, self.state.playlist.pos as f32, alt)
+            }))
+        });
         let s = &mut self.state;
         // Snapped playlist position under the mouse.
         let spot = grid.map(|grid| {
@@ -400,9 +409,15 @@ impl App {
                     self.sample_to_rack(path, y);
                 }
             }
-            // As if picked in the F8 menu (spec: ui/plugin-menu.md §5): a new channel at the bottom of the rack.
+            // On the playlist — a track row or its header (issue #2) — the instrument lands there: the channel as
+            // the F8 menu adds it, plus a clip of a new pattern named after it on that track, at the drop (on a
+            // header, at the song position). On the rack: a new channel at the bottom (spec: ui/plugin-menu.md §5).
             Item::Generator(i) => {
-                if spot.is_some() || win == Some(Win::ChannelRack) {
+                if let Some((track, tick)) = spot.or(on_header) {
+                    if let Some(m) = crate::plugin_menu::add_generator_on_track(self, i, track, tick) {
+                        self.state.message = Some(m);
+                    }
+                } else if win == Some(Win::ChannelRack) {
                     if let Some(m) = crate::plugin_menu::add_generator(self, i, None) {
                         self.state.message = Some(m);
                     }

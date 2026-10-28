@@ -20,6 +20,10 @@ pub enum PlugCmd {
     /// Generator `index` (into `Plugins::available`): a new channel at the bottom of the rack, or right below row
     /// `after`.
     Generator { index: usize, after: Option<usize> },
+    /// Generator `index` loaded straight onto arranger track `track` (a generator dropped on the playlist's grid or a
+    /// track header, the header menu's Insert instrument ▸; issue #2): the channel, and a clip of a new pattern named
+    /// after the instrument on the track at `tick`.
+    GeneratorOnTrack { index: usize, track: u16, tick: u32 },
     /// Generator `index` in place of rack row `row`'s (channel menu / plugin window menu > Replace ▸).
     Replace { index: usize, row: usize },
     /// Effect `index` (into `Plugins::effects`) into the selected mixer track: slot `slot`, else its first empty slot.
@@ -64,25 +68,26 @@ fn head(label: String) -> PItem {
 }
 
 /// One section's entries (spec §2): favourites, a separator, then the rest by display mode. `nested`: the list is a
-/// submenu itself, so "By vendor" uses headers instead of submenus (popups open one submenu level).
-fn section(s: &State, effect: bool, target: Target, nested: bool) -> Vec<PItem> {
+/// submenu itself, so "By vendor" uses headers instead of submenus (popups open one submenu level). `mk` names what
+/// a pick of entry `e` does (`item`, or the track-menu's GeneratorOnTrack).
+fn section(s: &State, effect: bool, mk: impl Fn(&Entry) -> PItem + Copy, nested: bool) -> Vec<PItem> {
     let list = if effect { &s.plugdb.lists.fx } else { &s.plugdb.lists.gens };
     if list.is_empty() {
         return vec![PItem::new(if effect { "(no effect plugins found)" } else { "(no instruments found)" }, Cmd::Nothing).off()];
     }
-    let mut v: Vec<PItem> = list.iter().filter(|e| e.favorite).map(|e| item(e, target, effect)).collect();
+    let mut v: Vec<PItem> = list.iter().filter(|e| e.favorite).map(mk).collect();
     let rest: Vec<&Entry> = list.iter().filter(|e| !e.favorite).collect();
     if !v.is_empty() && !rest.is_empty() {
         v.push(PItem::sep());
     }
     match s.plugdb.prefs.menu_view {
-        MenuView::Simple => v.extend(rest.iter().map(|e| item(e, target, effect))),
+        MenuView::Simple => v.extend(rest.iter().map(|e| mk(e))),
         MenuView::Categories => {
             for cat in db::categories(effect) {
                 let in_cat: Vec<&&Entry> = rest.iter().filter(|e| e.category == cat).collect();
                 if !in_cat.is_empty() {
                     v.push(PItem::head(cat));
-                    v.extend(in_cat.iter().map(|e| item(e, target, effect)));
+                    v.extend(in_cat.iter().map(|e| mk(e)));
                 }
             }
         }
@@ -92,7 +97,7 @@ fn section(s: &State, effect: bool, target: Target, nested: bool) -> Vec<PItem> 
                 by.entry(e.vendor.to_lowercase()).or_insert_with(|| (e.vendor.clone(), Vec::new())).1.push(e);
             }
             for (_, (vendor, es)) in by {
-                let items: Vec<PItem> = es.iter().map(|e| item(e, target, effect)).collect();
+                let items: Vec<PItem> = es.iter().map(|e| mk(e)).collect();
                 if nested {
                     v.push(head(vendor));
                     v.extend(items);
@@ -124,14 +129,25 @@ pub fn items(s: &State, target: Target, nested: bool) -> Vec<PItem> {
     match target {
         Target::All => {
             v.push(PItem::head("Generators"));
-            v.extend(section(s, false, target, nested));
+            v.extend(section(s, false, |e| item(e, target, false), nested));
             v.push(PItem::col());
             v.push(PItem::head("Effects"));
-            v.extend(section(s, true, target, nested));
+            v.extend(section(s, true, |e| item(e, target, true), nested));
         }
-        Target::Gen(_) | Target::Replace(_) => v.extend(section(s, false, target, nested)),
-        Target::Fx(_) => v.extend(section(s, true, target, nested)),
+        Target::Gen(_) | Target::Replace(_) => v.extend(section(s, false, |e| item(e, target, false), nested)),
+        Target::Fx(_) => v.extend(section(s, true, |e| item(e, target, true), nested)),
     }
+    v.extend(footer(s));
+    v
+}
+
+/// The generators as "load onto track" entries (the arranger track header menu's Insert instrument ▸, issue #2): a
+/// pick adds the instrument as `add_generator` does and places a clip of a new pattern named after it on the track
+/// at `tick` — FL adds an instrument dropped straight on a track. `nested`: the list fills a submenu.
+pub fn items_on_track(s: &State, track: u16, tick: u32, nested: bool) -> Vec<PItem> {
+    let mut v = section(s, false, |e| {
+        PItem::new(e.label.clone(), Cmd::Plugin(PlugCmd::GeneratorOnTrack { index: e.index, track, tick }))
+    }, nested);
     v.extend(footer(s));
     v
 }
@@ -169,6 +185,7 @@ impl App {
 pub fn run(app: &mut App, c: PlugCmd) -> Option<String> {
     let m = match c {
         PlugCmd::Generator { index, after } => add_generator(app, index, after),
+        PlugCmd::GeneratorOnTrack { index, track, tick } => add_generator_on_track(app, index, track, tick),
         PlugCmd::Replace { index, row } => replace_generator(app, index, row),
         PlugCmd::Effect { index, slot } => add_effect(app, index, slot),
         PlugCmd::Find => {
@@ -227,6 +244,52 @@ pub fn add_generator(app: &mut App, index: usize, after: Option<usize>) -> Optio
     sampler.then(|| "Added a sampler channel (Mango Sampler)".into())
 }
 
+/// Generator `index` loaded straight onto arranger track `track` (a generator dropped on the playlist's grid or a
+/// track header, the header menu's Insert instrument ▸; issue #2): the channel as `add_generator` makes it (at the
+/// bottom of the rack, hosted, selected), then a new pattern named after the instrument whose clip is placed on the
+/// track at `tick` — on a header that is the song position, FL adds an instrument dropped on the playlist as a clip
+/// on it. One undo step ("Add instrument to track"): undone, the clip, the pattern's name and the channel (with its
+/// instance) go. Returns the status message.
+pub fn add_generator_on_track(app: &mut App, index: usize, track: u16, tick: u32) -> Option<String> {
+    let d = app.plugins.available.get(index)?.desc.clone();
+    let s = &mut app.state;
+    let sampler = d.name == crate::plugins::LEMON_SAMPLER && crate::project_plugins::is_builtin(&d);
+    // One step holding what the whole load changes: the playlist's side (snapshot_with's), the rack's (the channel
+    // goes and comes back with it, a redo hosts the generator again) and the patterns' (the name).
+    let side = crate::history::RackSide::now(s, s.project.channels.len());
+    let snap = crate::history::Snap::Several(vec![
+        crate::history::Snap::Generator(Box::new(side), (!sampler).then_some(index)),
+        crate::history::Snap::Patterns { patterns: s.project.patterns.clone(), current: s.pattern },
+    ]);
+    crate::playlist::snapshot_with(s, crate::history::ADD_TO_TRACK, snap);
+    // The channel, as add_generator makes it at the bottom of the rack.
+    let ch = if sampler { crate::app::add_channel(&mut s.project) } else { crate::app::add_plugin_channel(&mut s.project, &d.name) };
+    if sampler {
+        s.pending_open = Some(ch);
+    } else {
+        s.pending_plugin = Some((ch, index));
+    }
+    s.piano.dirty = true;
+    let s = &mut app.state;
+    s.selected_channel = ch;
+    s.rack.select_only(ch);
+    crate::rack::autosize(s);
+    let r = crate::views::rack::rect(s);
+    let view_h = crate::views::rack::panel(r).h;
+    s.rack_scroll = (crate::views::rack::content_h(s) - view_h).max(0.0);
+    // A pattern of its own, named after the instrument ("Lemon Trio", then "Lemon Trio #2" once taken), current and
+    // the playlist's clip source, as the rack's "+" leaves a picked pattern.
+    let n = crate::patterns::first_empty(s);
+    let taken = |cand: &str| s.project.patterns.iter().any(|p| p.name.as_deref() == Some(cand));
+    let name = (1..).map(|k| if k == 1 { d.name.clone() } else { format!("{} #{k}", d.name) }).find(|c| !taken(&c)).expect("unbounded");
+    crate::patterns::pat_mut(s, n).name = Some(name.clone());
+    crate::patterns::select(s, n);
+    s.playlist.picker = crate::playlist::PickKind::Pattern;
+    let i = crate::playlist::place(s, track, tick);
+    s.playlist.sel = vec![i];
+    Some(format!("Added {name} on track {}", track + 1))
+}
+
 /// Generator `index` in place of rack row `row`'s (channel menu and plugin window menu > Replace ▸; FL: "the plugin list
 /// of Add one", spec ui/channel-rack.md §18). The channel keeps its row, notes and steps, mixer track, levels and
 /// Misc settings; its old instance goes, the new one starts from its defaults, and the channel takes the new
@@ -275,5 +338,97 @@ pub fn add_effect(app: &mut App, index: usize, slot: Option<u8>) -> Option<Strin
     match slot {
         Some(k) => crate::mixer::run(app, crate::mixer::MCmd::AddEffect(k, index)),
         None => Some("Every slot of this track is in use".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PlugCmd, items_on_track};
+    use crate::app::App;
+    use crate::osc3::LEMON_TRIO;
+    use crate::playlist::Cmd;
+
+    /// Insert instrument ▸ on a track header, a generator dropped on the track (issue #2): the pick adds the
+    /// instrument and places a clip of a new pattern named after it on the track, at the tick given; one undo step
+    /// takes the clip, the name and the channel back, a redo brings all three (and the hosting) up again.
+    #[test]
+    fn an_instrument_loaded_onto_a_track_places_its_clip() {
+        let mut a = App::new(None);
+        a.state.project = crate::app::test_project();
+        a.plugins.available = crate::plugins::builtin();
+        a.state.plugdb.rebuild(&a.plugins);
+        let index = a.plugins.index_of(LEMON_TRIO).unwrap();
+        let n = a.state.project.channels.len();
+        let (track, tick) = (2, 384);
+        let cmd = Cmd::Plugin(PlugCmd::GeneratorOnTrack { index, track, tick });
+        let m = crate::playlist::run(&mut a, cmd).expect("a status message");
+        assert_eq!(m, format!("Added {LEMON_TRIO} on track 3"));
+        assert_eq!(a.state.project.channels.len(), n + 1);
+        assert_eq!(a.state.project.channels[n].name.as_deref(), Some(LEMON_TRIO));
+        assert_eq!(a.state.pending_plugin, Some((n, index)), "the instrument is asked to host");
+        assert_eq!(a.state.selected_channel, n);
+        assert_eq!(a.state.pattern, 1, "the project's first empty pattern takes the name");
+        assert_eq!(crate::patterns::name_of(&a.state, 1), LEMON_TRIO);
+        assert_eq!(a.state.playlist.source, Some(os_model::ClipSource::Pattern(1)));
+        let last = *crate::playlist::clips(&a.state).last().expect("the clip");
+        assert_eq!((last.track, last.position, last.source), (track, tick, os_model::ClipSource::Pattern(1)));
+        assert_eq!(a.state.playlist.sel, vec![crate::playlist::clips(&a.state).len() - 1]);
+        // One step back: the clip, the name and the channel (with its hosting) go.
+        assert_eq!(crate::history::undo(&mut a.state), Some(crate::history::ADD_TO_TRACK));
+        assert_eq!(a.state.project.channels.len(), n);
+        assert!(a.state.pending_plugin.is_none());
+        assert!(crate::playlist::clips(&a.state).iter().all(|c| c.source != os_model::ClipSource::Pattern(1)));
+        assert_eq!(crate::patterns::name_of(&a.state, 1), "Pattern 1");
+        // And forward again: clip, name, channel and its hosting come back.
+        assert_eq!(crate::history::redo(&mut a.state), Some(crate::history::ADD_TO_TRACK));
+        assert_eq!(a.state.project.channels.len(), n + 1);
+        assert_eq!(a.state.pending_plugin, Some((n, index)));
+        let last = *crate::playlist::clips(&a.state).last().expect("the clip");
+        assert_eq!((last.track, last.position, last.source), (track, tick, os_model::ClipSource::Pattern(1)));
+        assert_eq!(crate::patterns::name_of(&a.state, 1), LEMON_TRIO);
+    }
+
+    /// The same twice on one track: the second pattern takes the instrument's name with a " #2", as Clone's does.
+    #[test]
+    fn a_second_instrument_on_a_track_names_its_pattern_uniquely() {
+        let mut a = App::new(None);
+        a.state.project = crate::app::test_project();
+        a.plugins.available = crate::plugins::builtin();
+        a.state.plugdb.rebuild(&a.plugins);
+        let index = a.plugins.index_of(LEMON_TRIO).unwrap();
+        crate::playlist::run(&mut a, Cmd::Plugin(PlugCmd::GeneratorOnTrack { index, track: 0, tick: 0 })).unwrap();
+        a.state.pending_plugin = None; // the windows are noise here
+        crate::playlist::run(&mut a, Cmd::Plugin(PlugCmd::GeneratorOnTrack { index, track: 3, tick: 96 })).unwrap();
+        assert_eq!(crate::patterns::name_of(&a.state, 2), format!("{LEMON_TRIO} #2"));
+        let last = *crate::playlist::clips(&a.state).last().unwrap();
+        assert_eq!((last.track, last.position, last.source), (3, 96, os_model::ClipSource::Pattern(2)));
+    }
+
+    /// The track header menu's Insert instrument ▸ lists the generators as on-track loads for the track it was
+    /// opened on, at the tick it was opened with (issue #2).
+    #[test]
+    fn the_track_menu_lists_the_instruments_for_its_track() {
+        let mut a = App::new(None);
+        a.state.project = crate::app::test_project();
+        a.plugins.available = crate::plugins::builtin();
+        a.state.plugdb.rebuild(&a.plugins);
+        let index = a.plugins.index_of(LEMON_TRIO).unwrap();
+        let p = crate::playlist::track_menu(&a.state, 3, 100.0, 200.0, 480);
+        let ins = p.items.iter().find(|i| i.label == "Insert instrument").expect("the submenu");
+        let pick = ins.children.iter().find(|i| i.label == LEMON_TRIO).expect("the generator");
+        assert_eq!(pick.cmd, Cmd::Plugin(PlugCmd::GeneratorOnTrack { index, track: 3, tick: 480 }));
+    }
+
+    /// The submenu's items come from the same database view the rack's Add one ▸ shows: favourites first, then the
+    /// rest by the display mode.
+    #[test]
+    fn on_track_items_match_the_racks_menu() {
+        let mut a = App::new(None);
+        a.state.project = crate::app::test_project();
+        a.plugins.available = crate::plugins::builtin();
+        a.state.plugdb.rebuild(&a.plugins);
+        let rack = crate::rack::add_one_items(&a.state).into_iter().filter(|i| !i.head && !i.sep && i.children.is_empty()).map(|i| i.label).collect::<Vec<_>>();
+        let on = items_on_track(&a.state, 0, 0, true).into_iter().filter(|i| !i.head && !i.sep && i.children.is_empty()).map(|i| i.label).collect::<Vec<_>>();
+        assert_eq!(on, rack);
     }
 }

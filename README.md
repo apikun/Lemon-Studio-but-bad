@@ -535,6 +535,7 @@ every feature marked as done, in progress or not started.
 - ✅ Clip groups: group, ungroup, select, move and copy together
 - ✅ More playlist shortcuts: zoom on selection, quick slice, snap cycling, insert a bar
 - ✅ Browser: drop effects into mixer slots
+- ✅ Instruments load straight onto the arranger: a generator dropped on the playlist or a track header, or the header menu's Insert instrument ▸, makes the channel and places a clip of a new pattern named after it on that track (issue #2)
 - ✅ Browser: reread (Ctrl+R) and only rows that have content
 - ✅ Browser: drag its width, long names scroll on hover, a right-click menu on every row
 - ✅ Browser: the arrow keys walk the tree as FL's do — a sample is heard the moment it is focused, Right replays it from the start, Left and Right open and close the folders
