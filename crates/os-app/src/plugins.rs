@@ -251,6 +251,7 @@ pub fn builtin() -> Vec<Available> {
     static BOOM: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static BASS: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static ACID: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static WAVETABLE: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     let mut v = linked(&LIB, &lemon_sampler::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, LEMON_SAMPLER);
     v.extend(linked(&OSC3, &lemon_3x_osc::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, crate::osc3::LEMON_TRIO));
     v.extend(linked(&CITRUS, &citrus::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, crate::citrus::CITRUS));
@@ -259,6 +260,8 @@ pub fn builtin() -> Vec<Available> {
     v.extend(linked(&BOOM, &lemon_boom::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Boom"));
     v.extend(linked(&BASS, &lemon_bass::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Bass"));
     v.extend(linked(&ACID, &lemon_acid::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Acid"));
+    // Mango Wavetable, from battlemountain2's fork (spec: docs/lemon-wavetable.md).
+    v.extend(linked(&WAVETABLE, &lemon_wavetable::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_WAVETABLE));
     v
 }
 
@@ -1311,6 +1314,8 @@ pub fn retired_count() -> usize {
 
 /// Name of Lemon Studio's sampler plugin: it plays and edits every sampler channel (spec: plugins/lemon-sampler.md §7).
 pub const LEMON_SAMPLER: &str = "Mango Sampler";
+/// Name of Mango Studio's wavetable synth, from battlemountain2's fork.
+pub const MANGO_WAVETABLE: &str = "Mango Wavetable";
 /// Name of Lemon Studio's parametric EQ plugin.
 pub const LEMON_EQ: &str = "Mango Parametric EQ";
 /// Lemon Studio's effects compiled in besides the EQ (`builtin_effects`, in this order). They have no file plugin of
