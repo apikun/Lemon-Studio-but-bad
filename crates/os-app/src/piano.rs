@@ -105,6 +105,42 @@ pub enum Overlay {
     Scrub(f32),
 }
 
+/// How note pitch is displayed on notes in the grid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NoteDisplay {
+    #[default]
+    Name,
+    Number,
+    None,
+}
+
+/// Key labels displayed on the vertical piano keyboard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum KeyLabels {
+    #[default]
+    AllWhite,
+    RootOnly,
+    None,
+}
+
+/// Piano roll scale highlighting (Alt+H; off at first, as in FL Studio).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScaleHighlight {
+    pub root: u8,
+    pub scale_idx: usize,
+    pub enabled: bool,
+}
+
+impl Default for ScaleHighlight {
+    fn default() -> Self {
+        ScaleHighlight {
+            root: 0,
+            scale_idx: crate::chords::FIRST_SCALE,
+            enabled: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PianoState {
     /// Time scroll in ticks (left edge of the grid).
@@ -162,6 +198,12 @@ pub struct PianoState {
     pub was_shown: Option<bool>,
     /// The magnet button's setting (spec: ui/piano-snap.md): a program setting, kept in the user folder (crate::snap).
     pub snap: crate::snap::EditorSnap,
+    /// Note pitch display mode on note bodies (name, MIDI number, or none).
+    pub note_display: NoteDisplay,
+    /// Note name display on the vertical piano roll keys (all white keys, root keys, or none).
+    pub key_labels: KeyLabels,
+    /// Scale highlighting / key helpers settings.
+    pub scale_highlight: ScaleHighlight,
     sel: Vec<usize>,
     sel_key: (u16, u16),
 }
@@ -195,6 +237,9 @@ impl Default for PianoState {
             split_click: None,
             was_shown: None,
             snap: crate::snap::EditorSnap::default(),
+            note_display: NoteDisplay::default(),
+            key_labels: KeyLabels::default(),
+            scale_highlight: ScaleHighlight::default(),
             sel: Vec::new(),
             sel_key: (0, 0),
         }
@@ -214,6 +259,10 @@ impl PianoState {
         self.sel_key = (pattern, channel);
         self.sel = sel;
         self.range = None;
+    }
+
+    pub fn has_selection(&self) -> bool {
+        !self.sel.is_empty() || self.range.is_some()
     }
 
     pub fn clear_selection(&mut self) {
