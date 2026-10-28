@@ -148,17 +148,19 @@ pub(crate) fn open(name: &str, rate: Option<u32>, buffer: Option<u32>, mut mix: 
             // only happens after this callback is removed (`AsioOut::drop`).
             unsafe { write(b[half] as *mut u8, sum, side, frames, format, big) };
         }
-        // The inputs of the same block, while One-click audio recording records.
-        let cap = crate::capture::capture();
-        if cap.on() && !in_halves.0.is_empty() {
+        // The inputs of the same block, while One-click audio recording records or a mixer track takes an input.
+        let (cap, mon) = (crate::capture::capture(), crate::capture::monitor());
+        if (cap.on() || mon.on()) && !in_halves.0.is_empty() {
             let last = in_halves.0.len() - 1;
             let n = in_format.bytes();
-            cap.push(frames, |ch, f| {
+            let at = |ch: usize, f: usize| {
                 let p = in_halves.0[ch.min(last)][half] as *const u8;
                 // Safety: the driver's input buffer holds `frames` samples of `in_format` while this callback runs.
                 let b = unsafe { std::slice::from_raw_parts(p.add(f * n), n) };
                 decode(b, in_format, in_big)
-            });
+            };
+            cap.push(crate::capture::ASIO_SOURCE, frames, at);
+            mon.push(crate::capture::ASIO_SOURCE, frames, at);
         }
     });
     // Drivers may ask to be reset while they start; that is not a reason to open them anew.

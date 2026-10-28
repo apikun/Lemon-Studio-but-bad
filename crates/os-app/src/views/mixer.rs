@@ -714,14 +714,16 @@ fn slot_panel(ui: &mut Ui, s: &State, r: Rect) {
     let kp = ((room - 15.0) / 503.0).clamp(0.3, 1.0);
     let knobs = room >= 579.0;
     let q = kp.max(0.55);
-    // Input row: EQ glyph, "(none)" combo, latency clock. Audio inputs are not available yet: greyed out.
+    // Input row: EQ glyph, the input combo (the device's input the track hears), latency clock (not available yet).
     let input_bg = ui.t.s(0x2b2e30);
     ui.c.fill_rect(Rect::new(r.x, r.y + 23.0, r.w, 36.0), input_bg);
     let mut g = Glyph::new();
     g.polygon(&[(r.x + 7.0, r.y + 32.0), (r.x + 13.0, r.y + 32.0), (r.x + 18.0, r.y + 37.5), (r.x + 13.0, r.y + 43.0), (r.x + 7.0, r.y + 43.0)]);
     ui.c.glyph(ui.t.s(0x40464a), &g);
     ui.c.text(Font::new(9).bold(), r.x + 6.0, r.y + 43.0, ui.t.s(0x40464a), "EQ");
-    off_combo(ui, Rect::new(r.x + 27.0, r.y + 28.0, 159.0, 23.0), "Audio input source", input_bg);
+    let combo = Rect::new(r.x + 27.0, r.y + 28.0, 159.0, 23.0);
+    let hov = ui.hit(combo, Action::Mix(MHit::Input), "Audio input source");
+    os_ui::kit::combo(ui.c, ui.t, combo, &mx::input_label(s, n), Font::new(17), os_ui::kit::State::hover(hov));
     let mut g = Glyph::new();
     g.ring(r.x + 202.0, r.y + 39.5, 8.5, 1.8).rect(r.x + 201.2, r.y + 34.0, 1.6, 6.5).rect(r.x + 201.2, r.y + 38.9, 5.0, 1.6);
     ui.c.glyph(ui.t.tx(0xd4dade), &g);
@@ -864,7 +866,7 @@ fn slot_panel(ui: &mut Ui, s: &State, r: Rect) {
     off_combo(ui, Rect::new(r.x + 26.0, b - 28.0, 189.0, 24.0), "Audio output target", ui.t.s(0x2e3133));
 }
 
-/// An input / output combo that is not available yet: drawn greyed out, its hit only says so.
+/// An output combo that is not available yet: drawn greyed out, its hit only says so.
 fn off_combo(ui: &mut Ui, r: Rect, name: &'static str, bg: Color) {
     ui.off(r, name);
     let st = os_ui::kit::State::NORMAL.with_disabled(true);

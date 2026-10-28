@@ -597,6 +597,13 @@ impl Transport {
         self.shared.marker_hold.store(0, Ordering::Relaxed);
         self.shared.song.store(matches!(mode, PlayMode::Song), Ordering::Relaxed);
         self.shared.rewind(start_tick);
+        // The position is the start's from now on, not the song's start until the stream opens (a take placed by it
+        // reads it from the first tick: `one_click_tick`).
+        let rate = self.shared.sample_rate.load(Ordering::Relaxed);
+        if start_tick > 0.0 && rate > 0 {
+            let tempo = project.tick_tempo(project.tempo.unwrap_or(140.0));
+            self.shared.position.store(os_engine::laws::tick_to_frame(start_tick, project.ppq.max(1), tempo, rate), Ordering::Relaxed);
+        }
         self.shared.state.store(PLAYING, Ordering::Release);
         let starts = Starts { count_in: bars, ..Starts::from_prefs() };
         let _ = self.tx.send(Cmd::Play(Box::new(project.clone()), mode, start_tick, generation, starts));
@@ -1908,6 +1915,10 @@ impl Session {
         let out = device.open()?;
         let (rate, fixed, info) = (out.info.rate, out.info.fixed, out.info.clone());
         let mut e = engine(project, library, rate, mode, inst, kind != Kind::Preview);
+        // Playback and live notes hear the mixer tracks' inputs (a rebuilt engine keeps them: `continue_from`).
+        if kind != Kind::Preview {
+            e.set_live_input(crate::capture::live_input());
+        }
         // Playback loops: a pattern on its bar line, the song at its end (back to the start).
         e.set_looping(song);
         if kind == Kind::Live {
