@@ -204,6 +204,47 @@ pub enum Mark {
     Radio(bool),
 }
 
+/// The grids Chop ▸ cuts clips on (battlemountain2's drum chopper, `crate::drum_chop`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChopGrid {
+    Bar,
+    HalfBar,
+    Beat,
+    HalfBeat,
+    Step,
+    ThirtySecond,
+    TripletSixth,
+}
+
+impl ChopGrid {
+    pub const ALL: [ChopGrid; 7] = [ChopGrid::Bar, ChopGrid::HalfBar, ChopGrid::Beat, ChopGrid::HalfBeat, ChopGrid::Step, ChopGrid::ThirtySecond, ChopGrid::TripletSixth];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ChopGrid::Bar => "Bar",
+            ChopGrid::HalfBar => "Half bar",
+            ChopGrid::Beat => "Beat",
+            ChopGrid::HalfBeat => "Half beat",
+            ChopGrid::Step => "Step",
+            ChopGrid::ThirtySecond => "32nd",
+            ChopGrid::TripletSixth => "Triplet",
+        }
+    }
+
+    pub fn ticks(self, ppq: u16) -> u32 {
+        let p = u32::from(ppq.max(1));
+        match self {
+            ChopGrid::Bar => p * 4,
+            ChopGrid::HalfBar => p * 2,
+            ChopGrid::Beat => p,
+            ChopGrid::HalfBeat => (p / 2).max(1),
+            ChopGrid::Step => (p / 4).max(1),
+            ChopGrid::ThirtySecond => (p / 8).max(1),
+            ChopGrid::TripletSixth => (p * 4 / 6).max(1),
+        }
+    }
+}
+
 /// Commands of the playlist's popup menus (§10).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
@@ -285,8 +326,11 @@ pub enum Cmd {
     ClipTimeSig(usize, u16, u16),
     /// Select region ▸: the clip plays the pattern from one marker to the next (start, end in pattern ticks).
     ClipRegion(usize, u32, u32),
-    /// Chop ▸: the clip (with the other selected clips when it is one of them) cut every that many ticks.
-    ClipChop(usize, u32),
+    /// Chop ▸ (battlemountain2's drum chopper): the clip, with the other selected clips when it is one of them, cut at
+    /// its drum hits (audio clips), on a grid, or into a stutter of that many repeats of its first piece.
+    ChopTransients(usize),
+    ChopGrid(usize, ChopGrid),
+    ChopStutter(usize, usize),
     ClipEditSource(usize),
     ClipSelectSimilar(usize),
     ClipRename(usize),
@@ -2524,6 +2568,7 @@ pub fn clip_menu(s: &State, i: usize, x: f32, y: f32) -> Popup {
     }
     items.push(PItem::new("Select all similar clips", Cmd::ClipSelectSimilar(i)));
     items.push(PItem::new("Delete", Cmd::ClipDelete(i)));
+    items.extend([PItem::sep(), PItem::head("Region"), PItem::sub("Chop", chop_items(i, source_kind(s, c.source) == PickKind::Audio))]);
     Popup { x, y, items, sub: None, scroll: [0; 2] }
 }
 
@@ -2559,12 +2604,7 @@ fn pattern_clip_menu(s: &State, i: usize, n: u16, x: f32, y: f32) -> Popup {
     if regions.is_empty() {
         regions.push(PItem::new("(no regions: add markers in the piano roll)", Cmd::Nothing).off());
     }
-    let (bar, beat) = (bar(s), ppq(s));
-    let chops = vec![
-        PItem::new("Bar", Cmd::ClipChop(i, bar)),
-        PItem::new("Beat", Cmd::ClipChop(i, beat)),
-        PItem::new("Step", Cmd::ClipChop(i, (beat / 4).max(1))),
-    ];
+    let chops = chop_items(i, false);
     let items = vec![
         PItem::head("Pattern clip"),
         PItem::new("Preview", Cmd::ClipPreview(i)),
@@ -2587,6 +2627,17 @@ fn pattern_clip_menu(s: &State, i: usize, n: u16, x: f32, y: f32) -> Popup {
         PItem::sub("Chop", chops),
     ];
     Popup { x, y, items, sub: None, scroll: [0; 2] }
+}
+
+/// Chop ▸ of clip `i`'s menu: at the drum hits (`audio` clips), on a grid, or as a stutter.
+fn chop_items(i: usize, audio: bool) -> Vec<PItem> {
+    let mut v = Vec::new();
+    if audio {
+        v.extend([PItem::new("At transients", Cmd::ChopTransients(i)), PItem::sep()]);
+    }
+    v.extend(ChopGrid::ALL.iter().map(|&g| PItem::new(g.label(), Cmd::ChopGrid(i, g))));
+    v.extend([PItem::sep(), PItem::new("Stutter 4x", Cmd::ChopStutter(i, 4)), PItem::new("Stutter 8x", Cmd::ChopStutter(i, 8))]);
+    v
 }
 
 /// The commands of a picker item's menu (§10a).
@@ -4625,28 +4676,17 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
             s.piano.dirty = true;
             None
         }
-        Cmd::ClipChop(i, step) => {
-            // The selected clips when this one is one of them, else this one (FL chops all the selected clips).
-            let mut which: Vec<usize> = if s.playlist.sel.contains(&i) { s.playlist.sel.clone() } else { vec![i] };
-            which.sort_unstable();
-            snapshot(s);
-            let mut cuts = 0;
-            for k in which {
-                let Some(c) = clips(s).get(k).copied() else { continue };
-                // Cuts on the grid from the clip's start, right to left so `k` stays this clip's left part.
-                let mut at = c.position + step;
-                let mut ticks = Vec::new();
-                while at < c.end() {
-                    ticks.push(at);
-                    at += step;
-                }
-                for &t in ticks.iter().rev() {
-                    if split(s, k, t).is_some() {
-                        cuts += 1;
-                    }
-                }
-            }
-            Some(format!("Chopped into {} more pieces", cuts))
+        Cmd::ChopTransients(i) => {
+            let n = crate::drum_chop::chop_selected_or_target(s, i, crate::drum_chop::chop_clip_transients);
+            Some(if n > 1 { format!("Chopped into {n} slices at the drum hits") } else { "No drum hits found to chop at".into() })
+        }
+        Cmd::ChopGrid(i, grid) => {
+            let n = crate::drum_chop::chop_selected_or_target(s, i, |s, k| crate::drum_chop::chop_clip_grid(s, k, grid));
+            Some(format!("Chopped into {n} slices ({})", grid.label().to_lowercase()))
+        }
+        Cmd::ChopStutter(i, repeats) => {
+            let n = crate::drum_chop::chop_selected_or_target(s, i, |s, k| crate::drum_chop::chop_clip_stutter(s, k, repeats));
+            Some(format!("Stutter: {n} slices"))
         }
         Cmd::ClipEditSource(i) => {
             if let Some(ClipSource::Pattern(n)) = clips(s).get(i).map(|c| c.source) {

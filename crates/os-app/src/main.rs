@@ -122,6 +122,7 @@ mod lfo;
 mod quantize;
 mod randomize;
 mod chop;
+mod drum_chop;
 mod piano_dlg;
 mod arpeggiate;
 mod tapper;

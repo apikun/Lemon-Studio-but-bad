@@ -9862,7 +9862,7 @@ mod tests {
         assert_eq!(labels, ["Pattern clip", "Preview", "Muted", "Rename and color...", "Change color...", "Random color", "Select source pattern", "Edit pattern", "Make unique", "Select all similar clips", "Delete", "Use current time signature from", "Region", "Select region", "Chop"]);
         // Chop ▸ Beat: a two-bar clip in 4/4 is eight beats.
         let beat = u32::from(a.state.project.ppq);
-        pl::run(&mut a, pl::Cmd::ClipChop(i, beat));
+        pl::run(&mut a, pl::Cmd::ChopGrid(i, pl::ChopGrid::Beat));
         let mut pieces: Vec<(u32, u32)> = pl::clips(&a.state).iter().filter(|c| c.track == 0).map(|c| (c.position, c.length)).collect();
         pieces.sort_unstable();
         assert_eq!(pieces, (0..8).map(|k| (k * beat, beat)).collect::<Vec<_>>());
