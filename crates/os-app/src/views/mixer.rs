@@ -391,10 +391,21 @@ fn strip(ui: &mut Ui, s: &State, n: u16, left: f32, bottom: f32, f: &FrameInfo, 
     let body = if selected { ui.t.s(0x26292b) } else { ui.t.s(0x232527) };
     let lemon = super::lemon(ui);
     if lemon {
-        // Lemon (spec: ui/lemon-design.md §8): each strip is a rounded card on the dark gap colour.
+        // Lemon (spec: ui/lemon-design.md §8): each strip is a rounded card on the dark gap colour. Mango, black: the gap
+        // black, the card lit from the top down and rimmed, the selected one lighter with a mango rim, so every strip
+        // stands on its own.
         let card = Rect::new(left, ly.y(HEAD_Y1) + 1.0, STRIP_W, bottom - ly.y(HEAD_Y1) - 1.0);
-        ui.c.fill_rect(card, ui.t.s(0x131517));
-        ui.c.fill_rrect(Rect::new(card.x + 1.5, card.y + 1.0, card.w - 3.0, card.h - 4.0), lk::r_panel(t), body);
+        ui.c.fill_rect(card, Color::rgb(0x000000));
+        let face = Rect::new(card.x + 2.0, card.y + 1.0, card.w - 4.0, card.h - 4.0);
+        let (top, low, rim) = if selected {
+            (Color::rgb(0x2a2a2a), Color::rgb(0x1a1a1a), t.accent.mix(Color::rgb(0x2e2e2e), 0.55))
+        } else {
+            (Color::rgb(0x202020), Color::rgb(0x121212), Color::rgb(0x2e2e2e))
+        };
+        ui.c.fill_rrect(face.outset(1.0), lk::r_panel(t) + 1.0, rim);
+        ui.c.fill_rect_gradient(face, top, low, lk::r_panel(t));
+        // The shine: a light line along the card's top edge.
+        ui.c.fill_rrect(Rect::new(face.x + 4.0, face.y + 1.0, face.w - 8.0, 1.0), 0.5, top.mix(Color::rgb(0xffffff), 0.12));
     } else {
         ui.c.fill_rect(Rect::new(left, ly.y(HEAD_Y1) + 1.0, STRIP_W, bottom - ly.y(HEAD_Y1) - 1.0), body);
         ui.c.fill_rect(Rect::new(left + STRIP_W - 1.0, ly.y(HEAD_Y1) + 1.0, 1.0, bottom - ly.y(HEAD_Y1) - 1.0), ui.t.s(0x1c1f21));
