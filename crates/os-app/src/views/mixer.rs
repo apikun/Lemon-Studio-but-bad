@@ -205,32 +205,36 @@ pub fn paint(ui: &mut Ui, s: &State, r: Rect, f: &FrameInfo) {
         ui.c.fill_rect(Rect::new(r.x + 92.0, ly.y(497.0 + 3.0 * k as f32), 1.0, 1.0), ui.t.s(0x3a3e41));
     }
     ui.c.push_clip(area);
+    let visible = mx::visible_tracks(s);
+    let total_tracks = visible.len();
     let first = (s.mixer_scroll / STRIP_W) as usize;
     let count = (area.w / STRIP_W).ceil() as usize + 2;
-    for n in (first + 1..first + 1 + count).filter(|n| *n <= usize::from(inserts)) {
-        let left = area.x + STRIP_W * (n - 1) as f32 - s.mixer_scroll;
-        strip(ui, s, n as u16, left, bottom, f, &ly);
+    for (i, &n) in visible.iter().enumerate().skip(first).take(count) {
+        let left = area.x + STRIP_W * i as f32 - s.mixer_scroll;
+        strip(ui, s, n, left, bottom, f, &ly);
     }
     // "+" after the last strip, at the fader handle's height (spec: ui/mixer.md §1).
-    let px = area.x + STRIP_W * f32::from(inserts) - s.mixer_scroll + 14.0;
-    let pb = Rect::new(px - 9.0, ly.y(HANDLE_0DB) - 9.0, 18.0, 18.0);
-    if px < area.right() + 10.0 {
-        let hov = ui.hit(pb, Action::Mix(MHit::Add), "Add more tracks");
-        if hov && lemon {
-            ui.c.fill_rrect(pb, lk::r_btn(ui.t), ui.t.button_hi);
-        } else if hov {
-            ui.c.stroke_rrect(pb, 3.0, 1.0, ui.t.h(0xf09a28));
+    if s.pattern_mixer_filter.is_none() {
+        let px = area.x + STRIP_W * f32::from(inserts) - s.mixer_scroll + 14.0;
+        let pb = Rect::new(px - 9.0, ly.y(HANDLE_0DB) - 9.0, 18.0, 18.0);
+        if px < area.right() + 10.0 {
+            let hov = ui.hit(pb, Action::Mix(MHit::Add), "Add more tracks");
+            if hov && lemon {
+                ui.c.fill_rrect(pb, lk::r_btn(ui.t), ui.t.button_hi);
+            } else if hov {
+                ui.c.stroke_rrect(pb, 3.0, 1.0, ui.t.h(0xf09a28));
+            }
+            icons::draw(ui.c, Icon::Plus, pb.inset(3.0), if hov { ui.t.tx(0xffffff) } else { ui.t.tx(0x9aa1a5) });
         }
-        icons::draw(ui.c, Icon::Plus, pb.inset(3.0), if hov { ui.t.tx(0xffffff) } else { ui.t.tx(0x9aa1a5) });
     }
     ui.c.pop_clip();
     strip(ui, s, 0, r.x + 44.0, bottom, f, &ly);
 
     // Horizontal scroll bar under the strips.
     let sb = Rect::new(area.x + 13.0, bottom - 14.0, area.w - 20.0, 9.0);
-    super::scrollbar(ui, sb, false, s.mixer_scroll, area.w, (f32::from(inserts) + 1.0) * STRIP_W, crate::app::Scroll::MixerX);
+    super::scrollbar(ui, sb, false, s.mixer_scroll, area.w, (total_tracks as f32 + 1.0) * STRIP_W, crate::app::Scroll::MixerX);
     chevron(ui, area.x + 5.0, bottom - 9.5, false, ui.t.s(0x5d6366));
-    cables(ui, s, strips, area, bottom);
+    cables(ui, s, strips, area, bottom, &visible);
 
     slot_panel(ui, s, Rect::new(r.right() - panel_w, r.y, panel_w, r.h));
     resize_zones(ui, s, Win::Mixer, outer);
@@ -238,10 +242,16 @@ pub fn paint(ui: &mut Ui, s: &State, r: Rect, f: &FrameInfo) {
 
 /// The routing cables (spec: ui/mixer.md §5): one from the current track's ⬇ into each of its send knobs, sagging
 /// and swinging (crate::cable). Sockets on strips scrolled out of view still hold their cable's end.
-fn cables(ui: &mut Ui, s: &State, strips: Rect, area: Rect, bottom: f32) {
+fn cables(ui: &mut Ui, s: &State, strips: Rect, area: Rect, bottom: f32, visible: &[u16]) {
     let socket_x = |n: u16| match n {
         0 => strips.x + 44.0 + 22.0,
-        n => area.x + STRIP_W * f32::from(n - 1) - s.mixer_scroll + 22.0,
+        n => {
+            let idx = visible.iter().position(|&t| t == n);
+            match idx {
+                Some(i) => area.x + STRIP_W * i as f32 - s.mixer_scroll + 22.0,
+                None => -1000.0,
+            }
+        }
     };
     // Each cable is plugged in under the middle of its ⬇ and its knob, which are drawn again over the cables' ends.
     let (ay, ky) = (bottom - 38.0, bottom - 40.0);
@@ -310,8 +320,19 @@ fn title_tools(ui: &mut Ui, s: &State, r: Rect) {
     icons::draw(ui.c, Icon::Plus, Rect::new(r.x + 110.0 + px, y - 7.0, 14.0, 14.0), if hov { ui.t.tx(0xffffff) } else { ui.t.tx(0xc4ccd0) });
     let lb = Rect::new(r.x + 130.0 + px, r.y + 2.0, 50.0, 20.0);
     let hov = ui.hit(lb, Action::Mix(MHit::Layout), "Mixer layout");
-    let _ = s;
     ui.c.text(Font::new(17), r.x + 134.0 + px, r.y + 2.0, if hov { ui.t.tx(0xffffff) } else { ui.t.tx(0xb8c4cb) }, "Wide");
+
+    if let Some(pat) = s.pattern_mixer_filter {
+        let pat_name = crate::patterns::name_of(s, pat);
+        let badge_text = format!("Focus: {pat_name}  ✕");
+        let badge_w = (badge_text.len() as f32 * 7.5 + 16.0).max(80.0);
+        let badge = Rect::new(r.x + 190.0 + px, r.y + 2.0, badge_w, 20.0);
+        let hov = ui.hit(badge, Action::Mix(MHit::ClearPatternFilter), "Click to clear pattern focus and show all mixer tracks");
+        let bg_col = if hov { ui.t.s(0x3a4248) } else { ui.t.s(0x283036) };
+        ui.c.fill_rrect(badge, 3.0, bg_col);
+        ui.c.stroke_rrect(badge, 3.0, 1.0, ui.t.h(0xf09a28));
+        ui.c.text_center(Font::new(13), badge, if hov { ui.t.tx(0xffffff) } else { ui.t.h(0xf3b234) }, &badge_text);
+    }
 }
 
 fn mix(a: Color, b: Color, t: f32) -> Color {

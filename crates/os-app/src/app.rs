@@ -1041,6 +1041,7 @@ pub struct State {
     pub selected_channel: usize,
     pub selected_mixer: u16,
     pub pattern: u16,
+    pub pattern_mixer_filter: Option<u16>,
     pub song_mode: bool,
     pub menu_open: Option<usize>,
     /// The open dropdown's submenu, shown as `playlist.popup`: the flat index of its ▸ entry.
@@ -1442,6 +1443,7 @@ impl App {
                 selected_mixer: 1,
                 mixer: Default::default(),
                 pattern: 1,
+                pattern_mixer_filter: None,
                 song_mode: false,
                 menu_open: None,
                 menu_sub: None,
@@ -3409,6 +3411,12 @@ impl App {
         }
 
         // --- LEVEL 2: Filters, Badges & Selections ---
+        if self.state.pattern_mixer_filter.take().is_some() {
+            self.state.message = Some("Mixer focus cleared (showing all tracks)".into());
+            self.damage_win(Win::Mixer);
+            self.invalidate();
+            return true;
+        }
         if self.state.piano.has_selection() {
             self.state.piano.clear_selection();
             self.invalidate();
@@ -6340,6 +6348,32 @@ impl App {
                 return self.invalidate();
             }
         }
+        if let Some(Action::PatternNext) = action {
+            let pat = self.state.pattern.max(1);
+            if self.state.pattern_mixer_filter == Some(pat) {
+                self.state.pattern_mixer_filter = None;
+                self.state.message = Some("Mixer focus cleared (showing all tracks)".into());
+            } else {
+                self.state.pattern_mixer_filter = Some(pat);
+                self.state.raise(Win::Mixer);
+                self.state.message = Some(format!("Mixer focused on Pattern {pat}"));
+            }
+            self.damage_win(Win::Mixer);
+            return self.invalidate();
+        }
+        if let Some(Action::PlPick(os_model::ClipSource::Pattern(p))) = action {
+            let pat = p as u16;
+            if self.state.pattern_mixer_filter == Some(pat) {
+                self.state.pattern_mixer_filter = None;
+                self.state.message = Some("Mixer focus cleared (showing all tracks)".into());
+            } else {
+                self.state.pattern_mixer_filter = Some(pat);
+                self.state.raise(Win::Mixer);
+                self.state.message = Some(format!("Mixer focused on Pattern {pat}"));
+            }
+            self.damage_win(Win::Mixer);
+            return self.invalidate();
+        }
         if let Some(Action::BrowserRow(i)) = action {
             if self.browser_row_middle(i) {
                 return;
@@ -8315,7 +8349,12 @@ impl App {
             Action::MenuSub(m, i) => self.open_menu_sub(m, i),
             // Show a hidden window, bring a covered one to the front, hide one already in front
             // (spec: ui/channel-rack.md §5).
-            Action::ToggleWin(Win::Browser) => s.show_browser = !s.show_browser,
+            Action::ToggleWin(Win::Browser) => {
+                s.show_browser = !s.show_browser;
+                if s.show_browser {
+                    crate::win_clamp::keep_all(s);
+                }
+            }
             Action::ToggleWin(Win::Perf) => self.toggle_perf(),
             Action::ToggleWin(Win::Tapper) => self.toggle_tapper(),
             Action::ToggleWin(Win::Touch) => self.toggle_touch(),
@@ -8611,7 +8650,12 @@ impl App {
         } else {
             if !s.shown(Win::Plugin) {
                 let r = views::rack::rect(s);
-                s.plugin_pos = ((r.right() + 8.0).min(1920.0 - 440.0), r.y.min(1080.0 - 210.0));
+                let to = crate::win_clamp::inside(
+                    Rect::new(r.right() + 8.0, r.y, views::channel_win::SIZE.0, views::channel_win::SIZE.1),
+                    s.work_rect(),
+                    views::channel_win::SIZE,
+                );
+                s.plugin_pos = (to.x, to.y);
             }
             s.plugin_channel = i;
             s.raise(Win::Plugin);
@@ -9972,6 +10016,12 @@ mod tests {
         a.state.playlist.popup = Some(crate::playlist::Popup { x: 0.0, y: 0.0, items: vec![], sub: None, scroll: [0; 2] });
         assert!(a.smart_escape());
         assert!(a.state.playlist.popup.is_none());
+
+        // 3. Level 2: Pattern Mixer Filter (Pattern Focus) clearing
+        a.state.pattern_mixer_filter = Some(1);
+        assert!(a.smart_escape());
+        assert!(a.state.pattern_mixer_filter.is_none());
+        assert_eq!(a.state.message.as_deref(), Some("Mixer focus cleared (showing all tracks)"));
 
         // 4. Level 2: Piano Roll selection clearing
         a.state.piano.select(1, 0, vec![0, 1]);
@@ -15315,6 +15365,7 @@ mod tests {
         let mut app = App::new(None);
         app.theme = design_theme(design, false);
         app.state.wins.iter_mut().for_each(|w| w.maxed = false);
+        app.state.show_browser = false;
         app.state.z = vec![Win::Playlist, Win::Mixer];
         frame(&mut app, &mut a, None);
         let _ = app.take_damage();

@@ -278,9 +278,14 @@ Windows (or detach, from their window menu). A few things differ from Windows fo
   then always separate windows, kept above Mango Studio while it is the active application; their window menu, Presets
   list and Misc lists do not open, and files cannot be dropped in from a file manager (the windowing library does not
   support it there).
-- **Scaling:** under XWayland Mango Studio follows the X11 scale (`Xft.dpi`). If it looks soft on a fractionally scaled
-  Wayland desktop, let X11 applications scale themselves (KDE: Display Configuration > Legacy applications (X11) >
-  Apply scaling themselves).
+- **Scaling:** the main window follows [winit's X11 scale selection](https://docs.rs/winit/0.30.13/winit/window/struct.Window.html#method.scale_factor).
+  Docked plugin frames and editors share that scale and follow changes; Mango plugins keep their active page when
+  their editor reopens at the new scale. With a native Wayland main window, separate X11 plugin frames still use the
+  X server's scale rather than the Wayland window's.
+- **Hyprland with docked plugins:** keep XWayland available and leave `OPENSTUDIO_WAYLAND` unset. No compositor rules
+  are required by this scaling fix. For an optional app-only size override, launch with
+  `WINIT_X11_SCALE_FACTOR=1.25 mangostudio`. This does not change Hyprland's monitor scaling or guarantee that compositor
+  upscaling will be sharp; the app's X11 scale and the compositor's output scale are separate settings.
 - **Keys** pressed while a plugin's editor has the keyboard focus do not play the typing keyboard yet, and a sample
   dragged from Mango Studio's browser onto a plugin window does not reach the plugin yet.
 - **Mango Sampler** cannot copy or paste audio through the clipboard yet.
@@ -372,6 +377,17 @@ cargo test --workspace
 Tests that need an audio device are marked `#[ignore]` and run with `cargo test -p os-app -- --ignored`.
 Project-file corpus tests run when `OPENSTUDIO_FLP_CORPUS` points to a text file listing `.flp` paths;
 project files are never committed to this repository.
+On a Linux desktop with X11/XWayland available, run the real docked-editor scaling check separately:
+
+```bash
+cargo test -p os-app --locked docked_editor_follows_xwayland_parent_scale -- --ignored --nocapture
+```
+
+It embeds Mango Sampler under an unmapped X11 parent (without taking desktop focus), checks the editor and its frame
+at 100%, 125%, 150% and 200%, verifies docking and active-page preservation, and checks that a docking request
+reconciles a stale editor scale. It is explicitly ignored in the
+ordinary suite because it requires a display; it does not certify every third-party editor or mixed-DPI monitor setup.
+
 The watermark test (`cargo test -p watermark`) checks that every source file opens with its header: a copyright line
 for each of its copyright holders, its SPDX licence identifier and the project's name.
 
