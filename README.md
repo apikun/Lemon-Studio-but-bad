@@ -94,9 +94,9 @@ Where Mango Studio stands against what a complete DAW offers:
 | Plugin management | ✅ | Plugin manager with your own search folders, a crash-safe background scan, favourites and hidden plugins; presets of your own and factory presets, import of `.vstpreset`, `.fxp` and `.fxb` files, and preset files dropped onto a plugin |
 | Time-stretching | ✅ | All twelve stretch methods for samples and audio clips, played by one open-source stretcher |
 | Playback engine | 🚧 | Renders ahead of the audio device so edits do not cause dropouts; voice limits, cut groups, glides, layer channels; one audio thread for now |
-| Automation | 🚧 | Clips for channel, mixer and plugin parameters with every curve shape; channel volume and pan moves record into a pattern; not yet recording into automation clips, or clip LFO |
+| Automation | 🚧 | Clips for channel, mixer and plugin parameters with every curve shape, their range and their LFO; channel volume and pan moves record into a pattern; not yet recording into automation clips |
 | Project files | 🚧 | Opens and saves projects from FL Studio 24.2 and later; older versions are on the roadmap. Keep backups |
-| Built-in instruments and effects | 🚧 | Instruments: Mango Sampler (long samples can play straight from disk), Mango Trio (three oscillators), Citrus (a six-operator synth that plays Sytrus patches), Mango Kick (a kick drum), Mango Boom (a bass drum), Mango Bass (a bass guitar) and Mango Acid (an acid bass). Effects: Mango Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion, Transient Processor, Mango Beat (FL's Gross Beat: time and gate envelopes per beat), Press (FL's Maximus) and Pulp Filter (FL's Fruity Love Philter). All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Mango Limiter's sound, sidechain included |
+| Built-in instruments and effects | 🚧 | Instruments: Mango Sampler (long samples can play straight from disk), Mango Trio (three oscillators), Citrus (a six-operator synth that plays Sytrus patches), Mango Kick (a kick drum), Mango Boom (a bass drum), Mango Bass (a bass guitar) and Mango Acid (an acid bass). Effects: Mango Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion, Transient Processor, Filter, Flanger, Phaser, Mango Beat (FL's Gross Beat: time and gate envelopes per beat), Press (FL's Maximus) and Pulp Filter (FL's Fruity Love Philter). All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Mango Limiter's sound, sidechain included |
 | Exporting audio | ✅ | Song, pattern or selection to WAV, FLAC, MP3 and OGG at once; bit depth, sample rate, interpolation, dither, mono, tails, stems and WAV markers; a pattern rendered as an audio clip (Quick render, Render and replace) |
 | MIDI file import / export | ✅ | Import into a new project, the open one or a piano roll channel (tracks, channels, tempo changes, time signatures, markers); export a pattern or the song's patterns |
 | Note input | 🚧 | Mouse, computer keyboard, MIDI controllers (velocity curves, sustain pedal, pitch bend, aftertouch) and the touch controller; note recording into patterns with loop record, precount and Start on input; step edit |
@@ -147,7 +147,7 @@ cd Mango-Studio
 `cargo run -p os-app --release` builds and runs Mango Studio. Before Mango Studio starts, it also rebuilds Mango
 Studio's own plugins (Mango Sampler, Mango Trio, Mango Parametric EQ, Mango Limiter, Mango Reverb, Mango Delay, Mango
 Soft Clipper, Mango Fast Distortion, Mango Balance, Mango Stereo Enhancer, Mango Transient Processor, Mango Chorus,
-Mango Stereo Shaper, Mango Beat, Citrus, Tesla, Press, Pulp Filter, Mango Kick, Mango Boom, Mango Bass and Mango Acid) and
+Mango Stereo Shaper, Mango Filter, Mango Flanger, Mango Phaser, Mango Beat, Citrus, Tesla, Press, Pulp Filter, Mango Kick, Mango Boom, Mango Bass and Mango Acid) and
 installs the ones that changed as VST3 and CLAP plugins, in the folders where other DAWs find them. Mango Studio itself
 has every one of them built in and needs no plugin files. A plugin that is new or updated in the repository shows up
 in other DAWs at the next run. The first run builds every plugin, which takes
@@ -411,7 +411,7 @@ Mango Studio is a Cargo workspace of focused crates:
 | [`lemon-limiter`](plugins/lemon-limiter) | Mango Limiter effect (VST3 + CLAP) |
 | [`lemon-reverb`](plugins/lemon-reverb) | Mango Reverb effect (VST3 + CLAP) |
 | [`lemon-delay`](plugins/lemon-delay) | Mango Delay effect (VST3 + CLAP) |
-| [`lemon-small-fx`](plugins/lemon-small-fx) | What the seven small Mango effects share: the plugin, its state, the editor and each effect's description |
+| [`lemon-small-fx`](plugins/lemon-small-fx) | What the small Mango effects share: the plugin, its state, the editor and each effect's description |
 | [`lemon-soft-clipper`](plugins/lemon-soft-clipper) | Mango Soft Clipper effect (VST3 + CLAP) |
 | [`lemon-fast-distortion`](plugins/lemon-fast-distortion) | Mango Fast Distortion effect (VST3 + CLAP) |
 | [`lemon-balance`](plugins/lemon-balance) | Mango Balance effect (VST3 + CLAP) |
@@ -419,6 +419,9 @@ Mango Studio is a Cargo workspace of focused crates:
 | [`lemon-transient-processor`](plugins/lemon-transient-processor) | Mango Transient Processor effect (VST3 + CLAP) |
 | [`lemon-chorus`](plugins/lemon-chorus) | Mango Chorus effect (VST3 + CLAP) |
 | [`lemon-stereo-shaper`](plugins/lemon-stereo-shaper) | Mango Stereo Shaper effect (VST3 + CLAP) |
+| [`lemon-filter`](plugins/lemon-filter) | Mango Filter effect (VST3 + CLAP) |
+| [`lemon-flanger`](plugins/lemon-flanger) | Mango Flanger effect (VST3 + CLAP) |
+| [`lemon-phaser`](plugins/lemon-phaser) | Mango Phaser effect (VST3 + CLAP) |
 | [`mango-beat`](plugins/mango-beat) | Mango Beat effect, a Gross Beat-style time manipulator (VST3 + CLAP) |
 | [`citrus`](plugins/citrus) | Citrus instrument, a six-operator synthesizer (VST3 + CLAP) |
 | [`tesla`](plugins/tesla) | Tesla, the audio editor and recorder (VST3 + CLAP) |
