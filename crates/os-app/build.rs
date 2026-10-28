@@ -65,8 +65,8 @@ fn main() {
     if matches!(std::env::var("CARGO_CFG_TARGET_OS").as_deref(), Ok("windows" | "linux" | "macos")) {
         println!("cargo::rustc-cfg=plugin_windows");
     }
-    println!("cargo:rerun-if-changed=assets/lemonstudio.rc");
-    println!("cargo:rerun-if-changed=assets/lemonstudio.ico");
+    println!("cargo:rerun-if-changed=assets/mangostudio.rc");
+    println!("cargo:rerun-if-changed=assets/mangostudio.ico");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows")
         || std::env::var("CARGO_CFG_TARGET_ENV").as_deref() != Ok("msvc")
     {
@@ -76,11 +76,11 @@ fn main() {
         println!("cargo:warning=rc.exe not found (Windows SDK); building without the app icon");
         return;
     };
-    let out = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("lemonstudio.res");
+    let out = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("mangostudio.res");
     let ok = Command::new(&rc)
         .args(["/nologo", "/fo"])
         .arg(&out)
-        .arg("assets/lemonstudio.rc")
+        .arg("assets/mangostudio.rc")
         .status()
         .is_ok_and(|s| s.success());
     if ok {

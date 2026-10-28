@@ -183,9 +183,9 @@ const CONTROLS: [Control; 8] = [
 ];
 
 pub const SPEC: &GenSpec = &GenSpec {
-    name: "Lemon Kick",
+    name: "Mango Kick",
     word: "KICK",
-    about: "Lemon Studio's kick drum",
+    about: "Mango Studio's kick drum",
     settings: &SETTINGS,
     version: None,
     any_version: false,
@@ -467,7 +467,7 @@ pub struct KickKind;
 impl Kind for KickKind {
     const SPEC: &'static GenSpec = SPEC;
     const CLAP_ID: &'static str = "org.openstudio.lemon-kick";
-    const CLAP_DESCRIPTION: &'static str = "Lemon Studio's kick drum";
+    const CLAP_DESCRIPTION: &'static str = "Mango Studio's kick drum";
     const CLAP_FEATURES: &'static [ClapFeature] = &[
         ClapFeature::Instrument,
         ClapFeature::Synthesizer,

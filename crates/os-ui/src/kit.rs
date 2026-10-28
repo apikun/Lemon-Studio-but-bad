@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 Artig3nce
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -294,6 +295,14 @@ pub fn led(c: &mut Canvas, t: &Palette, cx: f32, cy: f32, radius: f32, st: State
     } else {
         c.fill_circle(cx, cy, 4.0 * k, t.s(0x1f2a14));
     }
+}
+
+/// A round LED: the Lemon skin's in a circle (`lemon::led_round`); the Citrus skin's LED is round already.
+pub fn led_round(c: &mut Canvas, t: &Palette, cx: f32, cy: f32, radius: f32, st: State) {
+    if lemon::on(t) {
+        return lemon::led_round(c, t, cx, cy, radius, st);
+    }
+    led(c, t, cx, cy, radius, st)
 }
 
 /// Square check mark / tick (menus).

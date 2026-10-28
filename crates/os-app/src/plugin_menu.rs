@@ -224,7 +224,7 @@ pub fn add_generator(app: &mut App, index: usize, after: Option<usize>) -> Optio
         let view_h = crate::views::rack::panel(r).h;
         s.rack_scroll = (crate::views::rack::content_h(s) - view_h).max(0.0);
     }
-    sampler.then(|| "Added a sampler channel (Lemon Sampler)".into())
+    sampler.then(|| "Added a sampler channel (Mango Sampler)".into())
 }
 
 /// Generator `index` in place of rack row `row`'s (channel menu and plugin window menu > Replace ▸; FL: "the plugin list

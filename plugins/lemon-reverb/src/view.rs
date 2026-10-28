@@ -264,6 +264,6 @@ pub fn hint(t: &Target, m: &dyn Model, names: &dyn Fn(&str) -> String) -> String
             format!("{}\t{on}", names(id))
         }
         Target::Room => "Room".into(),
-        Target::Logo => "Lemon Reverb".into(),
+        Target::Logo => "Mango Reverb".into(),
     }
 }

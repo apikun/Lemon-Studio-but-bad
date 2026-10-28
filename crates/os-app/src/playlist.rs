@@ -334,6 +334,8 @@ pub enum Cmd {
     Param(crate::params::PCmd),
     /// "Type in value..." of a knob or parameter menu (spec: ui/type-in-value.md).
     TypeIn(crate::typein::Target),
+    /// "Reset" of a knob, fader or slider menu: back to its default (spec: ui/mixer.md §6.3).
+    Reset(crate::knobs::Control),
     /// Plugin presets (spec: plugins/presets.md).
     #[cfg_attr(not(windows), allow(dead_code))]
     Preset(crate::presets::PCmd),
@@ -2606,11 +2608,17 @@ pub fn marker_menu(s: &State, i: usize, tick: u32, x: f32, y: f32) -> Popup {
     Popup { x, y, items, sub: None, scroll: [0; 2] }
 }
 
-/// The short right-click menu of the toolbar's and the mixer's knobs, faders and the tempo: "Create automation clip"
-/// (§8) and the initial value's items (`crate::init::items`) when the control can be automated, "Type in value..." when
-/// it takes one (spec: ui/type-in-value.md §8).
+/// The short right-click menu of the toolbar's and the mixer's knobs, faders and the tempo: "Reset" for a knob or fader,
+/// "Create automation clip" (§8) and the initial value's items (`crate::init::items`) when the control can be automated,
+/// "Type in value..." when it takes one (spec: ui/type-in-value.md §8).
 pub fn knob_menu(s: &State, auto: Option<(u32, String, f64)>, typein: Option<crate::typein::Target>, x: f32, y: f32) -> Popup {
-    let mut items = Vec::new();
+    // Reset first, as on the rack's and the mixer's knobs (spec: ui/mixer.md §6.3, ui/channel-rack.md §19).
+    let reset = match typein {
+        Some(crate::typein::Target::Knob(k)) => Some(crate::knobs::Control::Knob(k)),
+        Some(crate::typein::Target::Fader(t)) => Some(crate::knobs::Control::Fader(t)),
+        _ => None,
+    };
+    let mut items: Vec<PItem> = reset.map(|c| PItem::new("Reset", Cmd::Reset(c))).into_iter().collect();
     if let Some((tgt, name, value)) = auto {
         let [init, delete] = crate::init::items(s, Some((tgt, value)));
         items.extend([
@@ -3826,6 +3834,10 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
             return None;
         }
         Cmd::MidiExt(d) => return app.set_ext_sync(d),
+        Cmd::Reset(c) => {
+            app.reset_control(c);
+            return None;
+        }
         Cmd::TypeIn(t) => {
             let at = app.mouse;
             crate::typein::open(&mut app.state, t, at);
@@ -4102,7 +4114,7 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
             snapshot(s);
             (!delete_space(s)).then(|| "Delete space: make a time selection first (right-drag the ruler)".into())
         }
-        Cmd::Consolidate | Cmd::ExportTracks | Cmd::QuantizeStarts | Cmd::PointValue(..) | Cmd::ClipPreview(_) | Cmd::TypeIn(_) | Cmd::Remote(_) | Cmd::MidiExt(_) => None,
+        Cmd::Consolidate | Cmd::ExportTracks | Cmd::QuantizeStarts | Cmd::PointValue(..) | Cmd::ClipPreview(_) | Cmd::TypeIn(_) | Cmd::Reset(_) | Cmd::Remote(_) | Cmd::MidiExt(_) => None,
         Cmd::StretchMode => {
             s.playlist.stretch = !s.playlist.stretch;
             Some(if s.playlist.stretch { "Stretch mode on: resizing an audio clip stretches it".into() } else { "Stretch mode off".into() })
@@ -4525,7 +4537,7 @@ pub fn export_tracks(app: &mut App) -> String {
     tracks.sort_unstable();
     tracks.dedup();
     let stem = s.path.as_ref().and_then(|p| p.file_stem()).map_or_else(|| "Untitled".to_string(), |n| n.to_string_lossy().into_owned());
-    let base = s.path.as_ref().and_then(|p| p.parent()).map(|d| d.join("Rendered")).unwrap_or_else(|| std::env::temp_dir().join("Lemon Studio").join("Rendered"));
+    let base = s.path.as_ref().and_then(|p| p.parent()).map(|d| d.join("Rendered")).unwrap_or_else(|| std::env::temp_dir().join("Mango Studio").join("Rendered"));
     let dir = base.join(format!("{stem} tracks"));
     if let Err(e) = std::fs::create_dir_all(&dir) {
         return format!("Export tracks: {e}");
@@ -4610,7 +4622,7 @@ pub fn consolidate(app: &mut App) -> String {
     let mut audio = e.render_all(512);
     let want = (os_engine::laws::tick_to_frame(f64::from(b - a), p.ppq, p.tick_tempo(s.tempo), rate) as usize) * 2;
     audio.resize(want.max(2), 0.0);
-    let dir = s.path.as_ref().and_then(|p| p.parent()).map(|d| d.join("Rendered")).unwrap_or_else(|| std::env::temp_dir().join("Lemon Studio").join("Rendered"));
+    let dir = s.path.as_ref().and_then(|p| p.parent()).map(|d| d.join("Rendered")).unwrap_or_else(|| std::env::temp_dir().join("Mango Studio").join("Rendered"));
     if let Err(e) = std::fs::create_dir_all(&dir) {
         return format!("Consolidate: {e}");
     }

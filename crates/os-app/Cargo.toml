@@ -6,7 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "lemonstudio"
+name = "mangostudio"
 path = "src/main.rs"
 
 [dependencies]
@@ -41,6 +41,7 @@ lemon-balance = { path = "../../plugins/lemon-balance", features = ["linked"] }
 lemon-stereo-enhancer = { path = "../../plugins/lemon-stereo-enhancer", features = ["linked"] }
 lemon-transient-processor = { path = "../../plugins/lemon-transient-processor", features = ["linked"] }
 lemon-chorus = { path = "../../plugins/lemon-chorus", features = ["linked"] }
+lemon-small-fx = { path = "../../plugins/lemon-small-fx" }
 lemon-stereo-shaper = { path = "../../plugins/lemon-stereo-shaper", features = ["linked"] }
 tesla = { path = "../../plugins/tesla", features = ["linked"] }
 pulp-filter = { path = "../../plugins/pulp-filter", features = ["linked"] }
@@ -61,6 +62,7 @@ serde = { version = "1", features = ["derive"] }
 flacenc = "0.5"
 mp3lame-encoder = "0.2"
 vorbis_rs = "0.5"
+zip = { version = "9.1.2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
 # ASIO output (`device::asio`), built from the ASIO SDK's host files in `asiosdk` (`.cargo/config.toml`).

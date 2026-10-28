@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 Artig3nce
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -60,6 +61,8 @@ pub struct FrameInfo {
     pub sounding: Vec<(u16, u16)>,
     /// The song position slider's handle is being dragged (it shows the dragged position, not the playhead).
     pub song_pos_drag: bool,
+    /// The mixer track whose fader is being dragged (the Mango skin lights its bar).
+    pub fader_drag: Option<u16>,
     /// What the toolbar editor's drag carries (spec: ui/toolbar-menu.md §8).
     pub bar_drag: Option<crate::toolbar::BarDrag>,
 }
@@ -202,7 +205,7 @@ pub fn paint(ui: &mut Ui, s: &State, f: &FrameInfo) -> usize {
     if docked.is_none() && !crate::wallpaper::paint(ui, work) {
         let wm = ui.t.watermark;
         icons::logo(ui.c, work.cx(), work.cy() + 40.0, 170.0, wm);
-        let version = concat!("Lemon Studio v", env!("CARGO_PKG_VERSION"), " - pre-alpha");
+        let version = concat!("Mango Studio v", env!("CARGO_PKG_VERSION"), " - pre-alpha");
         let vc = ui.t.version_text;
         let vw = ui.c.text_width(crate::views::fnt(16.0), version);
         ui.c.text(crate::views::fnt(16.0), work.cx() - vw / 2.0, h - 22.0, vc, version);
@@ -570,6 +573,12 @@ pub fn ball_knob(ui: &mut Ui, cx: f32, cy: f32, r: f32, value: f32) {
 pub fn led(ui: &mut Ui, cx: f32, cy: f32, on: bool) {
     let hov = ui.hovering(Rect::new(cx - 6.0, cy - 6.0, 12.0, 12.0));
     kit::led(ui.c, ui.t, cx, cy, 6.0, kit::State::hover(hov).with_on(on));
+}
+
+/// The small round LED of the mixer's, the playlist's and the channel rack's switches (after FL's), centred on `cx, cy`.
+pub fn led_small(ui: &mut Ui, cx: f32, cy: f32, on: bool) {
+    let hov = ui.hovering(Rect::new(cx - 6.0, cy - 6.0, 12.0, 12.0));
+    kit::led_round(ui.c, ui.t, cx, cy, 4.5, kit::State::hover(hov).with_on(on));
 }
 
 /// The label of a question's check that turns its Manage messages entry off when Ok is pressed.
