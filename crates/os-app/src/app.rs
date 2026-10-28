@@ -3336,6 +3336,22 @@ impl App {
 
     pub fn smart_escape(&mut self) -> bool {
         // --- LEVEL 1: Popups, Dialogs, Menus, In-place Editors, Settings, Searches ---
+        if self.modal_open() {
+            use winit::keyboard::{Key, NamedKey};
+            self.dialog_key(&Key::Named(NamedKey::Escape), false, false);
+            return true;
+        }
+        if crate::remote::is_open(&self.state) {
+            self.state.link_box = None;
+            self.invalidate();
+            return true;
+        }
+        // A piano roll tool's line or box being drawn (slice, zoom...).
+        if self.drag.is_none() && self.state.piano.overlay.take().is_some() {
+            self.damage_piano();
+            self.invalidate();
+            return true;
+        }
         if self.state.settings.open && self.state.settings.picker.is_some() {
             self.picker_close();
             self.invalidate();
@@ -3460,6 +3476,11 @@ impl App {
 
         // --- LEVEL 4: Sub-windows (Mixer, Piano Roll, Perf, Tapper) when frontmost ---
         match self.state.z.last().copied() {
+            // The piano roll's tool dialogs (Chop, Strum, Arpeggiate, ...): closed as their own close button does.
+            Some(w @ (Win::Strum | Win::Arp | Win::PianoDlg)) => {
+                self.act(Action::CloseWin(w));
+                return true;
+            }
             Some(Win::Perf) => {
                 self.close_perf();
                 self.invalidate();
@@ -6370,6 +6391,17 @@ impl App {
         self.raise_under_mouse();
         let (x, y) = self.mouse;
         let action = self.top_hit(x, y).map(|h| h.action.clone());
+        // Middle-click renames (from battlemountain2's fork): a channel by its name button, a playlist track by its
+        // header (the mixer's strips in `mixer::middle`).
+        if let Some(Action::ChannelSelect(i)) = action {
+            let at = crate::rack::box_at_row(&self.state, i, (x, y));
+            crate::rack::open_box(&mut self.state, crate::rack::RBox::Channel(i), at);
+            return self.invalidate();
+        }
+        if let Some(Action::PlHeader(t)) = action {
+            crate::playlist::start_edit(&mut self.state, crate::playlist::EditTarget::TrackName(t), (x, y));
+            return self.invalidate();
+        }
         if let Some(Action::Mix(h)) = action {
             if crate::mixer::middle(self, h) {
                 return self.invalidate();
@@ -9779,6 +9811,44 @@ fn load_theme_inner() -> Theme {
 
 #[cfg(test)]
 mod tests {
+    /// Middle-click renames (from battlemountain2's fork): a channel's name button, a playlist track's header and a
+    /// mixer strip each open their name box. Esc closes a message box and a piano roll tool dialog.
+    #[test]
+    fn middle_click_renames_and_escape_closes_dialogs() {
+        use crate::playlist::EditTarget;
+        let mut a = App::new(None);
+        a.state.project = test_project();
+        let mut c = Canvas::new(1920, 1080, 1.0).unwrap();
+        // The channel rack in front: its first channel's name button.
+        a.state.z = vec![Win::Playlist, Win::ChannelRack];
+        frame(&mut a, &mut c, None);
+        let r = hit_rect(&a, &Action::ChannelSelect(0));
+        a.mouse_move(r.cx(), r.cy());
+        a.mouse_down_middle();
+        assert!(a.state.pat_ui.name_box.is_some(), "the channel's name box");
+        a.state.pat_ui.name_box = None;
+        // A playlist track header.
+        a.state.z = vec![Win::Playlist];
+        frame(&mut a, &mut c, None);
+        let r = hit_rect(&a, &Action::PlHeader(2));
+        a.mouse_move(r.cx(), r.cy());
+        a.mouse_down_middle();
+        assert_eq!(a.state.playlist.edit.as_ref().map(|e| e.target), Some(EditTarget::TrackName(2)));
+        a.state.playlist.edit = None;
+        // A mixer strip.
+        assert!(crate::mixer::middle(&mut a, crate::mixer::MHit::Strip(3)));
+        assert_eq!(a.state.playlist.edit.as_ref().map(|e| e.target), Some(EditTarget::MixerName(3)));
+        a.state.playlist.edit = None;
+        // Esc: a message box, then a piano roll tool dialog.
+        a.show_msg(crate::dialog::Msg::new(crate::dialog::Kind::Info, "Notice", crate::dialog::spans(&["Test"]), &[crate::dialog::Answer::Ok], crate::dialog::Then::Nothing));
+        assert!(a.modal_open());
+        assert!(a.smart_escape());
+        assert!(!a.modal_open(), "Esc closes the message box");
+        a.state.raise(Win::PianoDlg);
+        assert!(a.smart_escape());
+        assert!(!a.state.shown(Win::PianoDlg), "Esc closes the tool dialog");
+    }
+
     /// A track's "..." handle (FL's): dragging it sizes that track alone; a click shrinks it to the smallest, another
     /// brings it back; the height is saved in the project file.
     #[test]

@@ -1022,7 +1022,7 @@ impl ApplicationHandler for Shell {
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
-                button: MouseButton::Back | MouseButton::Other(1) | MouseButton::Other(8),
+                button: MouseButton::Back | MouseButton::Other(1 | 4 | 8 | 0x113 | 0x116),
                 ..
             } => {
                 self.app.mouse_back();
@@ -1031,7 +1031,7 @@ impl ApplicationHandler for Shell {
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
-                button: MouseButton::Forward | MouseButton::Other(2) | MouseButton::Other(9),
+                button: MouseButton::Forward | MouseButton::Other(2 | 5 | 9 | 0x114 | 0x115),
                 ..
             } => {
                 self.app.mouse_forward();
