@@ -1947,6 +1947,11 @@ fn set_pattern_signature(s: &mut State, n: u16, num: u16, den: u16) {
     p.markers.sort_by_key(|m| m.position);
 }
 
+/// Whether (`x`, `y`) is on the menu icon of the clip drawn at `r`: the title strip's left end (§10).
+pub fn on_menu_icon(r: &Rect, x: f32, y: f32) -> bool {
+    r.w > 20.0 && x >= r.x && x < r.x + 14.0 && y >= r.y && y < r.y + TITLE_H
+}
+
 /// Make unique: a pattern clip gets its own copy of the pattern (§5).
 pub fn make_unique(s: &mut State, i: usize) -> Option<u16> {
     let c = *clips(s).get(i)?;
@@ -3149,7 +3154,7 @@ pub fn press_grid(app: &mut App, grid: Rect, right: bool) {
         }
         // The title strip's icon opens the clip menu (§10).
         let r = g.clip_rect(&c);
-        if !right && x < r.x + 14.0 && y < r.y + TITLE_H && r.w > 20.0 {
+        if !right && on_menu_icon(&r, x, y) {
             s.playlist.popup = Some(clip_menu(s, ci, r.x, r.y + TITLE_H));
             return;
         }
