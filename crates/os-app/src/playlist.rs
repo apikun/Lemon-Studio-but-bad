@@ -286,6 +286,10 @@ pub enum Cmd {
     PointCopy(u16, usize),
     PointPaste(u16, usize),
     PointMode(u16, usize, AutoMode),
+    /// The point menu's Shape ▸ (issue #29): the channel, the point the segment ends on and the shape.
+    PointShape(u16, usize, crate::auto_tools::AutoShape),
+    /// The automation clip menu's LFO ▸ (issue #29): the clip and the wave.
+    ClipLfo(usize, crate::lfo::Shape),
     PointValue(u16, usize),
     TrackRename(u16),
     TrackMute(u16),
@@ -2210,6 +2214,57 @@ pub fn delete_point(s: &mut State, ch: u16, i: usize) {
     }
 }
 
+/// The point menu's Shape ▸ (issue #29): fills the segment that ends on point `i` of automation channel `ch` with
+/// `shape`'s wave (`auto_tools::shape_points`), the wave's points straight. The end point heads a straight segment
+/// off the wave's last point; the first point ends no segment, so it fills nothing.
+pub fn apply_shape(s: &mut State, ch: u16, i: usize, shape: crate::auto_tools::AutoShape) {
+    let Some(a) = s.project.automation_mut(ch) else { return };
+    if i == 0 || i >= a.points.len() {
+        return;
+    }
+    let (b0, y0) = (a.points[i - 1].beat, a.points[i - 1].value);
+    let (b1, y1) = (a.points[i].beat, a.points[i].value);
+    let baked = crate::auto_tools::baked_points(crate::auto_tools::shape_points(b0, y0, b1, y1, shape));
+    if baked.is_empty() {
+        return;
+    }
+    let end = &mut a.points[i];
+    end.mode = AutoMode::Single;
+    end.tension = 0.0;
+    end.flag = 2;
+    let mut pts = Vec::with_capacity(a.points.len() + baked.len());
+    pts.extend_from_slice(&a.points[..i]);
+    pts.extend(baked);
+    pts.extend_from_slice(&a.points[i..]);
+    a.points = pts;
+    s.piano.dirty = true;
+}
+
+/// The automation clip menu's LFO ▸ (issue #29): replaces automation channel `ch`'s curve over clip `ci`'s window
+/// with `shape`'s wave (`auto_tools::lfo_points`) — around the curve's value at the window's start, ±25 %, one wave
+/// a bar, all straight. Points outside the window stay; the first one kept past it heads a straight segment again.
+pub fn apply_lfo(s: &mut State, ch: u16, ci: usize, shape: crate::lfo::Shape) {
+    let Some(c) = clips(s).get(ci).copied() else { return };
+    let (a_beat, b_beat) = window(s, &c);
+    let centre = s.project.automation(ch).and_then(|a| a.value_at(a_beat)).unwrap_or(0.5);
+    let period = f64::from(bar(s)) / f64::from(ppq(s));
+    let baked = crate::auto_tools::baked_points(crate::auto_tools::lfo_points(a_beat, b_beat, shape, centre, 0.25, period));
+    if baked.is_empty() {
+        return;
+    }
+    let Some(a) = s.project.automation_mut(ch) else { return };
+    let mut pts: Vec<AutoPoint> = a.points.iter().filter(|p| p.beat < a_beat - 1e-9).copied().collect();
+    pts.extend(baked);
+    pts.extend(a.points.iter().filter(|p| p.beat >= b_beat - 1e-9).copied());
+    if let Some(after) = pts.iter_mut().find(|p| p.beat >= b_beat - 1e-9) {
+        after.mode = AutoMode::Single;
+        after.tension = 0.0;
+        after.flag = 2;
+    }
+    a.points = pts;
+    s.piano.dirty = true;
+}
+
 /// The tempo an automation value stands for: `(10000 + Round(single(v) * 512000)) / 1000` BPM, 10 to 522 (spec:
 /// audio/timing.md "Tempo that changes").
 pub fn auto_tempo(v: f64) -> f64 {
@@ -2393,6 +2448,12 @@ pub fn clip_menu(s: &State, i: usize, x: f32, y: f32) -> Popup {
         items.push(PItem::new("Edit pattern", Cmd::ClipEditSource(i)));
         items.push(PItem::new("Make unique", Cmd::ClipUnique(i)));
     }
+    // The automation clip's LFO over its window (issue #29).
+    if let ClipSource::Channel(ch) = c.source {
+        if s.project.automation(ch).is_some() {
+            items.push(PItem::sub("LFO", crate::lfo::Shape::ALL.iter().map(|sh| PItem::new(sh.name(), Cmd::ClipLfo(i, *sh))).collect()));
+        }
+    }
     items.push(PItem::new("Select all similar clips", Cmd::ClipSelectSimilar(i)));
     items.push(PItem::new("Delete", Cmd::ClipDelete(i)));
     Popup { x, y, items, sub: None, scroll: [0; 2] }
@@ -2499,6 +2560,10 @@ pub fn point_menu(s: &State, ch: u16, i: usize, x: f32, y: f32) -> Popup {
     items.push(PItem::head("Mode"));
     for m in AutoMode::MENU {
         items.push(PItem::new(m.name(), Cmd::PointMode(ch, i, m)).mark(Mark::Radio(mode == Some(m))));
+    }
+    // The segment's wave, as Ableton's shape menu (issue #29): the first point ends no segment.
+    if i > 0 {
+        items.push(PItem::sub("Shape", crate::auto_tools::AutoShape::ALL.iter().map(|sh| PItem::new(sh.name(), Cmd::PointShape(ch, i, *sh))).collect()));
     }
     items.push(PItem::sep());
     items.push(PItem::new("Copy value", Cmd::PointCopy(ch, i)));
@@ -4329,6 +4394,21 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
                 p.flag = if m.has_tension() && !matches!(m, AutoMode::Stairs | AutoMode::SmoothStairs | AutoMode::Pulse | AutoMode::Wave) { 2 } else { 0 };
             }
             s.piano.dirty = true;
+            None
+        }
+        Cmd::PointShape(ch, i, shape) => {
+            snapshot(s);
+            apply_shape(s, ch, i, shape);
+            None
+        }
+        Cmd::ClipLfo(i, shape) => {
+            let Some(c) = clips(s).get(i).copied() else { return None };
+            let ClipSource::Channel(ch) = c.source else { return None };
+            if s.project.automation(ch).is_none() {
+                return None;
+            }
+            snapshot(s);
+            apply_lfo(s, ch, i, shape);
             None
         }
         Cmd::TrackRename(t) => {

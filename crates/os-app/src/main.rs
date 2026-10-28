@@ -13,6 +13,7 @@
 mod app;
 mod audio_cfg;
 mod auto_close;
+mod auto_tools;
 mod autoscroll;
 mod backup;
 #[cfg(test)]
