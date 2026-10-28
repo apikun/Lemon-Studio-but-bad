@@ -40,6 +40,10 @@ pub enum NCmd {
     /// The magnet button's menus (spec: ui/piano-snap.md): the snap setting, a stock length for new notes.
     Snap(crate::snap::EditorSnap),
     StockLength(crate::playlist::Snap),
+    /// The Note properties menu: the type new notes are drawn as.
+    NoteType(crate::piano::NoteType),
+    /// The Note properties menu: change the selected notes' type.
+    MakeType(crate::piano::NoteType),
     /// Make a channel rack row the piano roll's channel (the title's channel menu).
     Target(usize),
 }
@@ -81,6 +85,36 @@ pub fn tools_menu(s: &State, x: f32, y: f32) -> Popup {
         item("Add time marker", AddMarker).key("Alt+T"),
     ];
     Popup { x, y, items, sub: None, scroll: [0; 2] }
+}
+
+/// The Note properties menu (the toolbar's note button): the type new notes are drawn as, and the selected notes'
+/// type. A slide note makes no sound and glides the channel's sounding voices; a portamento note inverts its
+/// channel's portamento switch (flp/events/patterns.md note flags, audio/note-rules.md).
+pub fn note_type_menu(s: &State, x: f32, y: f32) -> Popup {
+    use crate::piano::NoteType;
+    let name = |ty: NoteType| match ty {
+        NoteType::Plain => "Plain note",
+        NoteType::Slide => "Slide note",
+        NoteType::Porta => "Portamento note",
+    };
+    let mut items = vec![PItem::head("New notes are")];
+    for ty in [NoteType::Plain, NoteType::Slide, NoteType::Porta] {
+        items.push(PItem::new(name(ty), Cmd::Piano(NCmd::NoteType(ty))).mark(Mark::Radio(s.piano.note_type == ty)));
+    }
+    items.push(PItem::sep());
+    items.push(PItem::head("Selected notes"));
+    let has_sel = !s.piano.selection(s.pattern, crate::piano::channel(s)).is_empty();
+    for ty in [NoteType::Plain, NoteType::Slide, NoteType::Porta] {
+        let mut it = PItem::new(format!("Make {}", ty.label()), Cmd::Piano(NCmd::MakeType(ty)));
+        it.enabled = has_sel;
+        items.push(it);
+    }
+    Popup { x, y, items, sub: None, scroll: [0; 2] }
+}
+
+/// The note button's hint (§2).
+pub fn note_type_hint(s: &State) -> String {
+    format!("Note properties: new notes are {} notes", s.piano.note_type.label())
 }
 
 /// The keys a held key repeats in the piano roll (spec: ui/piano-keys.md §4 rule 1): Shift / Ctrl / Alt + arrows (not
@@ -345,6 +379,18 @@ pub fn run(app: &mut App, cmd: NCmd) -> Option<String> {
         }
         NCmd::Snap(p) => return Some(crate::piano_snap::set(s, p)),
         NCmd::StockLength(sn) => return Some(crate::piano_snap::set_length(s, sn)),
+        NCmd::NoteType(ty) => {
+            s.piano.note_type = ty;
+            format!("Piano roll: new notes are {} notes", ty.label())
+        }
+        NCmd::MakeType(ty) => {
+            // The selection only: an empty one would turn every note of the channel (`apply`'s fallback).
+            if s.piano.selection(s.pattern, piano::channel(s)).is_empty() {
+                return Some("Piano roll: select notes to change their type".into());
+            }
+            let made = apply(s, |_, ns| ns.into_iter().map(|mut n| { ty.apply(&mut n); n }).collect());
+            done(made, &format!("made the selected notes {}", ty.label()))
+        }
         NCmd::Target(row) => {
             if row >= s.project.channels.len() {
                 return None;
@@ -555,5 +601,75 @@ mod tests {
         slide.set_slide(true);
         let l = legato(vec![note(0, 96, 60), slide, note(384, 48, 72), note(800, 48, 60)], 1152);
         assert_eq!(spans(&l), vec![(0, 384, 60), (96, 24, 64), (384, 416, 72), (800, 352, 60)]);
+    }
+
+    fn app() -> App {
+        let mut a = App::new(None);
+        a.state.selected_channel = 4;
+        a
+    }
+
+    /// The Note properties menu: the three types as radios (the chosen one on), and the Make entries off without a
+    /// selection, on with one.
+    #[test]
+    fn the_note_type_menu_follows_the_state() {
+        use crate::piano::NoteType;
+        let mut a = app();
+        let labels = |a: &App| {
+            note_type_menu(&a.state, 0.0, 0.0)
+                .items
+                .iter()
+                .map(|i| if i.sep { "-".to_string() } else { i.label.to_string() })
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        assert_eq!(labels(&a), "New notes are,Plain note,Slide note,Portamento note,-,Selected notes,Make plain,Make slide,Make portamento");
+        let p = note_type_menu(&a.state, 0.0, 0.0);
+        assert_eq!(p.items[1].mark, Mark::Radio(true), "plain is the default");
+        assert_eq!(p.items[2].mark, Mark::Radio(false));
+        assert!(!p.items[6].enabled, "no selection: nothing to make");
+        assert!(!p.items[8].enabled);
+        // A note of the channel selected: the Make entries are on, and slide is marked after picking it.
+        piano::pattern_mut(&mut a.state).notes.push(Note::step(4, 0));
+        let ch = piano::channel(&a.state).unwrap();
+        a.state.piano.select(a.state.pattern, ch, vec![0]);
+        let p = note_type_menu(&a.state, 0.0, 0.0);
+        assert!(p.items.iter().all(|i| i.enabled || i.head), "the Make entries are on");
+        let _ = run(&mut a, NCmd::NoteType(NoteType::Slide));
+        let p = note_type_menu(&a.state, 0.0, 0.0);
+        assert_eq!(p.items[2].mark, Mark::Radio(true), "slide is on now");
+        assert_eq!(p.items[1].mark, Mark::Radio(false));
+    }
+
+    /// The menu's commands: picking a type makes new notes that type; Make changes the selected notes only, as one
+    /// undo step; without a selection it says so and changes nothing.
+    #[test]
+    fn the_note_type_commands_pick_and_apply() {
+        use crate::piano::NoteType;
+        use winit::keyboard::Key;
+        let mut a = app();
+        let msg = run(&mut a, NCmd::NoteType(NoteType::Slide)).expect("a message");
+        assert_eq!(msg, "Piano roll: new notes are slide notes");
+        assert_eq!(a.state.piano.note_type, NoteType::Slide);
+        let p = piano::pattern_mut(&mut a.state);
+        p.notes = vec![Note::step(4, 0), Note::step(4, 48)];
+        let ch = piano::channel(&a.state).unwrap();
+        a.state.piano.select(a.state.pattern, ch, vec![0]);
+        let steps = a.state.history.len();
+        let msg = run(&mut a, NCmd::MakeType(NoteType::Slide)).expect("a message");
+        assert_eq!(msg, "Piano roll: made the selected notes slide");
+        let ns = piano::notes(&a.state);
+        assert_eq!(ns.len(), 2);
+        assert!(ns[0].slide(), "the selected note (position 0) is a slide note now");
+        assert!(!ns[1].slide(), "the unselected note stays plain");
+        assert_eq!(a.state.history.len(), steps + 1, "one undo step");
+        a.key(&Key::Character("z".into()), true, false);
+        assert!(!piano::notes(&a.state)[0].slide() && !piano::notes(&a.state)[1].slide(), "undo takes it back");
+        // Without a selection: a message, nothing changes, no undo step.
+        a.state.piano.clear_selection();
+        let msg = run(&mut a, NCmd::MakeType(NoteType::Porta)).expect("a message");
+        assert_eq!(msg, "Piano roll: select notes to change their type");
+        assert!(piano::notes(&a.state).iter().all(|n| !n.porta() && !n.slide()));
+        assert_eq!(a.state.history.len(), steps + 1);
     }
 }

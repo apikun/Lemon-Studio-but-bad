@@ -286,6 +286,8 @@ pub enum Action {
     PianoToolsMenu,
     /// Toolbar magnet: the Snap menu; right-click: Stock note lengths (spec: ui/piano-snap.md §1).
     PianoSnapMenu,
+    /// Toolbar note button: the Note properties menu (the type new notes are drawn as, the selected notes' type).
+    PianoNoteMenu,
     /// The channel name in the title: the channel menu; right-click: channel settings; wheel: channels with notes
     /// (spec: ui/piano-target-channel.md).
     PianoTarget,
@@ -6157,6 +6159,11 @@ impl App {
                 self.state.playlist.popup = Some(crate::piano_snap::lengths_menu(x, y));
                 return self.invalidate();
             }
+            Some(Action::PianoNoteMenu) => {
+                // The Note properties menu on both buttons of the mouse.
+                self.state.playlist.popup = Some(crate::piano_tools::note_type_menu(&self.state, x, y));
+                return self.invalidate();
+            }
             Some(Action::AutoScroll) => {
                 self.autoscroll_menu(x, y);
                 return self.invalidate();
@@ -8117,6 +8124,11 @@ impl App {
                 // Top-left 11 px left of and below the button's centre (spec: ui/piano-snap.md §1).
                 let b = self.hits.iter().rev().find(|h| h.action == Action::PianoSnapMenu).map_or(Rect::new(self.mouse.0, self.mouse.1, 0.0, 0.0), |h| h.rect);
                 s.playlist.popup = Some(crate::piano_snap::snap_menu(s, b.cx() - 11.0, b.cy() + 11.0));
+            }
+            Action::PianoNoteMenu => {
+                // Below the note button, like the Snap menu's.
+                let b = self.hits.iter().rev().find(|h| h.action == Action::PianoNoteMenu).map_or(Rect::new(self.mouse.0, self.mouse.1, 0.0, 0.0), |h| h.rect);
+                s.playlist.popup = Some(crate::piano_tools::note_type_menu(s, b.cx() - 11.0, b.cy() + 11.0));
             }
             Action::PitchStep(dir) => {
                 s.piano.pitch_center = piano::clamp_pitch_center(s.piano.pitch_center + dir * piano::PITCH_STEP);

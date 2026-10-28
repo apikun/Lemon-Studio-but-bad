@@ -339,7 +339,7 @@ fn toolbar(ui: &mut Ui, s: &State, r: Rect, shift: f32) {
         (222.0, Icon::ArrowRight, "Piano roll options", None),
         (242.0, Icon::MidiControl, "Piano roll tools: quantize, chop, glue, strum, arpeggiate, randomize...", Some(Action::PianoToolsMenu)),
         (263.0, Icon::Magnet, "", Some(Action::PianoSnapMenu)),
-        (283.0, Icon::Note, "Note properties", None),
+        (283.0, Icon::Note, "", Some(Action::PianoNoteMenu)),
         (305.0, Icon::Blend, "Scale and chord helpers", None),
         (327.0, Icon::Undo, "Undo (Ctrl+Z)", Some(Action::PianoUndo)),
         (360.0, Icon::Pencil, "Draw (P)", Some(Action::PianoTool(Tool::Draw))),
@@ -360,8 +360,14 @@ fn toolbar(ui: &mut Ui, s: &State, r: Rect, shift: f32) {
             continue;
         };
         let on = action == Action::PianoTool(active);
-        // The magnet's hint names the current snap (spec: ui/piano-snap.md §8).
-        let hint: std::borrow::Cow<'static, str> = if action == Action::PianoSnapMenu { crate::piano_snap::hint(s).into() } else { hint.into() };
+        // The magnet's hint names the current snap (spec: ui/piano-snap.md §8); the note button the note type.
+        let hint: std::borrow::Cow<'static, str> = if action == Action::PianoSnapMenu {
+            crate::piano_snap::hint(s).into()
+        } else if action == Action::PianoNoteMenu {
+            crate::piano_tools::note_type_hint(s).into()
+        } else {
+            hint.into()
+        };
         let hov = ui.hit(b, action, hint);
         let c = if super::lemon(ui) {
             // Lemon: the active tool is a lit rounded square with a dark glyph.

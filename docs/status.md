@@ -24,6 +24,8 @@ clicking it does nothing. The full, item-by-item roadmap lives on the
 ## ✅ Piano roll
 
 - Full tool set, with velocity and event lanes
+- Note types (the toolbar's Note properties menu): new notes are drawn plain, as slide notes or as portamento
+  notes, and the selected notes change type with the menu's Make entries
 - Quantize (FL's templates and Snap grids, sensitivity, four duration modes, levels), chop (FL's patterns, tied rows, levels, groups), glue, legato, strum,
   arpeggiate, flam, claw machine (trash, stretch, time distribution), flip, scale levels, limit (key / scale, range,
   transpose), LFO (sine, triangle or square into any event lane, Start to End ramps, a channel lane's control points)
@@ -120,7 +122,7 @@ clicking it does nothing. The full, item-by-item roadmap lives on the
 - A plugin the interface is using is waited for briefly instead of skipped, and the interface only touches
   a plugin when it has work for it
 - Cut groups, voice limits, mono and portamento glides
-- Slide notes (silent; they glide the channel's sounding notes)
+- Slide notes (silent; they glide the channel's sounding notes); drawn with the piano roll's Note properties menu
 - Layer channels play their children
 - The channel's level adjustments (volume multiplier, pan and mod X / Y offsets) and each note's own pan
   and mod X / Y reach the instrument
