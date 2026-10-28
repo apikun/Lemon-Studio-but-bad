@@ -132,9 +132,12 @@ Per-area details are in [docs/status.md](docs/status.md). The full, item-by-item
 
 ## Getting started
 
-No prebuilt binaries are provided at this stage: Mango Studio is built from source. Each platform below goes from a fresh
-machine to Mango Studio installed with its icon, and Mango Studio's own plugins installed for any DAW. All three need
-**Rust**, stable toolchain 1.89 or newer, installed through [rustup](https://rustup.rs/), and a clone of this repository:
+At the moment, ready-to-run builds are attached to this repository's GitHub releases for **Windows and Linux (x64)
+only**: portable binaries, with no installer and no runtime to install. macOS has no prebuilt binary yet — there Mango
+Studio is built from source for now. Each platform below goes from a fresh machine to Mango Studio installed with its
+icon, and Mango Studio's own plugins installed for any DAW. Building from source works on all three and needs
+**Rust**, stable toolchain 1.89 or newer, installed through [rustup](https://rustup.rs/), and a clone of this
+repository:
 
 ```bash
 git clone https://github.com/apikun/Mango-Studio.git
@@ -154,8 +157,9 @@ install only the plugins with `cargo run -p bundle-plugins -- --install`.
 
 ### Windows
 
-Windows 10 or 11, x64. A ready-to-run build is attached to this repository's GitHub releases: a portable
-`lemonstudio.exe`, with no installer and no runtime to install.
+Windows 10 or 11, x64. A ready-to-run build is attached to this repository's GitHub releases: `Mango-Studio-windows-x64.zip`,
+a portable `mangostudio.exe` with no installer and no runtime to install. To build the newest state of the source
+instead, follow the steps below.
 
 **Prerequisites**
 
@@ -227,7 +231,10 @@ the rates it was asked for.
 
 ### Linux
 
-x64, on X11 or a Wayland desktop.
+x64, on X11 or a Wayland desktop. A ready-to-run build is attached to this repository's GitHub releases:
+`Mango-Studio-linux-x64.zip`, a portable `mangostudio` binary (in its `dist` folder, next to this README and the
+third-party notices), with no installer and no runtime to install. To build the newest state of the source instead,
+follow the steps below.
 
 **Prerequisites:** a C++ compiler and libclang (for the time stretcher), the ALSA development files, the Wayland
 development files (which Mango Sampler's file dialogs link against when it is built as a plugin) and `pkg-config`:
@@ -286,7 +293,8 @@ Windows (or detach, from their window menu). A few things differ from Windows fo
 ### macOS
 
 macOS 11 or newer. macOS is supported at the same level as Linux, with the same features, and
-continuous integration builds and tests every change on macOS alongside Windows and Linux.
+continuous integration builds and tests every change on macOS alongside Windows and Linux. No prebuilt macOS binary
+is attached to the releases yet: on macOS, Mango Studio is built from source.
 
 **Prerequisites:** the Xcode Command Line Tools, which bring the compiler and libclang: `xcode-select --install`. Xcode
 itself is not needed (only to regenerate the app icon, see `tools/logo/macos-icon.sh`).
