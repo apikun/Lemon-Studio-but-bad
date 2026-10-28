@@ -1335,6 +1335,8 @@ pub struct App {
     pub resize_cursor: bool,
     /// The mouse is over a playlist clip (not one of its handles): the move cursor for the tools that drag clips.
     pub over_clip: bool,
+    /// The mouse is on a clip's menu icon (the title strip's left end): the hand shows, not the grab.
+    pub over_clip_icon: bool,
     /// Modifier keys held (set by the shell).
     pub ctrl: bool,
     pub shift: bool,
@@ -1581,6 +1583,7 @@ impl App {
             want_drag_window: false,
             resize_cursor: false,
             over_clip: false,
+            over_clip_icon: false,
             ctrl: false,
             shift: false,
             alt: false,
@@ -5779,12 +5782,14 @@ impl App {
             }
         }
         let mut over_clip = false;
+        let mut over_icon = false;
         if hover == Some(Action::PlaylistArea) {
             if let Some(g) = self.pl_grid {
                 let s = &self.state;
                 let pg = crate::playlist::PGeom::new(s, g);
                 let hit = crate::playlist::clip_at(s, &pg, x, y);
                 over_clip = hit.is_some_and(|i| crate::playlist::handle_at(s, &pg, i, x, y).is_none());
+                over_icon = hit.is_some_and(|i| crate::playlist::on_menu_icon(&pg.clip_rect(&crate::playlist::clips(s)[i]), x, y));
                 // Automation clips show their points while hovered, audio clips their fade and gain handles (§9a).
                 let auto = hit.filter(|&i| {
                     let c = &crate::playlist::clips(s)[i];
@@ -5825,6 +5830,7 @@ impl App {
         let changed = hover != self.hover || hint != self.hint || resize != self.resize_cursor;
         self.resize_cursor = resize;
         self.over_clip = over_clip;
+        self.over_clip_icon = over_icon;
         if changed {
             // Repaint the controls that lost / gained hover and the hint panel; large background
             // regions have no hover look.
@@ -6182,6 +6188,10 @@ impl App {
             (None, Some(Action::RackResize(e))) => *e,
             _ => 0,
         };
+        // A clip's menu icon takes a click, as the mixer's buttons do.
+        if self.drag.is_none() && self.over_clip_icon && self.hover == Some(Action::PlaylistArea) {
+            return Cursor::Pointer;
+        }
         match edges {
             0 if self.resize_cursor => Cursor::EwResize,
             0 if matches!(self.drag, Some(Drag::Fader { .. })) => Cursor::Pointer,
@@ -9760,6 +9770,31 @@ fn load_theme_inner() -> Theme {
 
 #[cfg(test)]
 mod tests {
+    /// Over a clip's menu icon the hand shows, over the rest of the clip the grab, and in the open menu the arrow.
+    #[test]
+    fn a_clips_menu_icon_shows_the_hand() {
+        use crate::playlist as pl;
+        let mut a = App::new(None);
+        a.state.project = test_project();
+        let bar = a.state.project.bar_ticks();
+        pl::arr_mut(&mut a.state).clips.push(os_model::Clip::new(0, 2 * bar, 0, os_model::ClipSource::Pattern(1)));
+        let mut c = Canvas::new(1920, 1080, 1.0).unwrap();
+        frame(&mut a, &mut c, None);
+        let g = a.pl_grid.unwrap();
+        let r = pl::PGeom::new(&a.state, g).clip_rect(&pl::clips(&a.state)[0]);
+        a.mouse_move(r.x + 40.0, r.y + 30.0);
+        assert_eq!(a.cursor(), Cursor::Move, "the clip: grab");
+        a.mouse_move(r.x + 6.0, r.y + 6.0);
+        assert_eq!(a.cursor(), Cursor::Pointer, "its menu icon: the hand");
+        a.mouse_down();
+        a.mouse_up();
+        assert!(a.state.playlist.popup.is_some(), "the click opens the clip menu");
+        frame(&mut a, &mut c, None);
+        let row = hit_rect(&a, &Action::PlPopup(1));
+        a.mouse_move(row.cx(), row.cy());
+        assert_eq!(a.cursor(), Cursor::Default, "in the menu: the arrow");
+    }
+
     /// A pattern clip's menu has FL's entries; Select source pattern, Use current time signature from, Select region
     /// and Chop do what they say.
     #[test]
