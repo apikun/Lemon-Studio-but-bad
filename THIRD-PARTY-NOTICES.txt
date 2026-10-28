@@ -7944,3 +7944,29 @@ the following restrictions:
     misrepresented as being the original software.
 
 3. This notice may not be removed or altered from any source distribution.
+
+
+--- GNU General Public License, version 3: honeydew (the Android port's scaffolding)
+
+Mango Studio's Android build follows the scaffolding of daijro's honeydew
+(https://github.com/daijro/honeydew): the gradle project's shape, the NativeActivity
+wiring and the APK build flow (android/, tools/android-dist.sh, the comments that point
+at them). honeydew is an independent, clean-room reimplementation of FL Studio Mobile in
+Rust, written by daijro and honeydew's contributors, licensed under the GNU General
+Public License, version 3.0 or later. Mango Studio's own code stays GPL-3.0-or-later
+and shares no code with FL Studio Mobile or Image-Line.
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+The full licence text is LICENSE, which Mango Studio shares with honeydew (GPL-3.0-or-later).
