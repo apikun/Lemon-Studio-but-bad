@@ -1422,7 +1422,8 @@ fn header(ui: &mut Ui, s: &State, g: &PGeom, row: u16, x: f32, w: f32) {
         ui.c.text_clip(Font::new(16), hr.x + 2.0, hr.y + 1.0, name_w, text, &pl::track_name(s, row));
     }
     if !short {
-        ui.c.text(Font::new(14), hr.x + 14.0, led.y - 6.0, text.shade(-0.2), "...");
+        // Under the start of the name.
+        ui.c.text(Font::new(14), hr.x + 2.0, led.y - 6.0, text.shade(-0.2), "...");
     }
     let info = pl::track_info(s, row);
     if lead {
