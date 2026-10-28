@@ -178,12 +178,22 @@ pub fn paint(ui: &mut Ui, s: &State, f: &FrameInfo, width: f32) {
     ui.hit(Rect::new(0.0, 0.0, width, h), Action::DragWindow, "");
 
     let placed = place(l, width, editing);
+    // Caption buttons in the corner always show; the rest of a narrow band ends left of them.
+    let corner = crate::toolbar::corner(l);
+    let fit = fit - corner;
     for row in 0..rows {
+        let pin = crate::toolbar::pinned(&l.rows[row]).then(|| l.rows[row].len() - 1);
+        let mut cut = false;
         for p in placed.iter().filter(|p| p.row == row) {
             let a = p.at();
-            let shows = if p.panel.repeats() { p.x + p.w <= fit } else { a.x(p.panel.first_end()) <= fit };
+            let corner = pin == Some(p.idx);
+            let shows = corner || if p.panel.repeats() { p.x + p.w <= fit } else { a.x(p.panel.first_end()) <= fit };
+            if cut && !corner {
+                continue;
+            }
             if !shows {
-                break;
+                cut = true;
+                continue;
             }
             // Group separators (2 px gaps measured in row 1 and row 2), each at the left edge of the panel it comes
             // with, shown with that panel; none at a row's start.
@@ -197,7 +207,7 @@ pub fn paint(ui: &mut Ui, s: &State, f: &FrameInfo, width: f32) {
                 item_frame(ui, l, p);
             }
             if !all {
-                break;
+                cut = true;
             }
         }
     }
@@ -216,7 +226,7 @@ pub fn paint(ui: &mut Ui, s: &State, f: &FrameInfo, width: f32) {
     // place. Hovering it says why; a click does nothing.
     let mid = (h / 2.0).floor();
     if fit.is_finite() {
-        let r = Rect::new(width - MORE_W, 0.0, MORE_W, h);
+        let r = Rect::new(width - corner - MORE_W, 0.0, MORE_W, h);
         ui.hit(r, Action::Swallow, MORE_HINT);
         os_ui::kit::triangle(ui.c, r.cx(), mid, 5.0, os_ui::kit::Dir::Right, t.glyph);
         return;
@@ -224,12 +234,17 @@ pub fn paint(ui: &mut Ui, s: &State, f: &FrameInfo, width: f32) {
     if !l.logo {
         return;
     }
-    // Logo spot (spans the rows): the Lemon Studio mark, just right of the last panel (x 1487 in the classic layout). It
-    // keeps to the right edge until the window is too narrow, then the edge crops it (spec ui/main-window.md §12); the
-    // toolbar never moves.
-    let end = placed.iter().map(|p| p.x + p.w).fold(0.0, f32::max);
-    let lx = (width - 45.0).max(end + 47.0);
+    // Logo spot (spans the rows): the Mango Studio mark, right of the last panel (x 1487 in the "Caption left" layout). It
+    // keeps to the right edge, left of caption buttons in the corner, until the window is too narrow, then the edge
+    // crops it (spec ui/main-window.md §12), or it goes when the caption buttons would cover it; the toolbar never
+    // moves.
+    let end = placed.iter().filter(|p| !(crate::toolbar::pinned(&l.rows[p.row]) && p.idx + 1 == l.rows[p.row].len())).map(|p| p.x + p.w).fold(0.0, f32::max);
+    let lx = (width - corner - 45.0).max(end + 47.0);
     let r = Rect::new(lx - 35.0, 0.0, 78.0, h - 1.0);
+    // No room left of the caption buttons in the corner: no logo, rather than one under them.
+    if corner > 0.0 && r.right() > width - corner {
+        return;
+    }
     if editing {
         ui.hit(r, Action::Bar(BarHit::Logo), "Logo - drag onto the palette to take it off");
         frame(ui, r.inset(2.0));
