@@ -1644,6 +1644,7 @@ fn wake_ui() {
 fn fatal(what: &str, why: String) -> ! {
     let message = format!("Mango Studio could not start.\n\n{what}: {why}");
     eprintln!("{message}");
+    crash_log(&format!("{what}: {why}"));
     #[cfg(windows)]
     unsafe {
         use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
@@ -1654,18 +1655,32 @@ fn fatal(what: &str, why: String) -> ! {
     std::process::exit(1);
 }
 
-/// Panics append a line to `panic-log.txt` in the user folder, so a run without a console (Windows from a shortcut,
-/// or Winlator) can read what went wrong after the fact. The default report still goes to stderr.
-fn log_panics() {
+/// A crash line lands in `panic-log.txt` in the user folder, so a run without a console (Windows from a shortcut,
+/// or Winlator) can read what went wrong after the fact. Android copies it into the external files folder
+/// (`OPENSTUDIO_LOG_DIR`, which `mobile` points at `/sdcard/Android/data/…/files`): the private folder is reachable
+/// only over adb, while a file manager reads that one.
+fn crash_log(line: &str) {
     use std::io::Write;
+    let stamped = format!("{} {line}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
+    let append = |dir: std::path::PathBuf| {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("panic-log.txt"))
+            .and_then(|mut f| writeln!(f, "{stamped}"));
+    };
+    if let Some(dir) = os_paths::user_dir() {
+        append(dir);
+    }
+    #[cfg(target_os = "android")]
+    if let Some(dir) = std::env::var_os("OPENSTUDIO_LOG_DIR").map(std::path::PathBuf::from) {
+        append(dir);
+    }
+}
+
+fn log_panics() {
     std::panic::set_hook(Box::new(|info| {
         let line = format!("{info}");
         eprintln!("{line}");
-        if let Some(dir) = os_paths::user_dir() {
-            let _ = std::fs::create_dir_all(&dir);
-            let _ = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("panic-log.txt"))
-                .and_then(|mut f| writeln!(f, "{} {line}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")));
-        }
+        crash_log(&line);
     }));
 }
 

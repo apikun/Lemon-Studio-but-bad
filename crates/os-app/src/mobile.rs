@@ -23,6 +23,12 @@ pub fn run(app: AndroidApp) {
         // Cursor themes and other HOME readers look in the app's folder; whatever they miss is skipped.
         unsafe { std::env::set_var("HOME", &data) };
     }
+    // A crash's log is also written here (`crash_log` reads it), because the private folder is reachable only over
+    // adb; a file manager opens the external one, so the launch crash is readable on the device itself.
+    if let Some(ext) = app.external_data_path().filter(|p| p.is_absolute()) {
+        let _ = std::fs::create_dir_all(&ext);
+        unsafe { std::env::set_var("OPENSTUDIO_LOG_DIR", &ext) };
+    }
     crate::log_panics();
     let mut builder = EventLoop::<()>::with_user_event();
     use winit::platform::android::EventLoopBuilderExtAndroid;

@@ -39,11 +39,43 @@ build=${MANGO_ANDROID_BUILD_DIR:-target/android}
 mkdir -p "$build/jniLibs/arm64-v8a"
 cargo build --release --locked -p os-android --target aarch64-linux-android
 cp target/aarch64-linux-android/release/libos_android.so "$build/jniLibs/arm64-v8a/"
+
+# Every non-system library the app's .so needs must ship in the APK, or the device's linker fails
+# to `dlopen` it and the app closes the instant it opens (v0.4.0 shipped without libc++_shared.so,
+# which the NativeActivity glue's C++ needs: GitHub issue about the launch crash). The NDK keeps
+# the ones it provides in its sysroot; cargo-ndk copies libc++_shared.so the same way.
+so=$build/jniLibs/arm64-v8a/libos_android.so
+$TC/bin/llvm-readelf -d "$so" | sed -n 's/.*(NEEDED).*Shared library: \[\([^]]*\)\].*/\1/p' |
+while read -r lib; do
+    case $lib in
+        libandroid.so|libaaudio.so|libc.so|libdl.so|liblog.so|libm.so|libEGL.so|libGLESv1_CM.so|libGLESv2.so|libvulkan.so|libnativewindow.so|libsync.so|libutils.so|libcutils.so|libz.so) ;;
+        *)  if [ ! -f "$build/jniLibs/arm64-v8a/$lib" ]; then
+                from=$TC/sysroot/usr/lib/aarch64-linux-android/$lib
+                if [ -f "$from" ]; then
+                    cp "$from" "$build/jniLibs/arm64-v8a/"
+                    echo "jniLibs: packed $lib (the app's .so needs it)"
+                else
+                    echo "$so needs $lib, and the NDK sysroot has no copy to pack" >&2
+                    exit 1
+                fi
+            fi ;;
+    esac
+done
+
 android/gradlew -p android --no-daemon "$task"
 
 apk=$(ls "$build"/outputs/apk/*/app-*.apk | head -1)
 sdk_tools=$ANDROID_HOME/build-tools/36.0.0
 "$sdk_tools/apksigner" verify "$apk"
 "$sdk_tools/zipalign" -c -P 16 4 "$apk"
+# The APK must carry the same libraries the .so needs (the linker fails on a missing one).
+needed=$($TC/bin/llvm-readelf -d "$so" |
+    sed -n 's/.*(NEEDED).*Shared library: \[\([^]]*\)\].*/\1/p' |
+    grep -vE '^lib(android|aaudio|c|dl|log|m|EGL|GLESv1_CM|GLESv2|vulkan|nativewindow|sync|utils|cutils|z)\.so$')
+packed=$("$sdk_tools/aapt" list "$apk" | grep '^lib/arm64-v8a/')
+for lib in $needed; do
+    printf '%s\n' "$packed" | grep -qF "lib/arm64-v8a/$lib" ||
+        { echo "the APK is missing $lib (the app's .so needs it): repack" >&2; exit 1; }
+done
 cp "$apk" Mango-Studio-android-arm64.apk
 echo "wrote Mango-Studio-android-arm64.apk"
