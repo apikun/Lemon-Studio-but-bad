@@ -9760,6 +9760,38 @@ fn load_theme_inner() -> Theme {
 
 #[cfg(test)]
 mod tests {
+    /// A pattern clip's menu has FL's entries; Select source pattern, Use current time signature from, Select region
+    /// and Chop do what they say.
+    #[test]
+    fn pattern_clip_menu_has_fls_entries() {
+        use crate::playlist as pl;
+        let mut a = App::new(None);
+        a.state.project = test_project();
+        let bar = a.state.project.bar_ticks();
+        a.state.project.patterns.push(os_model::Pattern { number: 2, ..Default::default() });
+        pl::arr_mut(&mut a.state).clips.push(os_model::Clip::new(0, 2 * bar, 0, os_model::ClipSource::Pattern(1)));
+        let i = pl::clips(&a.state).len() - 1;
+        let menu = pl::clip_menu(&a.state, i, 0.0, 0.0);
+        let labels: Vec<&str> = menu.items.iter().filter(|it| !it.sep).map(|it| it.label.as_ref()).collect();
+        assert_eq!(labels, ["Pattern clip", "Preview", "Muted", "Rename and color...", "Change color...", "Random color", "Select source pattern", "Edit pattern", "Make unique", "Select all similar clips", "Delete", "Use current time signature from", "Region", "Select region", "Chop"]);
+        // Chop ▸ Beat: a two-bar clip in 4/4 is eight beats.
+        let beat = u32::from(a.state.project.ppq);
+        pl::run(&mut a, pl::Cmd::ClipChop(i, beat));
+        let mut pieces: Vec<(u32, u32)> = pl::clips(&a.state).iter().filter(|c| c.track == 0).map(|c| (c.position, c.length)).collect();
+        pieces.sort_unstable();
+        assert_eq!(pieces, (0..8).map(|k| (k * beat, beat)).collect::<Vec<_>>());
+        // Select source pattern ▸ pattern 2.
+        pl::run(&mut a, pl::Cmd::ClipSetSource(i, 2));
+        assert_eq!(pl::clips(&a.state)[i].source, os_model::ClipSource::Pattern(2));
+        // Use current time signature from ▸ 3/4: pattern 2's bar is three beats.
+        pl::run(&mut a, pl::Cmd::ClipTimeSig(i, 3, 4));
+        assert_eq!(a.state.project.pattern_bars(2)[0].2, (3, 4));
+        // Select region ▸: the clip plays from the marker on.
+        pl::run(&mut a, pl::Cmd::ClipRegion(i, beat, 3 * beat));
+        let c = pl::clips(&a.state)[i];
+        assert_eq!((c.window, c.length), (Some((f64::from(beat), f64::from(3 * beat))), 2 * beat));
+    }
+
     use super::*;
 
     fn frame(app: &mut App, c: &mut Canvas, damage: Option<Rect>) {
