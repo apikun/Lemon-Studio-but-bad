@@ -504,7 +504,9 @@ fn strip(ui: &mut Ui, s: &State, n: u16, left: f32, bottom: f32, f: &FrameInfo, 
     ui.c.pop_clip();
 
     let enabled = track.is_none_or(|m| m.enabled);
-    ui.hit(Rect::new(kx - 7.0, ly.y(LED_Y) - 7.0, 14.0, 14.0), Action::Mix(MHit::Led(n)), "Mute / solo");
+    // As on FL, the light takes clicks across the strip, from the meter's bottom to the pan knob.
+    let (led0, led1) = (ly.y(METER_Y1) + 1.0, (ly.y(PAN_Y) - 14.0).max(ly.y(LED_Y) + 7.0));
+    ui.hit(Rect::new(left + 1.0, led0, STRIP_W - 2.0, led1 - led0), Action::Mix(MHit::Led(n)), "Mute / solo");
     led_small(ui, kx, ly.y(LED_Y), enabled);
     let pan = KnobId::MixPan(n);
     ui.hit(Rect::new(kx - 14.0, ly.y(PAN_Y) - 14.0, 28.0, 28.0), Action::Knob(pan), s.knob_text(pan));
@@ -522,6 +524,10 @@ fn strip(ui: &mut Ui, s: &State, n: u16, left: f32, bottom: f32, f: &FrameInfo, 
     g.polygon(&[(sx - 5.0, sep_y - 1.5), (sx, sep_y - 6.0), (sx + 5.0, sep_y - 1.5)]);
     g.polygon(&[(sx - 5.0, sep_y + 1.5), (sx, sep_y + 6.0), (sx + 5.0, sep_y + 1.5)]);
     ui.c.glyph(if pol { ui.t.h(0xf3b234) } else if hp { ui.t.tx(0xffffff) } else { ui.t.tx(0xb7c3ca) }, &g);
+    // Under the pointer, a rounded border, in the lit colour when on (FL's look).
+    if hp {
+        ui.c.stroke_rrect(pr.inset(0.5), 3.0, 1.0, if pol { ui.t.h(0xf3b234) } else { ui.t.tx(0x8d989e) });
+    }
     let wr = Rect::new(sx - 8.0, swap_y - 8.0, 16.0, 16.0);
     let hw = ui.hit(wr, Action::Mix(MHit::Swap(n)), "Swap left & right channels");
     let mut g = Glyph::new();
@@ -529,6 +535,9 @@ fn strip(ui: &mut Ui, s: &State, n: u16, left: f32, bottom: f32, f: &FrameInfo, 
     g.polygon(&[(sx + 1.5, swap_y - 6.0), (sx + 7.5, swap_y), (sx + 1.5, swap_y + 6.0)]);
     ui.c.glyph(if swp { Color::rgb(0x5fb6f0) } else if hw { ui.t.tx(0xffffff) } else { ui.t.tx(0xb7c3ca) }, &g);
     ui.c.fill_rect(Rect::new(sx - 0.5, swap_y - 6.0, 1.0, 12.0), ui.t.s(0x5a6266));
+    if hw {
+        ui.c.stroke_rrect(wr.inset(0.5), 3.0, 1.0, if swp { Color::rgb(0x5fb6f0) } else { ui.t.tx(0x8d989e) });
+    }
     let sep = KnobId::MixSep(n);
     ui.hit(Rect::new(sx - 9.0, ring_y - 9.0, 18.0, 18.0), Action::Knob(sep), s.knob_text(sep));
     mixer_knob(ui, sx, ring_y, 6.0, 9.5, s.knob(sep), Some(true));

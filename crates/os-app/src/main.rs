@@ -522,6 +522,7 @@ impl Shell {
                 app::Cursor::NwseResize => icon(CursorIcon::NwseResize),
                 app::Cursor::NeswResize => icon(CursorIcon::NeswResize),
                 app::Cursor::Move => icon(CursorIcon::Move),
+                app::Cursor::Pointer => icon(CursorIcon::Pointer),
                 // A tool's cursor, or the arrow when it could not be made.
                 app::Cursor::Tool(t) => match self.tool_cursors.iter().find(|(i, _)| *i == t) {
                     Some((_, cc)) => winit::window::Cursor::Custom(cc.clone()),
