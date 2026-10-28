@@ -1312,7 +1312,7 @@ pub const LEMON_EQ: &str = "Mango Parametric EQ";
 /// Lemon Studio's effects compiled in besides the EQ (`builtin_effects`, in this order). They have no file plugin of
 /// their own to be stored as, so a project stores them wrapped, as it stored their plugin files
 /// (`project_plugins::is_wrapped`).
-pub const LINKED_EFFECTS: [&str; 14] = [
+pub const LINKED_EFFECTS: [&str; 15] = [
     "Mango Limiter",
     "Mango Reverb",
     "Mango Delay",
@@ -1391,6 +1391,7 @@ pub fn current_name(name: &str) -> &str {
 /// (`App::sync_effects`, `App::store_builtin_states`; spec: plugins/lemon-small-effects.md "Opened projects' slots").
 /// Not Lemon Stereo Shaper: the difference output is the mixer slot's alone (spec: plugins/lemon-stereo-shaper.md §5),
 /// so the engine's own Stereo Shaper keeps playing those slots.
+pub const FL_RECREATIONS: [(&str, &str); 12] = [
     ("Fruity Limiter", "Mango Limiter"),
     ("Fruity Reeverb 2", "Mango Reverb"),
     ("Fruity Delay 3", "Mango Delay"),
@@ -1401,7 +1402,6 @@ pub fn current_name(name: &str) -> &str {
     ("Transient Processor", "Mango Transient Processor"),
     ("Fruity Chorus", "Mango Chorus"),
     ("Fruity Filter", "Mango Filter"),
-pub const FL_RECREATIONS: [(&str, &str); 12] = [
     ("Fruity Flanger", "Mango Flanger"),
     ("Fruity Phaser", "Mango Phaser"),
 ];

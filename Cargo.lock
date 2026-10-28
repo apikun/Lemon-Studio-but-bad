@@ -1959,6 +1959,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "lemon-filter"
+version = "0.2.1"
+dependencies = [
+ "lemon-small-fx",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
+name = "lemon-flanger"
+version = "0.2.1"
+dependencies = [
+ "lemon-small-fx",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
 name = "lemon-kick"
 version = "0.2.1"
 dependencies = [
@@ -1999,7 +2017,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-phaser"
-version = "0.0.1"
+version = "0.2.1"
 dependencies = [
  "lemon-small-fx",
  "nih_plug",
@@ -2923,6 +2941,8 @@ dependencies = [
  "lemon-chorus",
  "lemon-delay",
  "lemon-fast-distortion",
+ "lemon-filter",
+ "lemon-flanger",
  "lemon-kick",
  "lemon-limiter",
  "lemon-parametric-eq-2",

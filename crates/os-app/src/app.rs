@@ -9622,7 +9622,7 @@ mod tests {
         lemon_small_fx::params::set_field(&mut flanger, 1, 700);
         let mut phaser = lemon_small_fx::params::default_state(lemon_small_fx::phaser::SPEC);
         lemon_small_fx::params::set_field(&mut phaser, 6, 15);
-        let cases = [(1u16, 0u8, "Fruity Flanger", "Lemon Flanger", flanger), (2, 1, "Fruity Phaser", "Lemon Phaser", phaser)];
+        let cases = [(1u16, 0u8, "Fruity Flanger", "Mango Flanger", flanger), (2, 1, "Fruity Phaser", "Mango Phaser", phaser)];
         let mut a = App::new(None);
         a.state.project = test_project();
         a.state.file = None;
