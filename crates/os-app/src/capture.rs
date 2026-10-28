@@ -1,5 +1,6 @@
 // Copyright (C) 2026 ItsAlphaNeon
 // Copyright (C) 2026 ravenmarkdev-alt
+// Copyright (C) 2026 Artig3nce
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -186,6 +187,9 @@ pub struct Monitor {
     primed: AtomicBool,
     /// One reader at a time: a stream fading out may still render while the next one starts.
     reader: Mutex<()>,
+    /// The largest block a stream pushed: the reader keeps that much waiting on top of `PRIME`, so a device that hands
+    /// its input over in big blocks is not cut back below one and played dry.
+    block: std::sync::atomic::AtomicUsize,
 }
 
 /// About 0.7 s of eight inputs at 48 kHz.
@@ -198,7 +202,7 @@ const MOST: usize = PRIME + 4096;
 /// The one monitor.
 pub fn monitor() -> &'static Monitor {
     static M: OnceLock<Monitor> = OnceLock::new();
-    M.get_or_init(|| Monitor { ring: Ring::new(MONITOR_RING), on: AtomicBool::new(false), from: AtomicU32::new(ASIO_SOURCE), primed: AtomicBool::new(false), reader: Mutex::new(()) })
+    M.get_or_init(|| Monitor { ring: Ring::new(MONITOR_RING), on: AtomicBool::new(false), from: AtomicU32::new(ASIO_SOURCE), primed: AtomicBool::new(false), reader: Mutex::new(()), block: std::sync::atomic::AtomicUsize::new(0) })
 }
 
 impl Monitor {
@@ -210,6 +214,7 @@ impl Monitor {
     /// every input, while some track takes one. The audio callback calls it; it neither locks nor allocates.
     pub fn push(&self, from: u32, frames: usize, at: impl Fn(usize, usize) -> f32) {
         if self.on() && self.from.load(Ordering::Relaxed) == from {
+            self.block.fetch_max(frames, Ordering::Relaxed);
             self.ring.push_with(frames * LIVE_INPUTS, |k| at(k % LIVE_INPUTS, k / LIVE_INPUTS));
         }
     }
@@ -219,6 +224,7 @@ impl Monitor {
         if let Some(f) = from {
             self.from.store(f, Ordering::Relaxed);
         }
+        self.block.store(0, Ordering::Relaxed);
         self.on.store(from.is_some(), Ordering::Release);
     }
 
@@ -226,12 +232,15 @@ impl Monitor {
     fn read(&self, frames: usize, out: &mut Vec<f32>) {
         out.clear();
         if let Ok(_one) = self.reader.try_lock() {
+            // What it keeps waiting grows with the device's blocks (`block`), so one big block never skips the rest.
+            let prime = PRIME + self.block.load(Ordering::Relaxed);
+            let most = prime + (MOST - PRIME);
             let waiting = self.ring.len() / LIVE_INPUTS;
-            if waiting > MOST {
-                self.ring.take((waiting - PRIME) * LIVE_INPUTS, out, false);
+            if waiting > most {
+                self.ring.take((waiting - prime) * LIVE_INPUTS, out, false);
             }
             let waiting = self.ring.len() / LIVE_INPUTS;
-            if !self.primed.load(Ordering::Relaxed) && waiting >= PRIME + frames {
+            if !self.primed.load(Ordering::Relaxed) && waiting >= prime.max(PRIME + frames) {
                 self.primed.store(true, Ordering::Relaxed);
             }
             if self.primed.load(Ordering::Relaxed) {
@@ -376,19 +385,38 @@ fn open_device(device: &cpal::Device) -> Result<(cpal::Stream, u32, u32), String
     use cpal::SampleFormat;
     let supported = device.default_input_config().map_err(|e| e.to_string())?;
     let format = supported.sample_format();
-    let config: cpal::StreamConfig = supported.into();
+    let range = supported.buffer_size().clone();
+    let mut config: cpal::StreamConfig = supported.into();
     let source = next_source();
-    let stream = match format {
-        SampleFormat::F32 => build::<f32>(device, &config, source),
-        SampleFormat::F64 => build::<f64>(device, &config, source),
-        SampleFormat::I16 => build::<i16>(device, &config, source),
-        SampleFormat::I24 => build::<cpal::I24>(device, &config, source),
-        SampleFormat::I32 => build::<i32>(device, &config, source),
-        SampleFormat::U16 => build::<u16>(device, &config, source),
+    let open = |config: &cpal::StreamConfig| match format {
+        SampleFormat::F32 => build::<f32>(device, config, source),
+        SampleFormat::F64 => build::<f64>(device, config, source),
+        SampleFormat::I16 => build::<i16>(device, config, source),
+        SampleFormat::I24 => build::<cpal::I24>(device, config, source),
+        SampleFormat::I32 => build::<i32>(device, config, source),
+        SampleFormat::U16 => build::<u16>(device, config, source),
         other => Err(format!("unsupported input sample format {other:?}")),
-    }?;
+    };
+    // Small blocks, so a track's input is heard soon and steadily: a sound server's default can be thousands of
+    // frames (8192 seen with PulseAudio) at a time. A device that refuses opens at its own size.
+    let small = match range {
+        cpal::SupportedBufferSize::Range { min, max } => INPUT_BLOCK.clamp(min, max),
+        cpal::SupportedBufferSize::Unknown => INPUT_BLOCK,
+    };
+    let default = config.buffer_size;
+    config.buffer_size = cpal::BufferSize::Fixed(small);
+    let stream = match open(&config) {
+        Ok(s) => s,
+        Err(_) => {
+            config.buffer_size = default;
+            open(&config)?
+        }
+    };
     Ok((stream, config.sample_rate, source))
 }
+
+/// The block an input stream asks its device for (frames): about 10 ms at 48 kHz.
+const INPUT_BLOCK: u32 = 512;
 
 fn build<T>(device: &cpal::Device, config: &cpal::StreamConfig, source: u32) -> Result<cpal::Stream, String>
 where
@@ -606,27 +634,48 @@ mod tests {
     /// skips back when too much waits; only its stream goes in.
     #[test]
     fn the_monitor_keeps_a_little_waiting() {
-        let m = Monitor { ring: Ring::new(MONITOR_RING), on: AtomicBool::new(false), from: AtomicU32::new(ASIO_SOURCE), primed: AtomicBool::new(false), reader: Mutex::new(()) };
+        let m = Monitor { ring: Ring::new(MONITOR_RING), on: AtomicBool::new(false), from: AtomicU32::new(ASIO_SOURCE), primed: AtomicBool::new(false), reader: Mutex::new(()), block: std::sync::atomic::AtomicUsize::new(0) };
         let at = |c: usize, f: usize| (f * 100 + c) as f32;
+        // A low-latency device: 64-frame blocks.
+        let push = |m: &Monitor, n: usize| (0..n / 64).for_each(|_| m.push(3, 64, at));
         m.push(ASIO_SOURCE, 64, at);
         assert_eq!(m.ring.len(), 0, "off");
         m.set(Some(3));
         m.push(ASIO_SOURCE, 64, at);
         assert_eq!(m.ring.len(), 0, "another stream's");
-        m.push(3, PRIME, at);
+        push(&m, PRIME);
         let mut out = Vec::new();
         m.read(100, &mut out);
         assert_eq!(out.len(), 100 * LIVE_INPUTS);
         assert!(out.iter().all(|&x| x == 0.0), "not enough waiting yet");
-        m.push(3, 200, at);
+        push(&m, 192);
         m.read(100, &mut out);
         assert_eq!(out[LIVE_INPUTS + 2], 102.0, "the second frame's third input");
-        assert_eq!(m.ring.len(), (PRIME + 100) * LIVE_INPUTS);
-        m.push(3, MOST, at);
+        assert_eq!(m.ring.len(), (PRIME + 92) * LIVE_INPUTS);
+        push(&m, MOST);
         m.read(10, &mut out);
-        assert_eq!(m.ring.len(), (PRIME - 10) * LIVE_INPUTS, "skipped back");
+        assert_eq!(m.ring.len(), (PRIME + 64 - 10) * LIVE_INPUTS, "skipped back to a block more than PRIME");
         m.set(None);
         assert!(!m.on());
+    }
+
+    /// A device that hands its input over in big blocks (8192 frames, as PulseAudio did): the monitor keeps a block
+    /// waiting, so a tick's input sounds and goes on sounding until the next block comes, never skipped to silence.
+    #[test]
+    fn the_monitor_plays_a_device_with_big_blocks() {
+        let m = Monitor { ring: Ring::new(MONITOR_RING), on: AtomicBool::new(false), from: AtomicU32::new(ASIO_SOURCE), primed: AtomicBool::new(false), reader: Mutex::new(()), block: std::sync::atomic::AtomicUsize::new(0) };
+        let one = |_: usize, _: usize| 0.5f32;
+        m.set(Some(3));
+        m.push(3, 8192, one);
+        let mut out = Vec::new();
+        m.read(231, &mut out);
+        assert!(out.iter().all(|&x| x == 0.0), "waits for a block on top of PRIME");
+        m.push(3, 8192, one);
+        // The reads of a block's time (8192 frames, 35 ticks of 231) all sound.
+        for k in 0..35 {
+            m.read(231, &mut out);
+            assert!(out.iter().all(|&x| x == 0.5), "tick {k} sounds");
+        }
     }
 
     /// Stereo takes a pair; one input goes to both sides.
