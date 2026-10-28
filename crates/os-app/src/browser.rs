@@ -357,6 +357,8 @@ impl App {
         // so the moving preview leaves no trail.
         let grid = self.pl_grid();
         let old_zone = self.state.browser_drag.as_ref().and_then(|d| zone_rect(&self.state, grid, d.x, d.y));
+        // The label too: redrawn where it was, or each old copy stays on screen as a trail.
+        let old_ghost = self.state.browser_drag.as_ref().map(|d| view::ghost_rect(d.x, d.y));
         if !started {
             self.drag = Some(Drag::Browser { item: item.clone(), label: label.clone(), m0, started: true });
         }
@@ -364,7 +366,9 @@ impl App {
         for r in old_zone.into_iter().chain(zone_rect(&self.state, grid, x, y)) {
             self.damage_rect(r.outset(1.0));
         }
-        self.damage_rect(view::ghost_rect(x, y));
+        for r in old_ghost.into_iter().chain([view::ghost_rect(x, y)]) {
+            self.damage_rect(r.outset(1.0));
+        }
     }
 }
 
