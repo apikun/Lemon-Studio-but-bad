@@ -4608,9 +4608,18 @@ impl App {
                 format!("Status: opens with the first note or Play ({host})")
             }
         };
+        // The engine's load answers the line above: at 100 % or more it cannot keep up with real time, and no
+        // buffer length will hold the dropouts (the render has to get lighter); well under it, dropouts are the
+        // device's scheduling, which a longer buffer does hold.
+        let load = tp.load();
+        let load_note = if load > 0.0 {
+            format!(" The engine renders in {}% of a core.", (load * 100.0).round() as i32)
+        } else {
+            String::new()
+        };
         let second = match tp.underruns() {
-            0 => "No dropouts so far.".to_string(),
-            n => format!("Dropouts so far: {n} (device blocks the engine could not fill in time; a longer buffer helps)"),
+            0 => format!("No dropouts so far.{load_note}"),
+            n => format!("Dropouts so far: {n} (device blocks the engine could not fill in time; a longer buffer helps).{load_note}"),
         };
         let st = &mut self.state.settings;
         let changed = st.status[0] != first || st.status[1] != second || (&st.driver, st.asio_open, &st.instead) != (&driver, asio_open, &instead);

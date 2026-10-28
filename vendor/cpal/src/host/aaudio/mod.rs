@@ -289,9 +289,20 @@ fn configure_for_device(
     // - https://developer.android.com/ndk/guides/audio/audio-latency#buffer-size
     if let BufferSize::Fixed(size) = config.buffer_size {
         // For fixed sizes, the user explicitly wants control over the callback size.
-        builder = builder
-            .frames_per_data_callback(size.min(i32::MAX as FrameCount) as i32)
-            .buffer_capacity_in_frames(size.saturating_mul(2).min(i32::MAX as FrameCount) as i32);
+        #[cfg(not(target_os = "android"))]
+        {
+            builder = builder
+                .frames_per_data_callback(size.min(i32::MAX as FrameCount) as i32)
+                .buffer_capacity_in_frames(size.saturating_mul(2).min(i32::MAX as FrameCount) as i32);
+        }
+        // Mango patch: Android asks for the capacity only, and leaves the data-callback size to AAudio (its
+        // burst). Forcing the callback size too risks the open: a device's MMAP FIFO can be smaller than the
+        // ask, AAudio refuses the stream, and the app opens again with no length at all — the two-burst budget
+        // the length was meant to replace. The capacity alone is what buys the room.
+        #[cfg(target_os = "android")]
+        {
+            builder = builder.buffer_capacity_in_frames(size.saturating_mul(4).min(i32::MAX as FrameCount) as i32);
+        }
     }
 
     // Mango patch (the tree's only change from cpal 0.18.2): Android asks for the low-latency
