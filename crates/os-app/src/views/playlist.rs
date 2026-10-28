@@ -1365,6 +1365,8 @@ pub fn paint_overlays(ui: &mut Ui, s: &State) {
         let cw = ui.c.text_width(Font::new(14), &e.text).min(r.w - 10.0);
         ui.c.fill_rect(Rect::new(r.x + 5.0 + cw, r.y + 3.0, 1.0, 14.0), t.text);
     }
+    // The plugin picker, above everything else.
+    super::plugin_picker::paint(ui, s);
 }
 
 // Row heights follow the display scale like FL's popup menus (spec: ui/ui-scaling.md §2).

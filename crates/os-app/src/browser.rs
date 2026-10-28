@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 ravenmarkdev-alt
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -44,9 +45,40 @@ impl App {
                 s.playlist.popup = if open { None } else { Some(Popup { x, y, items: options_menu(s), sub: None, scroll: [0; 2] }) };
             }
             Action::BrowserSearch => s.browser_search_focus = true,
+            Action::BrowserPlugFilter(i) => {
+                s.browser_plug_filter = i;
+                s.browser_plug_cat = None;
+                s.browser_scroll = 0.0;
+            }
+            Action::BrowserPlugCat(c) => {
+                s.browser_plug_cat = c;
+                s.browser_scroll = 0.0;
+            }
+            Action::BrowserPlugStar(i) => {
+                let Some(f) = crate::views::plugin_panel::list(s).into_iter().nth(i) else { return true };
+                crate::plugin_menu::run(self, crate::plugin_menu::PlugCmd::Star { effect: f.effect, index: f.entry().index });
+            }
             Action::BrowserRow(i) => {
                 let Some(row) = view::rows(s).into_iter().nth(i) else { return true };
                 select(s, &row.key);
+                // The plugin browser: a second press on the same plugin adds it, as its row menu's Add does.
+                if s.browser_tab == view::PLUGIN_TAB {
+                    let now = std::time::Instant::now();
+                    let double = s.browser_plug_click.as_ref().is_some_and(|(k, t)| *k == row.key && now.duration_since(*t).as_millis() < 400);
+                    s.browser_plug_click = if double { None } else { Some((row.key.clone(), now)) };
+                    if double {
+                        let m = match row.item {
+                            Item::Generator(i) => crate::plugin_menu::add_generator(self, i, None),
+                            Item::Effect(i) => crate::plugin_menu::add_effect(self, i, None),
+                            _ => None,
+                        };
+                        if m.is_some() {
+                            self.state.message = m;
+                        }
+                        self.invalidate();
+                        return true;
+                    }
+                }
                 if row.open.is_some() && !s.browser_open.remove(&row.key) {
                     s.browser_open.insert(row.key.clone());
                 }
@@ -767,6 +799,10 @@ pub fn row_menu(s: &crate::app::State, row: &view::Row) -> Vec<PItem> {
             items.push(if s.hosted_rows.contains(&key) { it } else { it.off() });
         }
         Item::None | Item::File(_) | Item::Param(..) => {}
+    }
+    // The plugin browser's variants and star.
+    if s.browser_tab == view::PLUGIN_TAB {
+        items.extend(crate::views::plugin_panel::row_menu(s, row));
     }
     if let Some(path) = &row.path {
         sep(&mut items);

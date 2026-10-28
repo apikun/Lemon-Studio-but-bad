@@ -258,6 +258,13 @@ pub enum Action {
     BrowserSearch,
     /// The splitter right of the browser: drag to resize it, double-click for the default width (§9).
     BrowserSplitter,
+    /// The plugin browser (Plugin database tab): filter button `i` (`views::plugin_panel::FILTERS`), a category
+    /// (`None`: all of them), the star of row `i`.
+    BrowserPlugFilter(usize),
+    BrowserPlugCat(Option<&'static str>),
+    BrowserPlugStar(usize),
+    /// The plugin picker (`crate::plugin_picker`).
+    Picker(crate::plugin_picker::PickAct),
     PlaylistArea,
     MixerArea,
     RackArea,
@@ -1058,6 +1065,13 @@ pub struct State {
     /// runs, and the last press on the splitter, for its double click (spec: ui/browser.md §9).
     pub browser_w: f32,
     pub browser_split_click: Option<std::time::Instant>,
+    /// The plugin browser's filter button (`views::plugin_panel::FILTERS`) and category (`None`: all), and the last
+    /// press on one of its plugins, for its double click.
+    pub browser_plug_filter: usize,
+    pub browser_plug_cat: Option<&'static str>,
+    pub browser_plug_click: Option<(String, std::time::Instant)>,
+    /// The plugin picker, while it is open (`crate::plugin_picker`).
+    pub picker: Option<crate::plugin_picker::Picker>,
     /// The hovered row whose label is scrolling, as last painted (spec: ui/browser.md §9).
     pub browser_marquee: std::cell::RefCell<Option<views::browser::Marquee>>,
     /// Plugin parameter lists and the last tweaked parameters (spec: plugins/plugin-parameters.md).
@@ -1427,6 +1441,10 @@ impl App {
                 browser_hist_pos: 0,
                 browser_w: crate::browser::load_width(),
                 browser_split_click: None,
+                browser_plug_filter: views::plugin_panel::ALL,
+                browser_plug_cat: None,
+                browser_plug_click: None,
+                picker: None,
                 browser_marquee: Default::default(),
                 tempo: 130.0,
                 tempo_digits: std::cell::Cell::new([f32::INFINITY; 3]),
@@ -6762,7 +6780,10 @@ impl App {
     fn wheel_act(&mut self, dx: f32, dy: f32, shift: bool, ctrl: bool) -> Option<Win> {
         let (x, y) = self.mouse;
         let area = self.top_hit(x, y).map(|h| h.action.clone());
-        if matches!(area, Some(Action::BrowserList | Action::BrowserRow(_) | Action::BrowserTab(_))) {
+        if self.picker_wheel(area.as_ref(), dy + dx) {
+            return None;
+        }
+        if matches!(area, Some(Action::BrowserList | Action::BrowserRow(_) | Action::BrowserTab(_) | Action::BrowserPlugStar(_))) {
             self.browser_wheel(dy + dx);
             return None;
         }
@@ -7043,6 +7064,10 @@ impl App {
                 Key::Named(NamedKey::Enter) => self.link_accept(),
                 _ => {}
             }
+            return;
+        }
+        // The plugin picker takes every key while it is open, held Backspace included.
+        if self.picker_key(key, ctrl, alt) {
             return;
         }
         // Ctrl+J: Multilink to controllers (spec: ui/remote-control.md §4).
@@ -7328,7 +7353,7 @@ impl App {
     /// skips the normal shortcut handling. Spec: ui/typing-keyboard.md.
     pub fn typing_key(&mut self, code: KeyCode, pressed: bool, ctrl: bool, alt: bool) -> bool {
         // A playlist text box (track / marker name, point value) takes the letters.
-        if pressed && (self.modal_open() || self.state.playlist.edit.is_some() || self.state.plugdb.finding || self.state.pat_ui.name_box.is_some() || self.state.pat_ui.confirm || self.browser_takes_typing() || self.state.perf.finding) {
+        if pressed && (self.modal_open() || self.state.playlist.edit.is_some() || self.state.plugdb.finding || self.state.pat_ui.name_box.is_some() || self.state.pat_ui.confirm || self.browser_takes_typing() || self.state.perf.finding || self.state.picker.is_some()) {
             return false;
         }
         // So does a box of the settings window's Info page, and a browser folder cell.
@@ -7768,7 +7793,7 @@ impl App {
         if self.playlist_act(&a, false) {
             return;
         }
-        if self.browser_act(&a) {
+        if self.picker_act(&a) || self.browser_act(&a) {
             return;
         }
         if self.rack_act(&a) {
@@ -8153,6 +8178,7 @@ impl App {
             }
             Action::CloseWin(w) => s.hide(w),
             Action::BrowserRow(_) | Action::BrowserTab(_) | Action::BrowserList | Action::BrowserCollapse | Action::BrowserReread | Action::BrowserMenu | Action::BrowserSearch | Action::BrowserSplitter => {}
+            Action::BrowserPlugFilter(_) | Action::BrowserPlugCat(_) | Action::BrowserPlugStar(_) | Action::Picker(_) => {}
             Action::TypeIn(t) => crate::typein::click(s, t),
             Action::PlaylistArea | Action::MixerArea | Action::RackArea | Action::Swallow => {}
             Action::PlTool(_)
@@ -12509,6 +12535,28 @@ mod tests {
         assert_eq!(sub(&app), Some((Some(0), [0, 2])));
     }
 
+    /// Clicks on the drawn picker: a category's row opens its list, a plugin's arrow there its variants.
+    #[test]
+    fn picker_clicks_open_a_category_and_variants() {
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let mut app = App::new(None);
+        app.plugins.available.clear();
+        app.plugins.effects = ["CLA-76 Mono", "CLA-76 Stereo", "Echo Thing"].iter().map(|n| crate::plugin_db::fake(n, os_host::Kind::Effect)).collect();
+        app.state.plugdb.rebuild(&app.plugins);
+        app.open_picker(crate::plugin_menu::Target::Fx(None));
+        frame(&mut app, &mut c, None);
+        let r = hit_rect(&app, &Action::Picker(crate::plugin_picker::PickAct::Main(1)));
+        click(&mut app, &mut c, r);
+        assert!(app.state.picker.as_ref().is_some_and(|p| p.cat.is_some()), "the category opened");
+        let r = hit_rect(&app, &Action::Picker(crate::plugin_picker::PickAct::SideMore(1)));
+        click(&mut app, &mut c, r);
+        assert!(app.state.picker.as_ref().is_some_and(|p| p.fam.is_some()), "the variants opened");
+        let r = hit_rect(&app, &Action::Picker(crate::plugin_picker::PickAct::Variant(1)));
+        click(&mut app, &mut c, r);
+        assert!(app.state.picker.is_none());
+        assert_eq!(app.state.plugdb.prefs.recent.first(), Some(&app.plugins.effects[1].desc.uid()), "CLA-76 Stereo was added");
+    }
+
     /// With hundreds of plugins (issue #134) the F8 menu is wider than the window: its footer is out of view at first;
     /// the scroll bar brings it in, and Manage plugins... works there (spec: ui/menus.md "Menus wider than the window").
     #[test]
@@ -12521,16 +12569,19 @@ mod tests {
             app.plugins.available.push(crate::plugin_db::fake(&format!("Test Synth {i}"), os_host::Kind::Instrument));
             app.plugins.effects.push(crate::plugin_db::fake(&format!("Test FX {i}"), os_host::Kind::Effect));
         }
+        // F8 opens the plugin picker now; the plugin list as a popup (Simple lists every plugin) still scrolls.
+        app.state.plugdb.prefs.menu_view = crate::plugin_db::MenuView::Simple;
         app.state.plugdb.rebuild(&app.plugins);
         frame(&mut app, &mut c, None);
-        app.key(&Key::Named(NamedKey::F8), false, false);
+        let items = crate::plugin_menu::items(&app.state, crate::plugin_menu::Target::All, false);
+        app.state.playlist.popup = Some(crate::playlist::Popup { x: 10.0, y: 10.0, items, sub: None, scroll: [0; 2] });
         frame(&mut app, &mut c, None);
-        let manage = app.state.playlist.popup.as_ref().and_then(|p| p.items.iter().position(|i| i.label == "Manage plugins...")).expect("the F8 menu");
+        let manage = app.state.playlist.popup.as_ref().and_then(|p| p.items.iter().position(|i| i.label == "Manage plugins...")).expect("the plugin list");
         let row = |app: &App| app.hits.iter().find(|h| h.action == Action::PlPopup(manage) && h.rect.h > 0.0).map(|h| h.rect);
         assert_eq!(row(&app), None, "out of view at first");
         let track = app.bar(Scroll::Popup).expect("a scroll bar").track;
         click(&mut app, &mut c, Rect::new(track.right() - 2.0, track.y, 1.0, track.h));
-        assert!(crate::plugin_menu::is_open(&app.state), "the bar keeps the menu open");
+        assert!(app.state.playlist.popup.is_some(), "the bar keeps the menu open");
         let r = row(&app).expect("in view at the end");
         assert!(r.x >= 0.0 && r.right() <= 1366.0);
         click(&mut app, &mut c, r);
@@ -13299,13 +13350,10 @@ mod tests {
         click(&mut app, &mut c, r0);
         assert!(rows(&app.state).iter().all(|r| r.item != Item::Pattern(1)));
         assert_eq!(crate::playlist::clips(&app.state).len(), n0 + 1);
-        // Plugin database tab: open Generators, drag Lemon Sampler onto the playlist -> a new channel.
+        // Plugin database tab (the plugin browser): drag Lemon Sampler onto the playlist -> a new channel.
         app.plugins = crate::plugins::Plugins::builtins();
         app.state.plugdb.rebuild(&app.plugins);
         let r0 = hit_rect(&app, &Action::BrowserTab(2));
-        click(&mut app, &mut c, r0);
-        let gi = rows(&app.state).iter().position(|r| r.label == "Generators").unwrap();
-        let r0 = hit_rect(&app, &Action::BrowserRow(gi));
         click(&mut app, &mut c, r0);
         let si = rows(&app.state).iter().position(|r| r.item == Item::Generator(0)).expect("sampler row");
         let ch0 = app.state.project.channels.len();
@@ -14017,10 +14065,8 @@ mod tests {
         frame(&mut app, &mut c, None);
         let r0 = hit_rect(&app, &Action::BrowserTab(2));
         click(&mut app, &mut c, r0);
-        let gi = rows(&app.state).iter().position(|r| r.label == "Generators").expect("generators");
-        let r0 = hit_rect(&app, &Action::BrowserRow(gi));
-        click(&mut app, &mut c, r0);
-        let gi = rows(&app.state).iter().position(|r| r.item == Item::Generator(1)).expect("a generator row");
+        // The Plugin database tab is a plugin browser: the generators are listed at once, no folder to open.
+        let gi = rows(&app.state).iter().position(|r| matches!(r.item, Item::Generator(_)) && r.label == crate::osc3::LEMON_TRIO).expect("a generator row");
         let ch0 = app.state.project.channels.len();
         let src = hit_rect(&app, &Action::BrowserRow(gi));
         let dst = hit_rect(&app, &Action::PlHeader(2));
@@ -14039,7 +14085,9 @@ mod tests {
         assert_eq!(app.state.message.as_deref(), Some(format!("Added {} on track 3", crate::osc3::LEMON_TRIO).as_str()));
         // A second drag of the same row onto the rows: at the drop, the next pattern.
         frame(&mut app, &mut c, None);
-        let gi = rows(&app.state).iter().position(|r| r.item == Item::Generator(1)).expect("the row again");
+        // Later than a double click: the plugin browser takes two presses on a row within 400 ms as one, adding it.
+        app.state.browser_plug_click = None;
+        let gi = rows(&app.state).iter().position(|r| matches!(r.item, Item::Generator(_)) && r.label == crate::osc3::LEMON_TRIO).expect("the row again");
         let src = hit_rect(&app, &Action::BrowserRow(gi));
         let grid = app.pl_grid().expect("grid");
         let n = crate::playlist::clips(&app.state).len();
@@ -14498,9 +14546,12 @@ mod tests {
         for _ in 0..6 {
             let hr = hit_rect(&app, &Action::RackAdd);
             click(&mut app, &mut a, hr);
-            let pick = app.state.playlist.popup.as_ref().and_then(|p| p.items.iter().find(|i| i.label == crate::plugins::LEMON_SAMPLER)).map(|i| i.cmd.clone());
-            crate::playlist::run(&mut app, pick.expect("the generator menu lists Mango Sampler"));
-            assert!(app.state.playlist.popup.is_none());
+            assert_eq!(app.state.picker.as_ref().map(|p| p.target), Some(crate::plugin_menu::Target::Gen(None)), "the generator picker");
+            for ch in "mango sampler".chars() {
+                app.key(&winit::keyboard::Key::Character(ch.to_string().into()), false, false);
+            }
+            app.key(&winit::keyboard::Key::Named(winit::keyboard::NamedKey::Enter), false, false);
+            assert!(app.state.picker.is_none());
             frame(&mut app, &mut a, None);
         }
         assert_eq!(app.state.project.channels.len(), n + 6);
@@ -18366,42 +18417,45 @@ mod tests {
         app.state.plugdb.rebuild(&app.plugins);
         frame(&mut app, &mut c, None);
         let f8 = Key::Named(NamedKey::F8);
-        let pick = |app: &App, label: &str| app.state.playlist.popup.as_ref().and_then(|p| p.items.iter().find(|i| i.label == label)).map(|i| i.cmd.clone());
+        // The picker: a search lists a plugin first; a click on its row adds it.
+        let search = |app: &mut App, c: &mut Canvas, text: &str| {
+            for ch in text.chars() {
+                app.key(&Key::Character(ch.to_string().into()), false, false);
+            }
+            frame(app, c, None);
+        };
         app.key(&f8, false, false);
-        {
-            let p = app.state.playlist.popup.as_ref().expect("F8 opens the plugin menu");
-            assert!(p.items.iter().any(|i| i.head && i.label == "Generators"));
-            assert!(p.items.iter().any(|i| i.head && i.label == "Effects"));
-        }
+        assert_eq!(app.state.picker.as_ref().map(|p| p.target), Some(crate::plugin_menu::Target::All), "F8 opens the plugin picker");
         // An effect: the selected track's first empty slot.
         crate::mixer::select(&mut app.state, 2, false);
         app.state.project.mixer[2].slots[0] = Some(os_model::SlotPlugin { name: "Taken".into(), state: Vec::new() });
-        let fx = pick(&app, "Test FX").expect("the effects are listed");
+        search(&mut app, &mut c, "test fx");
         let index = app.plugins.effects.len() - 1;
-        assert_eq!(fx, Cmd::Plugin(PlugCmd::Effect { index, slot: None }));
-        crate::playlist::run(&mut app, fx);
-        assert!(app.state.playlist.popup.is_none());
+        assert!(crate::plugin_picker::cmds(&app.state, crate::plugin_menu::Target::All).contains(&Cmd::Plugin(PlugCmd::Effect { index, slot: None })));
+        let row = hit_rect(&app, &Action::Picker(crate::plugin_picker::PickAct::Main(0)));
+        click(&mut app, &mut c, row);
+        assert!(app.state.picker.is_none());
         assert_eq!(crate::mixer::slot_name(&app.state, 2, 1).as_deref(), Some("Test FX"));
         // F8 twice: open, then closed.
         app.key(&f8, false, false);
         assert!(crate::plugin_menu::is_open(&app.state));
         app.key(&f8, false, false);
-        assert!(app.state.playlist.popup.is_none());
-        // The toolbar button opens it under the button; a generator goes to the bottom of the rack and is selected.
+        assert!(!crate::plugin_menu::is_open(&app.state));
+        // The toolbar button opens it too; a generator goes to the bottom of the rack and is selected.
         frame(&mut app, &mut c, None);
         let b = hit_rect(&app, &Action::PickerOpen);
         click(&mut app, &mut c, b);
-        let p = app.state.playlist.popup.as_ref().expect("the toolbar button opens the plugin menu");
-        assert!(p.y >= b.bottom(), "under the button");
+        assert!(crate::plugin_menu::is_open(&app.state), "the toolbar button opens the plugin picker");
         let n = app.state.project.channels.len();
-        let osc = pick(&app, crate::osc3::LEMON_TRIO).expect("the generators are listed");
-        crate::playlist::run(&mut app, osc);
+        search(&mut app, &mut c, &crate::osc3::LEMON_TRIO.to_lowercase());
+        let osc = crate::plugin_menu::pick(crate::plugin_menu::Target::All, false, app.plugins.index_of(crate::osc3::LEMON_TRIO).unwrap());
+        app.key(&Key::Named(NamedKey::Enter), false, false);
+        assert!(app.state.picker.is_none(), "Enter adds the first match: {osc:?}");
         assert_eq!(app.state.project.channels.len(), n + 1);
         assert_eq!(app.state.selected_channel, n);
         assert_eq!(app.state.pending_plugin, Some((n, app.plugins.index_of(crate::osc3::LEMON_TRIO).unwrap())));
         // An empty mixer slot's menu lists the effects for that slot.
-        let m = crate::mixer::effect_menu(&app.state, 4, 0.0, 0.0);
-        assert!(m.items.iter().any(|i| i.cmd == Cmd::Plugin(PlugCmd::Effect { index, slot: Some(4) })));
+        assert!(crate::plugin_picker::cmds(&app.state, crate::plugin_menu::Target::Fx(Some(4))).contains(&Cmd::Plugin(PlugCmd::Effect { index, slot: Some(4) })));
     }
 
     /// The menu bar dropdown's ▸ entries (spec: ui/menus.md "Look"): a click opens the submenu, the app's popup, to the
@@ -20120,9 +20174,8 @@ mod tests {
         let track = a.state.project.channels[row].mixer_track;
         crate::mixer::select(&mut a.state, track, false);
         let eq = a.plugins.effects.iter().position(|e| e.desc.format == Format::Vst2 && e.desc.name.replace(' ', "") == "3BandEQ").expect("3BandEQ");
-        let menu = crate::mixer::effect_menu(&a.state, 0, 0.0, 0.0);
-        let cmd = Cmd::Plugin(PlugCmd::Effect { index: eq, slot: Some(0) });
-        assert!(menu.items.iter().any(|it| it.cmd == cmd), "the slot menu lists the VST2 copy");
+       let cmd = Cmd::Plugin(PlugCmd::Effect { index: eq, slot: Some(0) });
+        assert!(crate::plugin_picker::cmds(&a.state, crate::plugin_menu::Target::Fx(Some(0))).contains(&cmd), "the slot's picker lists the VST2 copy");
         pl::run(&mut a, cmd);
         let key = fx_key(track, 0);
         for _ in 0..200 {
