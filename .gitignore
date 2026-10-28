@@ -13,3 +13,6 @@ CLAUDE.md
 
 # macOS Finder metadata
 .DS_Store
+
+# Python bytecode from the icon tooling
+__pycache__/
