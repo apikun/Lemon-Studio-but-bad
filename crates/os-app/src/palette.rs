@@ -1,10 +1,12 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 battlemountain2
+// Copyright (C) 2026 Artig3nce
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
 //! Omni Command Palette (Phase 4): Global searchable action runner, plugin inserter, and navigation hub.
 //!
-//! Toggled globally via `Ctrl+K` (or `Cmd+K` on macOS) and View ▸ Command palette.
+//! Toggled globally via `Ctrl+Shift+Space` and View ▸ Command palette (Ctrl+K stays FL's next channel and graph editor).
 //! Provides instant fuzzy filtering over DAW actions, native & scanned plugins, open windows,
 //! channels, and mixer tracks. Supports full keyboard navigation (Up/Down, Enter, Esc).
 
@@ -620,8 +622,8 @@ pub fn key(app: &mut App, key: &winit::keyboard::Key, ctrl: bool, alt: bool) -> 
         return false;
     }
 
-    // Toggle closed on Ctrl+K
-    if let Key::Character(c) = key && ctrl && !alt && c.eq_ignore_ascii_case("k") {
+    // Toggle closed on Ctrl+Shift+Space, the key that opened it.
+    if matches!(key, Key::Named(NamedKey::Space)) && ctrl && !alt && app.shift {
         app.state.palette.open = false;
         app.invalidate();
         return true;

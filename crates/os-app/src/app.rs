@@ -3171,7 +3171,7 @@ impl App {
         self.invalidate();
     }
 
-    /// Omni Command Palette (Ctrl+K, Phase 4).
+    /// Omni Command Palette (Ctrl+Shift+Space: Ctrl+K is FL's next channel and graph editor).
     pub fn toggle_command_palette(&mut self) {
         self.state.palette.open = !self.state.palette.open;
         if self.state.palette.open {
@@ -7087,8 +7087,9 @@ impl App {
         if self.state.palette.open && crate::palette::key(self, key, ctrl, alt) {
             return;
         }
-        // Ctrl+K: Omni Command Palette modal.
-        if let Key::Character(c) = key && ctrl && !alt && !self.shift && c.eq_ignore_ascii_case("k") {
+        // Ctrl+Shift+Space: Omni Command Palette modal (Ctrl+K stays FL's: the piano roll's next channel, the channel
+        // rack's graph editor).
+        if matches!(key, Key::Named(NamedKey::Space)) && ctrl && !alt && self.shift {
             self.toggle_command_palette();
             return;
         }
@@ -20858,9 +20859,11 @@ mod tests {
         // 1. Initial State: palette is closed
         assert!(!app.state.palette.open);
 
-        // 2. Ctrl+K opens the palette
-        app.key(&Key::Character("k".into()), true, false);
-        assert!(app.state.palette.open, "Ctrl+K opened command palette");
+        // 2. Ctrl+Shift+Space opens the palette
+        app.shift = true;
+        app.key(&Key::Named(NamedKey::Space), true, false);
+        app.shift = false;
+        assert!(app.state.palette.open, "Ctrl+Shift+Space opened command palette");
         assert_eq!(app.state.palette.query, "");
         assert_eq!(app.state.palette.selected, 0);
 

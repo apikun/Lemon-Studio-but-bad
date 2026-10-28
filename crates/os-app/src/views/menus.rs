@@ -229,7 +229,7 @@ const PAT_CMDS: &[Item] = &[
 
 const VIEW_ITEMS: &[Item] = &[
     head("Windows"),
-    it("Command palette", "Ctrl+K").on(),
+    it("Command palette", "Ctrl+Shift+Space").on(),
     it("Playlist", "F5").on().tick(),
     it("Piano roll", "F7").on().tick(),
     it("Channel rack", "F6").on().tick(),
