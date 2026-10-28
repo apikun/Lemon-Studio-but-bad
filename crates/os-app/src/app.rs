@@ -329,6 +329,8 @@ pub enum Action {
     PlMarkers,
     PlHeader(u16),
     PlLed(u16),
+    /// A playlist track header's "..." handle: drag to size the track, click to shrink it or bring it back.
+    PlTrackSize(u16),
     /// A group track's collapse arrow (spec: ui/playlist.md §6a).
     PlGroupArrow(u16),
     /// The arrangement name in the playlist title: the arrangement menu (spec: ui/playlist.md §12).
@@ -6188,6 +6190,10 @@ impl App {
             (None, Some(Action::RackResize(e))) => *e,
             _ => 0,
         };
+        // A track's "..." handle sizes the track.
+        if matches!((&self.drag, &self.hover), (Some(Drag::Pl(crate::playlist::PlDrag::TrackSize { .. })), _) | (None, Some(Action::PlTrackSize(_)))) {
+            return Cursor::NsResize;
+        }
         // A clip's menu icon takes a click, as the mixer's buttons do.
         if self.drag.is_none() && self.over_clip_icon && self.hover == Some(Action::PlaylistArea) {
             return Cursor::Pointer;
@@ -7374,7 +7380,7 @@ impl App {
         let pl_grid = self.pl_grid;
         let pl_area = matches!(
             area,
-            Some(Action::PlaylistArea | Action::PlRuler | Action::PlMarkers | Action::PlHeader(_) | Action::PlLed(_) | Action::PlGroupArrow(_))
+            Some(Action::PlaylistArea | Action::PlRuler | Action::PlMarkers | Action::PlHeader(_) | Action::PlLed(_) | Action::PlTrackSize(_) | Action::PlGroupArrow(_))
         );
         let s = &mut self.state;
         let (dx, dy) = if shift { (dy, dx) } else { (dx, dy) };
@@ -8104,6 +8110,8 @@ impl App {
                 pl::press_header(self, t, right, at);
             }
             Action::PlLed(t) => pl::press_led(self, t, right),
+            Action::PlTrackSize(t) if !right => pl::press_track_size(self, t),
+            Action::PlTrackSize(_) => {}
             Action::PlGroupArrow(t) => {
                 pl::toggle_collapse(&mut self.state, t);
                 self.invalidate();
@@ -8626,6 +8634,7 @@ impl App {
             | Action::PlMarkers
             | Action::PlHeader(_)
             | Action::PlLed(_)
+            | Action::PlTrackSize(_)
             | Action::PlGroupArrow(_)
             | Action::PlArrangement
             | Action::PlStretch
@@ -9770,6 +9779,48 @@ fn load_theme_inner() -> Theme {
 
 #[cfg(test)]
 mod tests {
+    /// A track's "..." handle (FL's): dragging it sizes that track alone; a click shrinks it to the smallest, another
+    /// brings it back; the height is saved in the project file.
+    #[test]
+    fn a_tracks_dots_size_it() {
+        use crate::playlist as pl;
+        let mut a = App::new(None);
+        a.state.project = test_project();
+        a.state.file = None;
+        a.state.path = None;
+        a.state.z = vec![Win::Playlist];
+        let mut c = Canvas::new(1920, 1080, 1.0).unwrap();
+        frame(&mut a, &mut c, None);
+        let height = |a: &App, t: u16| pl::Rows::new(&a.state).height(t);
+        let h0 = height(&a, 1);
+        let dots = hit_rect(&a, &Action::PlTrackSize(1));
+        a.mouse_move(dots.cx(), dots.cy());
+        assert_eq!(a.cursor(), Cursor::NsResize, "{:?} {:?}", a.hover, dots);
+        // Drag down 30 px: track 2 grows by 30, track 1 and 3 stay.
+        a.mouse_down();
+        a.mouse_move(dots.cx(), dots.cy() + 15.0);
+        a.mouse_move(dots.cx(), dots.cy() + 30.0);
+        a.mouse_up();
+        assert_eq!(height(&a, 1), h0 + 30.0);
+        assert_eq!((height(&a, 0), height(&a, 2)), (h0, h0));
+        // Saved and opened again, it keeps its height.
+        let path = std::env::temp_dir().join(format!("mango-track-height-{}.flp", std::process::id()));
+        a.save_to(path.clone());
+        let mut b = App::new(None);
+        b.open(path.clone());
+        let _ = std::fs::remove_file(&path);
+        assert!((height(&b, 1) - (h0 + 30.0)).abs() < 1.0, "{}", height(&b, 1));
+        // A click shrinks it to the smallest; another brings it back.
+        frame(&mut a, &mut c, None);
+        let dots = hit_rect(&a, &Action::PlTrackSize(1));
+        click(&mut a, &mut c, dots);
+        assert_eq!(height(&a, 1), pl::TRACK_MIN);
+        frame(&mut a, &mut c, None);
+        let grip = hit_rect(&a, &Action::PlTrackSize(1));
+        click(&mut a, &mut c, grip);
+        assert_eq!(height(&a, 1), h0);
+    }
+
     /// Over a clip's menu icon the hand shows, over the rest of the clip the grab, and in the open menu the arrow.
     #[test]
     fn a_clips_menu_icon_shows_the_hand() {
@@ -14271,7 +14322,7 @@ mod tests {
         let ppt = app.state.playlist_bar_w / f32::from(app.state.project.ppq * 4);
         assert!((ghost.rect.w - len as f32 * ppt).abs() < 0.01, "the ghost is as long as the sample");
         assert_eq!(ghost.rect.y, g.y_of(0), "the ghost sits on the row under the pointer");
-        assert!((ghost.rect.h - g.rows.clip_h()).abs() < 0.01);
+        assert!((ghost.rect.h - g.rows.clip_h(0)).abs() < 0.01);
         assert_eq!(ghost.label, "Ghost 01", "named like the clip the drop makes");
         // It follows the pointer, snapped (the raw tick under 100 px snaps forward, under 320 px to a later one).
         let (x2, y2) = (grid.x + 320.0, grid.y + 10.0);
