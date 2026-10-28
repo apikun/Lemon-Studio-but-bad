@@ -533,13 +533,21 @@ pub fn right(app: &mut App, h: MHit) -> bool {
 
 /// Middle click: rename a filled slot (§7).
 pub fn middle(app: &mut App, h: MHit) -> bool {
-    if let MHit::SlotName(i) = h {
-        let t = app.state.selected_mixer;
-        if slot_name(&app.state, t, i).is_some() {
-            let at = app.mouse;
-            crate::playlist::start_edit(&mut app.state, EditTarget::SlotName(t, i), at);
+    let at = app.mouse;
+    match h {
+        MHit::SlotName(i) => {
+            let t = app.state.selected_mixer;
+            if slot_name(&app.state, t, i).is_some() {
+                crate::playlist::start_edit(&mut app.state, EditTarget::SlotName(t, i), at);
+                return true;
+            }
+        }
+        // A strip: rename its track (from battlemountain2's fork).
+        MHit::Strip(n) => {
+            crate::playlist::start_edit(&mut app.state, EditTarget::MixerName(n), at);
             return true;
         }
+        _ => {}
     }
     false
 }

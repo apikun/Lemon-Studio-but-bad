@@ -1529,7 +1529,7 @@ pub fn loop_menu(s: &State, x: f32, y: f32) -> Popup {
 // Commands
 
 /// Where the rack's name boxes open: over a row's name button, else near the mouse.
-fn box_at_row(s: &State, r: usize, mouse: (f32, f32)) -> (f32, f32) {
+pub(crate) fn box_at_row(s: &State, r: usize, mouse: (f32, f32)) -> (f32, f32) {
     crate::views::rack::name_rect(s, r).map_or(crate::patterns::box_at_mouse(mouse), |nb| (nb.x, nb.y))
 }
 
