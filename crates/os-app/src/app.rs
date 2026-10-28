@@ -19382,10 +19382,10 @@ mod tests {
             assert_eq!((row(label).enabled, row(label).mark), (enabled, mark), "{label}");
         }
         assert_eq!(row("Hide").key, "Ctrl+F11");
-        // The factory presets (no user ones here), the classic layout's checked.
+        // The factory presets (no user ones here), the tests' first layout checked.
         let presets: Vec<_> = items.iter().skip_while(|i| i.label != "Presets").skip(1).collect();
         assert!(presets.len() == crate::toolbar::PRESETS.len() && presets.iter().all(|i| i.enabled));
-        assert_eq!(presets.iter().filter(|i| i.mark == Mark::Radio(true)).map(|i| i.label.as_ref()).collect::<Vec<&str>>(), ["Classic"]);
+        assert_eq!(presets.iter().filter(|i| i.mark == Mark::Radio(true)).map(|i| i.label.as_ref()).collect::<Vec<&str>>(), ["Caption left"]);
         // VIEW > Toolbars ▸ is the same menu.
         let entry = MENUS[VIEW].cols.iter().flat_map(|(_, items)| items.iter()).position(|it| it.label == "Toolbars").unwrap();
         assert!(works(VIEW, item_at(VIEW, entry).unwrap()));
@@ -19502,7 +19502,7 @@ mod tests {
         let home = block(&c, 383);
         let (play, tempo) = (hit_rect(&app, &Action::Play), hit_rect(&app, &Action::Tempo));
         let digits = app.state.tempo_digits.get();
-        let mut l = Layout::classic();
+        let mut l = crate::toolbar::PRESETS[crate::toolbar::CAPTION_LEFT].layout();
         l.rows[0].retain(|&p| p != Panel::Transport);
         l.rows[0].insert(0, Panel::Transport);
         app.set_toolbar_layout(l);
