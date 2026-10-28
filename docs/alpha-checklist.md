@@ -28,7 +28,7 @@ Systems a fully functional DAW can't ship without.
 ## Built-in instruments and effects
 
 Without third-party plugins, the built-in ones are the whole sound palette. Lemon Studio has three instruments and
-twelve effects; these are the gaps a project made in FL Studio runs into most.
+thirteen effects; these are the gaps a project made in FL Studio runs into most.
 
 - [ ] **Drum sampler (FPC).** A pad-based drum instrument
 - [ ] **Slicer (Slicex, Fruity Slicer).** A loop chopped into slices that the piano roll plays

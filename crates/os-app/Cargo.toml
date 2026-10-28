@@ -35,6 +35,7 @@ lemon-acid = { path = "../../plugins/lemon-acid", features = ["linked"] }
 lemon-limiter = { path = "../../plugins/lemon-limiter", features = ["linked"] }
 lemon-reverb = { path = "../../plugins/lemon-reverb", features = ["linked"] }
 lemon-delay = { path = "../../plugins/lemon-delay", features = ["linked"] }
+mango-beat = { path = "../../plugins/mango-beat", features = ["linked"] }
 lemon-soft-clipper = { path = "../../plugins/lemon-soft-clipper", features = ["linked"] }
 lemon-fast-distortion = { path = "../../plugins/lemon-fast-distortion", features = ["linked"] }
 lemon-balance = { path = "../../plugins/lemon-balance", features = ["linked"] }
