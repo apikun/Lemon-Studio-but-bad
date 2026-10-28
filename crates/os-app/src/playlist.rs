@@ -277,6 +277,16 @@ pub enum Cmd {
     ClipMute(usize),
     ClipDelete(usize),
     ClipUnique(usize),
+    /// Rename and color... / Change color... (the palette shown) of a pattern clip's pattern.
+    ClipPatternBox(usize, bool),
+    /// Select source pattern ▸: the clip plays that pattern instead.
+    ClipSetSource(usize, u16),
+    /// Use current time signature from ▸: the clip's pattern takes this signature.
+    ClipTimeSig(usize, u16, u16),
+    /// Select region ▸: the clip plays the pattern from one marker to the next (start, end in pattern ticks).
+    ClipRegion(usize, u32, u32),
+    /// Chop ▸: the clip (with the other selected clips when it is one of them) cut every that many ticks.
+    ClipChop(usize, u32),
     ClipEditSource(usize),
     ClipSelectSimilar(usize),
     ClipRename(usize),
@@ -1919,6 +1929,24 @@ fn end_solo(s: &mut State) {
     }
 }
 
+/// Pattern `n`'s time signature: a signature marker at its start, num / den (any signature marker there replaced).
+fn set_pattern_signature(s: &mut State, n: u16, num: u16, den: u16) {
+    if s.project.pattern(n).is_none() {
+        s.project.patterns.push(os_model::Pattern { number: n, ..Default::default() });
+    }
+    let Some(p) = s.project.patterns.iter_mut().find(|p| p.number == n) else { return };
+    p.markers.retain(|m| !(m.kind == os_model::TimeMarker::SIGNATURE && m.position == 0));
+    p.markers.push(os_model::TimeMarker {
+        position: 0,
+        kind: os_model::TimeMarker::SIGNATURE,
+        name: format!("{num}/{den}"),
+        numerator: num as u8,
+        denominator: den as u8,
+        scale: 0,
+    });
+    p.markers.sort_by_key(|m| m.position);
+}
+
 /// Make unique: a pattern clip gets its own copy of the pattern (§5).
 pub fn make_unique(s: &mut State, i: usize) -> Option<u16> {
     let c = *clips(s).get(i)?;
@@ -2457,6 +2485,9 @@ pub fn clip_menu(s: &State, i: usize, x: f32, y: f32) -> Popup {
         PickKind::Audio => "Audio clip",
         PickKind::Automation => "Automation clip",
     };
+    if let ClipSource::Pattern(n) = c.source {
+        return pattern_clip_menu(s, i, n, x, y);
+    }
     let mut items = vec![
         PItem::head(head),
         PItem::new("Preview", Cmd::ClipPreview(i)),
@@ -2467,10 +2498,6 @@ pub fn clip_menu(s: &State, i: usize, x: f32, y: f32) -> Popup {
         PItem::new("Random color", Cmd::ClipRandomColor(i)),
         PItem::sep(),
     ];
-    if let ClipSource::Pattern(_) = c.source {
-        items.push(PItem::new("Edit pattern", Cmd::ClipEditSource(i)));
-        items.push(PItem::new("Make unique", Cmd::ClipUnique(i)));
-    }
     // The automation clip's LFO over its window (issue #29).
     if let ClipSource::Channel(ch) = c.source {
         if s.project.automation(ch).is_some() {
@@ -2483,6 +2510,68 @@ pub fn clip_menu(s: &State, i: usize, x: f32, y: f32) -> Popup {
     }
     items.push(PItem::new("Select all similar clips", Cmd::ClipSelectSimilar(i)));
     items.push(PItem::new("Delete", Cmd::ClipDelete(i)));
+    Popup { x, y, items, sub: None, scroll: [0; 2] }
+}
+
+/// A pattern clip's menu, as FL's: name and colour, the source, the pattern's time signature, and the region and chop
+/// entries.
+fn pattern_clip_menu(s: &State, i: usize, n: u16, x: f32, y: f32) -> Popup {
+    let c = clips(s)[i];
+    let sources = s.project.patterns.iter().map(|p| {
+        PItem::new(crate::patterns::name_of(s, p.number), Cmd::ClipSetSource(i, p.number)).mark(Mark::Radio(p.number == n))
+    });
+    // The signatures the clip's place can take: the playlist's there, and the project's.
+    let arr_sig = s.project.arrangement().map(|a| s.project.marker_bars(&a.markers)).and_then(|r| r.iter().rev().find(|r| r.0 <= c.position).map(|r| r.2));
+    let proj_sig = s.project.signature().unwrap_or((s.project.bar().0, 4));
+    let sig_item = |label: &str, (num, den): (u16, u16)| PItem::new(format!("{label} ({num}/{den})"), Cmd::ClipTimeSig(i, num, den));
+    let mut sigs = Vec::new();
+    if let Some(sig) = arr_sig {
+        sigs.push(sig_item("Playlist", sig));
+    }
+    sigs.push(sig_item("Project", proj_sig));
+    // Regions: from each marker of the pattern to the next (or the pattern's end).
+    let mut marks: Vec<&os_model::TimeMarker> = s.project.pattern(n).map(|p| p.markers.iter().filter(|m| m.kind != os_model::TimeMarker::SIGNATURE).collect()).unwrap_or_default();
+    marks.sort_by_key(|m| m.position);
+    let end = s.project.pattern_length(n);
+    let mut regions: Vec<PItem> = marks
+        .iter()
+        .enumerate()
+        .filter_map(|(k, m)| {
+            let to = marks.get(k + 1).map_or(end, |m| m.position);
+            let name = if m.name.is_empty() { format!("Region {}", k + 1) } else { m.name.clone() };
+            (to > m.position).then(|| PItem::new(name, Cmd::ClipRegion(i, m.position, to)))
+        })
+        .collect();
+    if regions.is_empty() {
+        regions.push(PItem::new("(no regions: add markers in the piano roll)", Cmd::Nothing).off());
+    }
+    let (bar, beat) = (bar(s), ppq(s));
+    let chops = vec![
+        PItem::new("Bar", Cmd::ClipChop(i, bar)),
+        PItem::new("Beat", Cmd::ClipChop(i, beat)),
+        PItem::new("Step", Cmd::ClipChop(i, (beat / 4).max(1))),
+    ];
+    let items = vec![
+        PItem::head("Pattern clip"),
+        PItem::new("Preview", Cmd::ClipPreview(i)),
+        PItem::sep(),
+        PItem::new("Muted", Cmd::ClipMute(i)).mark(Mark::Check(c.muted)),
+        PItem::sep(),
+        PItem::new("Rename and color...", Cmd::ClipPatternBox(i, false)),
+        PItem::new("Change color...", Cmd::ClipPatternBox(i, true)),
+        PItem::new("Random color", Cmd::ClipRandomColor(i)),
+        PItem::sep(),
+        PItem::sub("Select source pattern", sources.collect()),
+        PItem::new("Edit pattern", Cmd::ClipEditSource(i)),
+        PItem::new("Make unique", Cmd::ClipUnique(i)),
+        PItem::new("Select all similar clips", Cmd::ClipSelectSimilar(i)),
+        PItem::new("Delete", Cmd::ClipDelete(i)),
+        PItem::sep(),
+        PItem::sub("Use current time signature from", sigs),
+        PItem::head("Region"),
+        PItem::sub("Select region", regions),
+        PItem::sub("Chop", chops),
+    ];
     Popup { x, y, items, sub: None, scroll: [0; 2] }
 }
 
@@ -4435,6 +4524,74 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
         Cmd::ClipUnique(i) => {
             snapshot(s);
             make_unique(s, i).map(|n| format!("Made unique: pattern {n}"))
+        }
+        Cmd::ClipPatternBox(i, palette) => {
+            let Some(ClipSource::Pattern(n)) = clips(s).get(i).map(|c| c.source) else { return None };
+            let at = grid.zip(clips(s).get(i)).map_or((600.0, 200.0), |(g, c)| {
+                let r = PGeom::new(s, g).clip_rect(c);
+                (r.x, r.y)
+            });
+            crate::patterns::open_name_box(s, crate::patterns::BoxTarget::Name(n), at);
+            if palette {
+                if let Some(b) = s.pat_ui.name_box.as_mut() {
+                    b.palette = true;
+                }
+            }
+            None
+        }
+        Cmd::ClipSetSource(i, n) => {
+            if clips(s).get(i).map(|c| c.source) == Some(ClipSource::Pattern(n)) {
+                return None;
+            }
+            snapshot(s);
+            // The new source whole, from where the clip starts (FL; Shift keeping the length is not done yet).
+            let len = source_len(s, ClipSource::Pattern(n));
+            if let Some(c) = arr_mut(s).clips.get_mut(i) {
+                c.source = ClipSource::Pattern(n);
+                c.length = len;
+                c.window = None;
+            }
+            s.piano.dirty = true;
+            Some(format!("Clip plays {}", crate::patterns::name_of(s, n)))
+        }
+        Cmd::ClipTimeSig(i, num, den) => {
+            let Some(ClipSource::Pattern(n)) = clips(s).get(i).map(|c| c.source) else { return None };
+            snapshot(s);
+            set_pattern_signature(s, n, num, den);
+            s.piano.dirty = true;
+            Some(format!("{}: time signature {num}/{den}", crate::patterns::name_of(s, n)))
+        }
+        Cmd::ClipRegion(i, a, b) => {
+            snapshot(s);
+            if let Some(c) = arr_mut(s).clips.get_mut(i) {
+                c.window = Some((f64::from(a), f64::from(b)));
+                c.length = b - a;
+            }
+            s.piano.dirty = true;
+            None
+        }
+        Cmd::ClipChop(i, step) => {
+            // The selected clips when this one is one of them, else this one (FL chops all the selected clips).
+            let mut which: Vec<usize> = if s.playlist.sel.contains(&i) { s.playlist.sel.clone() } else { vec![i] };
+            which.sort_unstable();
+            snapshot(s);
+            let mut cuts = 0;
+            for k in which {
+                let Some(c) = clips(s).get(k).copied() else { continue };
+                // Cuts on the grid from the clip's start, right to left so `k` stays this clip's left part.
+                let mut at = c.position + step;
+                let mut ticks = Vec::new();
+                while at < c.end() {
+                    ticks.push(at);
+                    at += step;
+                }
+                for &t in ticks.iter().rev() {
+                    if split(s, k, t).is_some() {
+                        cuts += 1;
+                    }
+                }
+            }
+            Some(format!("Chopped into {} more pieces", cuts))
         }
         Cmd::ClipEditSource(i) => {
             if let Some(ClipSource::Pattern(n)) = clips(s).get(i).map(|c| c.source) {
