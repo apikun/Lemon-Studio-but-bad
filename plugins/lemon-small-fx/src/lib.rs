@@ -474,5 +474,19 @@ mod tests {
         assert_eq!(read(filter::SPEC, "Party next door"), [160, 1024, 864, 0, 0, 0, 1]);
         assert_eq!(read(filter::SPEC, "Tiny speakers"), [544, 0, 0, 1024, 464, 1, 1]);
         assert_eq!(all(filter::SPEC).len(), 4);
+        // FL's 27 Flanger and 27 Phaser presets. Their Default presets are not what a new instance holds: the Flanger's has
+        // the phase at 119 and the feedback at 24 (a new one 118 and 23), the Phaser's is a slower, all-wet sweep.
+        for spec in [flanger::SPEC, phaser::SPEC] {
+            for name in all(spec) {
+                read(spec, &name);
+            }
+            assert_eq!(all(spec).len(), 27, "{}", spec.name);
+        }
+        let mut start = flanger::SPEC.start();
+        (start[os_engine::effects::flanger::PHASE], start[os_engine::effects::flanger::FEED]) = (119, 24);
+        assert_eq!(read(flanger::SPEC, "Default"), start);
+        assert_eq!(read(flanger::SPEC, "Rotary"), [597, 938, 4740, 165, 4010, 501, 82, 629, 747, 4323, 3281, 4323]);
+        assert_eq!(read(phaser::SPEC, "Default"), [1500, 0, 900, 0, 512, 11, 693, 0, 2500]);
+        assert_eq!(read(phaser::SPEC, "Whale song"), [547, 953, 1000, 1024, 512, 22, 990, 0, 3047]);
     }
 }
