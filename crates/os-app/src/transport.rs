@@ -64,9 +64,12 @@ const CLOSE_AFTER: Duration = Duration::from_millis(40);
 /// What a stream keeps queued beyond the block its device is about to take (spec: audio/devices.md "Render-ahead"):
 /// one block more, since some drivers ask for two blocks back to back, but at least `MARGIN_MIN` seconds (the feeder
 /// has to wake and render a tick between two blocks) and at most `MARGIN_MAX`. Together with the block and part of a
-/// tick it is what a live edit or note waits for.
-const MARGIN_MIN: f64 = 0.003;
-const MARGIN_MAX: f64 = 0.006;
+/// tick it is what a live edit or note waits for. Android keeps 0.2-0.4 s instead of 3-6 ms: the feeder there shares
+/// the phone's CPU with full-screen software rendering and slower synthesis, so a wake that runs late ate the few
+/// milliseconds a desktop keeps and the queue ran dry mid-tick — the crackle. The lag an edit or a live note waits
+/// grew with it (the queue holds about eleven seconds, so the extra render-ahead fits easily).
+const MARGIN_MIN: f64 = if cfg!(target_os = "android") { 0.2 } else { 0.003 };
+const MARGIN_MAX: f64 = if cfg!(target_os = "android") { 0.4 } else { 0.006 };
 /// A stream's queue: samples (interleaved stereo) and ticks it can hold, and the room the feeder leaves for one more
 /// tick (a tick at 10 BPM and 24 PPQ at 192 kHz is 96 000 samples).
 const QUEUE_SAMPLES: usize = 1 << 19;
