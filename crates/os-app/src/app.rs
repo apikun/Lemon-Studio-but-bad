@@ -5847,6 +5847,10 @@ impl App {
         self.hover = hover;
         self.hover_rect = rect;
         self.hint = hint;
+        // Not when the wheel lit the row (it moves the cursor there: `menu_wheel`).
+        if changed && self.drag.is_none() && self.warp.is_none() {
+            self.hover_submenu();
+        }
         changed
     }
 
@@ -6027,6 +6031,10 @@ impl App {
         }
         // Playlist popup menus close on any click outside them (their scroll bars are in them); a click elsewhere
         // accepts an open text box.
+        // A click on the dropdown's ▸ entry whose submenu is open (hover opened it) keeps it open.
+        if self.state.playlist.popup.is_some() && matches!(action, Some(Action::MenuSub(_, j)) if self.state.menu_sub == Some(j)) {
+            return;
+        }
         if self.state.playlist.popup.is_some() && !matches!(action, Some(Action::PlPopup(_) | Action::PlPopupSub(_) | Action::Scrollbar(Scroll::Popup | Scroll::PopupSub))) {
             self.state.playlist.popup = None;
             // A dropdown's submenu: the click goes on to the dropdown (below), but one on the submenu's own ▸ entry only
@@ -8136,8 +8144,11 @@ impl App {
                 let Some(p) = self.state.playlist.popup.as_mut() else { return true };
                 let Some(item) = p.items.get(i).cloned() else { return true };
                 if !item.children.is_empty() {
-                    p.sub = if p.sub == Some(i) { None } else { Some(i) };
-                    p.scroll[1] = 0;
+                    // Hover opened it already: the click keeps it open.
+                    if p.sub != Some(i) {
+                        p.sub = Some(i);
+                        p.scroll[1] = 0;
+                    }
                 } else if item.enabled && !item.head {
                     if let Some(m) = pl::run(self, item.cmd) {
                         self.state.message = Some(m);
@@ -9086,6 +9097,33 @@ impl App {
                 let label = item_at(m, i).map_or("item", |it| it.label);
                 self.state.message = Some(format!("{label}: not available yet"));
             }
+        }
+    }
+
+    /// Submenus open on hover, as FL Studio's do: a ▸ entry of the open dropdown or of a popup opens its submenu, and
+    /// another entry of the same list closes it.
+    fn hover_submenu(&mut self) {
+        match self.hover.clone() {
+            Some(Action::MenuSub(m, i)) if self.state.menu_open == Some(m) && self.state.menu_sub != Some(i) => {
+                self.open_menu_sub(m, i);
+                self.invalidate();
+            }
+            Some(Action::MenuItem(m, _)) if self.state.menu_open == Some(m) && self.state.menu_sub.is_some() => {
+                self.state.menu_sub = None;
+                self.state.playlist.popup = None;
+                self.invalidate();
+            }
+            Some(Action::PlPopup(i)) => {
+                let Some(p) = self.state.playlist.popup.as_mut() else { return };
+                let parent = p.items.get(i).is_some_and(|it| !it.children.is_empty() && it.enabled);
+                let sub = if parent { Some(i) } else { None };
+                if p.sub != sub {
+                    p.sub = sub;
+                    p.scroll[1] = 0;
+                    self.invalidate();
+                }
+            }
+            _ => {}
         }
     }
 
@@ -19298,11 +19336,15 @@ mod tests {
         assert_eq!((app.state.menu_open, app.state.menu_sub), (Some(TOOLS_MENU), Some(entry)), "over the open dropdown");
         assert_eq!((p.x, p.y), (row.right(), row.y - 2.0), "right of its row");
         assert_eq!(p.items, crate::rack::declick_items(&app.state));
-        // The entry again closes the submenu only; a click elsewhere closes both.
+        // The entry again keeps it open (hover opens it, as in FL); another entry of the dropdown closes it; a click
+        // elsewhere closes both.
         click(&mut app, &mut c, row);
-        assert!(app.state.playlist.popup.is_none() && app.state.menu_open == Some(TOOLS_MENU));
-        click(&mut app, &mut c, row);
-        assert!(app.state.playlist.popup.is_some());
+        assert!(app.state.playlist.popup.is_some() && app.state.menu_sub == Some(entry));
+        let other = app.hits.iter().find(|h| matches!(h.action, Action::MenuItem(TOOLS_MENU, _))).map(|h| h.rect).expect("a plain entry");
+        app.mouse_move(other.cx(), other.cy());
+        assert!(app.state.playlist.popup.is_none() && app.state.menu_open == Some(TOOLS_MENU), "hovering another entry closes it");
+        app.mouse_move(row.cx(), row.cy());
+        assert!(app.state.playlist.popup.is_some(), "hovering the entry opens it");
         click(&mut app, &mut c, Rect::new(1500.0, 900.0, 4.0, 4.0));
         assert!(app.state.playlist.popup.is_none() && app.state.menu_open.is_none());
         // Generic (bleeding) = mode 3 on the selected channels only.
