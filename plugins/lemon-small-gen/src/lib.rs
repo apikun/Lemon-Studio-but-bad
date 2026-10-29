@@ -16,6 +16,7 @@ pub mod params;
 pub mod view;
 
 pub mod acid;
+pub mod monk;
 pub mod boobass;
 pub mod fruit_kick;
 pub mod lemon_boom;
@@ -31,7 +32,7 @@ use os_ui::{Canvas, Color, Rect};
 use params::GenParams;
 
 /// The most settings a generator here has.
-pub const MAX: usize = 12;
+pub const MAX: usize = 16;
 
 /// One setting: the plugin's saved state holds it as int `k` (its place in [`GenSpec::settings`], unless
 /// [`GenSpec::fields`] maps it).
