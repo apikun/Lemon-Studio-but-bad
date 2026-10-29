@@ -1934,7 +1934,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-crusher"
-version = "0.2.1"
+version = "0.6.1"
 dependencies = [
  "lemon-small-fx",
  "nih_plug",
