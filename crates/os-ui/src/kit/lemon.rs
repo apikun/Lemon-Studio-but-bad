@@ -539,15 +539,14 @@ pub fn lemon_mark(c: &mut Canvas, cx: f32, cy: f32, s: f32, col: Color) {
     c.fill_polygon(&oval(-s * 1.02, s * 0.18, s * 0.14), col);
 }
 
-/// A plugin wordmark: the lemon mark and "LEMON" small in lemon above `name` large and grey, right-aligned at
+/// A plugin wordmark: "MANGO" small in mango above `name` large and grey, right-aligned at
 /// `right` (or left-aligned at `right` when `left`). `top` = top of the small line.
 pub fn wordmark(c: &mut Canvas, x: f32, top: f32, left: bool, name: &str, big: Font, small: Font) {
-    let (wn, ws) = (spaced_width(c, big, name, 3.0), spaced_width(c, small, "LEMON", 3.0));
+    let (wn, ws) = (spaced_width(c, big, name, 3.0), spaced_width(c, small, "MANGO", 3.0));
     let lh_s = c.line_height(small);
     let x0 = if left { x } else { x - wn };
-    let sx = if left { x0 + 12.0 } else { (x - ws).max(x0 + 12.0) };
-    lemon_mark(c, sx - 8.0, top + lh_s / 2.0, 4.5, brand::MAIN);
-    spaced(c, small, sx, top, brand::MAIN, "LEMON", 3.0);
+    let sx = if left { x0 } else { (x - ws).max(x0) };
+    spaced(c, small, sx, top, brand::MAIN, "MANGO", 3.0);
     spaced(c, big, x0, top + lh_s - 2.0, plug::WORDMARK, name, 3.0);
 }
 

@@ -55,7 +55,7 @@ pub fn paint(
     canvas.fill_rect(Rect::new(0.0, 0.0, W as f32, H as f32), palette.toolbar);
 
     // Top Header
-    canvas.text(title, 24.0, 14.0, text, "LEMON WAVETABLE");
+    canvas.text(title, 24.0, 14.0, text, "MANGO WAVETABLE");
     canvas.text(small, 290.0, 25.0, secondary, "Serum V2 Architecture  /  2,048-Sample Mipmapped");
 
     // Preset selector buttons
