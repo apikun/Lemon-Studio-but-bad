@@ -1269,8 +1269,10 @@ fn fades(ui: &mut Ui, s: &State, g: &PGeom, i: usize, c: &Clip, edges: Body, wav
         let font = Font::new(10);
         let tw = ui.c.text_width(font, &text);
         let bw = tw + 8.0;
-        let bx = (gx - bw / 2.0).clamp(body.x + 2.0, body.right() - bw - 2.0);
-        let by = (gy - 20.0).clamp(body.y + 2.0, body.bottom() - 16.0);
+        // Kept inside the body, left and top first: a clip narrower or lower than the badge (a short sample, a small
+        // track) has no room for both edges.
+        let bx = (gx - bw / 2.0).min(body.right() - bw - 2.0).max(body.x + 2.0);
+        let by = (gy - 20.0).min(body.bottom() - 16.0).max(body.y + 2.0);
         let br = Rect::new(bx, by, bw, 14.0);
         ui.c.fill_rrect(br, 3.0, ui.t.s(0x181e22).with_alpha(230));
         ui.c.stroke_rrect(br, 3.0, 1.0, white.with_alpha(160));

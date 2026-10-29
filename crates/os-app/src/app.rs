@@ -8203,6 +8203,16 @@ impl App {
                 if let os_model::ClipSource::Pattern(n) = src {
                     self.state.pattern = n;
                 }
+                // Dragged onto the playlist (or a track header), the item drops a clip of itself there, as FL's picker
+                // does: the browser's drag, with the pattern or the clip's channel.
+                let item = match src {
+                    os_model::ClipSource::Pattern(n) => Some(views::browser::Item::Pattern(n)),
+                    os_model::ClipSource::Channel(ch) => self.state.project.channels.iter().position(|c| c.index == ch).map(views::browser::Item::Channel),
+                };
+                if let Some(item) = item.filter(|_| !right) {
+                    let label = pl::source_name(&self.state, src);
+                    self.drag = Some(Drag::Browser { item, label, m0: self.mouse, started: false });
+                }
                 if right {
                     let (x, y) = self.mouse;
                     match src {
@@ -18132,6 +18142,57 @@ mod tests {
         assert_eq!(app.state.playlist.pos, 4 * bar);
         assert!(!app.transport.playing(), "and does not start playback");
         assert_eq!(app.state.tempo, 140.0, "the initial tempo");
+    }
+
+    /// A clip narrower than its gain badge ("+0.0 dB") shows the badge when its gain handle is hovered, without a crash
+    /// (a short sample dropped from a folder).
+    #[test]
+    fn a_short_clips_gain_badge_paints() {
+        use crate::playlist as pl;
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let (mut app, _, _, _) = ruler_app(&mut c);
+        app.state.playlist_bar_w = 200.0;
+        let wav = std::env::temp_dir().join(format!("os-app-short-{}.wav", std::process::id()));
+        os_engine::wav::write_f32_stereo(&mut std::fs::File::create(&wav).unwrap(), 48000, &[0.5; 20000]).unwrap();
+        pl::add_audio_clip(&mut app.state, &wav.to_string_lossy(), 0, 0).expect("audio clip added");
+        app.state.playlist.tool = pl::PlTool::Draw;
+        frame(&mut app, &mut c, None);
+        let g = pl::PGeom::new(&app.state, app.pl_grid().unwrap());
+        let body = g.body(&pl::clips(&app.state)[pl::clips(&app.state).len() - 1]);
+        assert!(body.w > 14.0 && body.w < 30.0, "narrower than the badge: {}", body.w);
+        app.mouse_move(body.cx(), body.bottom() - 2.0);
+        assert_eq!(app.state.playlist.hover_handle, Some(pl::Handle::Gain));
+        frame(&mut app, &mut c, None);
+        let _ = std::fs::remove_file(&wav);
+    }
+
+    /// A pattern dragged from the playlist's clip list onto the grid drops a clip of it where it lands, as FL's picker
+    /// does; a click on it only selects it.
+    #[test]
+    fn picker_items_drag_onto_the_playlist() {
+        use crate::playlist as pl;
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let mut app = App::new(None);
+        app.state.project.patterns[0].notes.push(Note::step(0, 0));
+        app.state.z = vec![Win::Playlist];
+        app.state.playlist.picker = pl::PickKind::Pattern;
+        frame(&mut app, &mut c, None);
+        let row = app.hits.iter().find(|h| h.action == Action::PlPick(os_model::ClipSource::Pattern(1))).map(|h| h.rect).expect("pattern 1 in the list");
+        app.mouse_move(row.cx(), row.cy());
+        app.mouse_down();
+        app.mouse_up();
+        assert!(pl::clips(&app.state).is_empty(), "a click places nothing");
+        let g = app.pl_grid().expect("the grid");
+        app.mouse_move(row.cx(), row.cy());
+        app.mouse_down();
+        app.mouse_move(g.x + 200.0, g.y + 10.0);
+        app.mouse_move(g.x + 210.0, g.y + 12.0);
+        assert!(app.state.browser_drag.is_some(), "the drag shows");
+        app.mouse_up();
+        let clips = pl::clips(&app.state);
+        assert_eq!(clips.len(), 1, "{:?}", app.state.message);
+        assert_eq!((clips[0].source, clips[0].track), (os_model::ClipSource::Pattern(1), 0));
+        assert!(clips[0].position > 0, "where it was dropped");
     }
 
     /// An audio clip's gain handle shows the hand, over it and while it is dragged (not the Draw tool's brush); the clip
