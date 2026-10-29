@@ -18289,6 +18289,82 @@ mod tests {
         assert!(clips[0].position > 0, "where it was dropped");
     }
 
+    /// The gain handle's right-click menu (FL's gain menu): Copy value, Paste value onto the clip and the selected audio
+    /// clips, Reset; each one undo step; the Delete tool's right button does not delete the clip there.
+    #[test]
+    fn the_gain_handle_menu_copies_and_pastes_the_gain() {
+        use crate::playlist as pl;
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let (mut app, _, _, _) = ruler_app(&mut c);
+        app.state.playlist_bar_w = 200.0;
+        let wav = std::env::temp_dir().join(format!("os-app-gain-menu-{}.wav", std::process::id()));
+        os_engine::wav::write_f32_stereo(&mut std::fs::File::create(&wav).unwrap(), 48000, &[0.5; 96000]).unwrap();
+        let path = wav.to_string_lossy().into_owned();
+        pl::add_audio_clip(&mut app.state, &path, 0, 0).expect("first clip");
+        pl::add_audio_clip(&mut app.state, &path, 1, 0).expect("second clip");
+        let n = pl::clips(&app.state).len();
+        let (a, b) = (n - 2, n - 1);
+        pl::arr_mut(&mut app.state).clips[a].set_gain(0.5);
+        app.state.playlist.tool = pl::PlTool::Draw;
+        frame(&mut app, &mut c, None);
+        let g = pl::PGeom::new(&app.state, app.pl_grid().unwrap());
+        let body = g.body(&pl::clips(&app.state)[a]);
+        app.mouse_move(body.cx(), body.bottom() - 2.0);
+        app.mouse_down_right();
+        app.mouse_up();
+        assert_eq!(pl::clips(&app.state).len(), n, "the right button on the gain handle deletes nothing");
+        let popup = app.state.playlist.popup.clone().expect("the gain menu");
+        let labels: Vec<&str> = popup.items.iter().filter(|i| !i.sep).map(|i| i.label.as_ref()).collect();
+        assert_eq!(labels, ["Copy value (-6.0 dB)", "Paste value", "Reset (0 dB)"]);
+        assert!(!popup.items[1].enabled, "nothing copied yet");
+        // Copy it, paste it onto the other clip: one undo step.
+        pl::run(&mut app, popup.items[0].cmd.clone());
+        let steps = app.state.history.at();
+        pl::run(&mut app, pl::Cmd::GainPaste(b));
+        assert_eq!(pl::clips(&app.state)[b].gain(), 0.5);
+        assert_eq!(app.state.history.at(), steps + 1);
+        crate::history::undo(&mut app.state);
+        assert_eq!(pl::clips(&app.state)[b].gain(), 1.0, "undone");
+        // A selection: paste goes to every selected audio clip.
+        app.state.playlist.sel = vec![a, b];
+        pl::run(&mut app, pl::Cmd::GainPaste(b));
+        assert_eq!((pl::clips(&app.state)[a].gain(), pl::clips(&app.state)[b].gain()), (0.5, 0.5));
+        // Reset takes the selected clips back to 0 dB.
+        pl::run(&mut app, pl::Cmd::GainReset(a));
+        assert_eq!((pl::clips(&app.state)[a].gain(), pl::clips(&app.state)[b].gain()), (1.0, 1.0));
+        let _ = std::fs::remove_file(&wav);
+    }
+
+    /// A clip's gain goes with every way of copying it: Ctrl+B, Ctrl+C then Ctrl+V, and the held-click pick-up; a clip
+    /// placed new (from the list or with the Draw tool) starts at 0 dB.
+    #[test]
+    fn copies_of_a_clip_keep_its_gain() {
+        use crate::playlist as pl;
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let (mut app, _, _, _) = ruler_app(&mut c);
+        app.state.playlist_bar_w = 200.0;
+        let wav = std::env::temp_dir().join(format!("os-app-gain-copy-{}.wav", std::process::id()));
+        os_engine::wav::write_f32_stereo(&mut std::fs::File::create(&wav).unwrap(), 48000, &[0.5; 96000]).unwrap();
+        pl::add_audio_clip(&mut app.state, &wav.to_string_lossy(), 0, 0).expect("audio clip added");
+        let first = pl::clips(&app.state).len() - 1;
+        let mut quiet = pl::clips(&app.state)[first];
+        quiet.set_gain(0.5);
+        pl::arr_mut(&mut app.state).clips[first] = quiet;
+        let gains = |app: &App| pl::clips(&app.state).iter().filter(|c| c.source == quiet.source).map(|c| c.gain()).collect::<Vec<_>>();
+        assert_eq!(gains(&app), [0.5]);
+        app.state.playlist.sel = vec![first];
+        pl::duplicate(&mut app.state);
+        assert_eq!(gains(&app), [0.5, 0.5], "Ctrl+B");
+        app.state.playlist.sel = vec![first];
+        pl::copy(&mut app.state);
+        pl::paste(&mut app.state);
+        assert_eq!(gains(&app), [0.5, 0.5, 0.5], "Ctrl+C, Ctrl+V");
+        let orig = vec![(first, pl::clips(&app.state)[first])];
+        pl::clone_clips(&mut app.state, &orig);
+        assert_eq!(gains(&app), [0.5, 0.5, 0.5, 0.5], "the held click's pick-up");
+        let _ = std::fs::remove_file(&wav);
+    }
+
     /// An audio clip's gain handle shows the hand, over it and while it is dragged (not the Draw tool's brush); the clip
     /// beside it keeps the move cursor.
     #[test]

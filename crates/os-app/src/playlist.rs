@@ -282,6 +282,11 @@ pub enum Cmd {
     Consolidate,
     /// Shift+R: toggle sample reverse on selected audio clips.
     ToggleReverse,
+    /// The clip gain handle's menu (FL's gain menu): copy clip `.0`'s gain, paste it onto clip `.0` (and the selected audio
+    /// clips when it is one of them), or take it back to 0 dB.
+    GainCopy(usize),
+    GainPaste(usize),
+    GainReset(usize),
     SelectAll,
     Deselect,
     InvertSelection,
@@ -634,6 +639,8 @@ pub struct PlaylistState {
     /// Time selection (ticks).
     pub range: Option<(u32, u32)>,
     pub clipboard: Vec<Clip>,
+    /// The clip gain copied from a gain handle's menu (`Cmd::GainCopy`).
+    pub gain_clip: Option<f32>,
     pub overlay: Option<Overlay>,
     pub popup: Option<Popup>,
     pub edit: Option<TextEdit>,
@@ -690,6 +697,7 @@ impl Default for PlaylistState {
             pos: 0,
             range: None,
             clipboard: Vec::new(),
+            gain_clip: None,
             overlay: None,
             popup: None,
             edit: None,
@@ -1781,6 +1789,19 @@ pub fn duplicate(s: &mut State) {
     s.piano.dirty = true;
 }
 
+/// Sets the gain of the audio clips among `idx` to `g`; returns how many clips it was set on.
+fn set_gain(s: &mut State, idx: &[usize], g: f32) -> usize {
+    let mut n = 0;
+    for &i in idx {
+        if clips(s).get(i).is_some_and(|c| matches!(c.source, ClipSource::Channel(_)) && c.gain() != g) {
+            arr_mut(s).clips[i].set_gain(g);
+            n += 1;
+        }
+    }
+    s.piano.dirty = true;
+    n
+}
+
 pub fn copy(s: &mut State) {
     let idx = if s.playlist.sel.is_empty() { Vec::new() } else { s.playlist.sel.clone() };
     s.playlist.clipboard = idx.iter().filter_map(|&i| clips(s).get(i).copied()).collect();
@@ -2536,6 +2557,35 @@ pub fn snap_menu(s: &State, x: f32, y: f32) -> Popup {
     Popup { x, y, items: snap_items(s), sub: None, scroll: [0; 2] }
 }
 
+/// A gain in dB as the handle's hint shows it.
+fn gain_text(g: f32) -> String {
+    format!("{:+.1} dB", 20.0 * g.max(1e-6).log10())
+}
+
+/// The menu of clip `i`'s gain handle, right-clicked (as FL's gain menu): Copy value, Paste value (with the copied gain's
+/// dB; greyed while there is none) and Reset (0 dB).
+pub fn gain_menu(s: &State, i: usize, x: f32, y: f32) -> Popup {
+    let gain = clips(s).get(i).map_or(1.0, Clip::gain);
+    let paste = match s.playlist.gain_clip {
+        Some(g) => PItem::new(format!("Paste value ({})", gain_text(g)), Cmd::GainPaste(i)),
+        None => PItem::new("Paste value", Cmd::GainPaste(i)).off(),
+    };
+    let reset = PItem::new("Reset (0 dB)", Cmd::GainReset(i));
+    Popup {
+        x,
+        y,
+        items: vec![PItem::new(format!("Copy value ({})", gain_text(gain)), Cmd::GainCopy(i)), paste, PItem::sep(), if (gain - 1.0).abs() > 0.005 { reset } else { reset.off() }],
+        sub: None,
+        scroll: [0; 2],
+    }
+}
+
+/// The audio clips a gain set from clip `i`'s menu goes to: clip `i`, and the selected audio clips when it is one of them.
+fn gain_targets(s: &State, i: usize) -> Vec<usize> {
+    let sel = &s.playlist.sel;
+    if sel.contains(&i) { sel.clone() } else { vec![i] }
+}
+
 pub fn clip_menu(s: &State, i: usize, x: f32, y: f32) -> Popup {
     let c = clips(s)[i];
     let head = match source_kind(s, c.source) {
@@ -3242,6 +3292,16 @@ pub fn press_grid(app: &mut App, grid: Rect, right: bool) {
         }
         app.invalidate();
         return;
+    }
+
+    // The right button on an audio clip's gain handle opens its menu (Copy value, Paste value, Reset), in any tool: it would
+    // otherwise be the Delete tool's.
+    if let (true, Some(ci)) = (right, hit) {
+        if handle_at(s, &g, ci, x, y) == Some(Handle::Gain) {
+            s.playlist.popup = Some(gain_menu(s, ci, x, y));
+            app.invalidate();
+            return;
+        }
     }
 
     if right {
@@ -4396,6 +4456,22 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
             let sel = s.playlist.sel.clone();
             delete(s, sel);
             None
+        }
+        Cmd::GainCopy(i) => {
+            let g = clips(s).get(i)?.gain();
+            s.playlist.gain_clip = Some(g);
+            Some(format!("Clip gain copied: {}", gain_text(g)))
+        }
+        Cmd::GainPaste(i) => {
+            let g = s.playlist.gain_clip?;
+            snapshot_as(s, "Clip gain");
+            let n = set_gain(s, &gain_targets(s, i), g);
+            Some(format!("Clip gain {} on {n} clip{}", gain_text(g), if n == 1 { "" } else { "s" }))
+        }
+        Cmd::GainReset(i) => {
+            snapshot_as(s, "Clip gain");
+            set_gain(s, &gain_targets(s, i), 1.0);
+            Some("Clip gain: +0.0 dB (Reset)".into())
         }
         Cmd::Paste => {
             snapshot(s);
