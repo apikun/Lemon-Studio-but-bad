@@ -1896,6 +1896,10 @@ pub(crate) fn run_from(mut builder: winit::event_loop::EventLoopBuilder<()>, pat
         if let Some(Err(e)) = crate::templates::root().map(|r| crate::templates::ensure_starter(&r)) {
             eprintln!("[templates] the Starter kit was not made: {e}");
         }
+        // The Mango Kit: eighteen drum sounds made from maths, written once and listed in the Browser.
+        if let Some(Err(e)) = os_paths::user_dir().map(|r| crate::sound_kit::offer(&mut app.state, &r)) {
+            eprintln!("[sound kit] the Mango Kit was not made: {e}");
+        }
         app.startup_project();
         // Ask for data folder "On startup": the New project form over it (spec: ui/data-folder.md §7).
         app.startup_form();
