@@ -129,6 +129,44 @@ pub struct ScaleHighlight {
     pub root: u8,
     pub scale_idx: usize,
     pub enabled: bool,
+    /// Notes drawn in the grid land on notes of the scale (while the highlighting is on).
+    pub snap: bool,
+    /// How the scale menu names its black notes.
+    pub names: ScaleNames,
+}
+
+/// The Scale highlighting menu's black-note naming: as Settings has it, as flats, or the way the scale's key is
+/// usually written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ScaleNames {
+    #[default]
+    Default,
+    BlackNotes,
+    Automatic,
+}
+
+impl ScaleHighlight {
+    /// Whether the menu names black notes with flats.
+    pub fn flats(&self) -> bool {
+        match self.names {
+            ScaleNames::Default => crate::prefs::index(&crate::prefs::BLACK_NOTES) == 1,
+            ScaleNames::BlackNotes => true,
+            // Keys written with flats: F, Bb, Eb, Ab, Db for a major scale, D, G, C, F, Bb, Eb for a minor one.
+            ScaleNames::Automatic => {
+                let minor = crate::chords::entry(self.scale_idx).is_some_and(|e| e.name.starts_with("Minor"));
+                let tonic = if minor { (self.root + 3) % 12 } else { self.root };
+                matches!(tonic, 1 | 3 | 5 | 8 | 10)
+            }
+        }
+    }
+
+    /// `key` moved to the nearest note of the scale (the lower one on a tie) when notes snap to it; else as it is.
+    pub fn snapped(&self, key: i32) -> i32 {
+        if !(self.enabled && self.snap) {
+            return key;
+        }
+        (0..=6).flat_map(|d| [key - d, key + d]).find(|&k| (0..=TOP_KEY).contains(&k) && crate::chords::in_scale(self.root, self.scale_idx, k)).unwrap_or(key)
+    }
 }
 
 impl Default for ScaleHighlight {
@@ -137,6 +175,8 @@ impl Default for ScaleHighlight {
             root: 0,
             scale_idx: crate::chords::FIRST_SCALE,
             enabled: false,
+            snap: true,
+            names: ScaleNames::default(),
         }
     }
 }
@@ -692,6 +732,7 @@ pub fn rescale(s: &mut State, from: u16, to: u16) {
 pub fn add_note(s: &mut State, channel: u16, tick: u32, key: i32) -> usize {
     let ppq = u32::from(s.project.ppq.max(4));
     let length = if s.piano.last_len > 0 { s.piano.last_len } else { ppq / 2 };
+    let key = s.piano.scale_highlight.snapped(key.clamp(0, TOP_KEY));
     let mut note = Note { length, key: key.clamp(0, TOP_KEY) as u16, ..Note::step(channel, tick) };
     if let Some(t) = s.piano.last_controls {
         copy_controls(&t, &mut note);

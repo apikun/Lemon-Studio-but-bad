@@ -54,6 +54,8 @@ pub enum NCmd {
     ScaleToggle,
     ScaleRoot(u8),
     ScaleKind(usize),
+    ScaleSnap,
+    ScaleNames(crate::piano::ScaleNames),
 }
 
 /// A key a menu entry presses (`NCmd::Press`).
@@ -151,16 +153,32 @@ fn edit_menu(s: &State) -> Vec<PItem> {
     ]
 }
 
+/// Root note `r` (0 = C) as the scale menu names it.
+fn root_name(r: u8, flats: bool) -> String {
+    crate::note_names::name_in(i32::from(r), crate::prefs::index(&crate::prefs::NOTE_NAMES), flats).trim_end_matches(|c: char| c.is_ascii_digit() || c == '-').to_string()
+}
+
 /// The ▸ menu's View submenu (FL's): Scale highlighting lists the root notes and the scales in two columns; Ghost
 /// channels is the Alt+V switch. The rest of FL's entries are greyed until they are built.
 fn view_menu(s: &State) -> Vec<PItem> {
-    use crate::piano::ScaleHighlight;
-    let ScaleHighlight { root, scale_idx, enabled } = s.piano.scale_highlight;
-    let mut scale = vec![item("Highlight scale", NCmd::ScaleToggle).key("Alt+H").mark(Mark::Check(enabled)), PItem::sep(), PItem::head("Root note")];
-    scale.extend((0..12u8).map(|r| PItem::new(crate::note_names::note_name(i32::from(r)).trim_end_matches(|c: char| c.is_ascii_digit() || c == '-').to_string(), Cmd::Piano(NCmd::ScaleRoot(r))).mark(Mark::Radio(root == r))));
+    use crate::piano::{ScaleHighlight, ScaleNames};
+    let sh = s.piano.scale_highlight;
+    let ScaleHighlight { root, scale_idx, enabled, snap, names } = sh;
+    let flats = sh.flats();
+    // FL's two columns: the root notes, then the scale's switches, the naming and the scales.
+    let mut scale = vec![PItem::head("Root note")];
+    scale.extend((0..12u8).map(|r| PItem::new(root_name(r, flats), Cmd::Piano(NCmd::ScaleRoot(r))).mark(Mark::Radio(root == r && enabled))));
     scale.push(PItem::col());
     scale.push(PItem::head("Scale"));
-    scale.extend((crate::chords::FIRST_SCALE..=88).map(|k| PItem::new(crate::chords::label(k), Cmd::Piano(NCmd::ScaleKind(k))).mark(Mark::Radio(scale_idx == k))));
+    scale.push(item("Highlight scale", NCmd::ScaleToggle).key("Alt+H").mark(Mark::Check(enabled)));
+    scale.push(item("Snap PR notes to scale", NCmd::ScaleSnap).mark(Mark::Check(snap)));
+    scale.push(PItem::not_yet("Snap incoming MIDI"));
+    scale.push(PItem::sep());
+    for (label, n) in [("Default", ScaleNames::Default), ("Black notes", ScaleNames::BlackNotes), ("Automatic", ScaleNames::Automatic)] {
+        scale.push(PItem::new(label, Cmd::Piano(NCmd::ScaleNames(n))).mark(Mark::Radio(names == n)));
+    }
+    scale.push(PItem::sep());
+    scale.extend(crate::chords::menu_scales().into_iter().map(|(label, k)| PItem::new(label, Cmd::Piano(NCmd::ScaleKind(k))).mark(Mark::Radio(scale_idx == k && enabled))));
     vec![
         PItem::head("Grid"),
         PItem::not_yet("Grid color..."),
@@ -582,12 +600,21 @@ pub fn run(app: &mut App, cmd: NCmd) -> Option<String> {
         NCmd::ScaleRoot(r) => {
             let sh = &mut s.piano.scale_highlight;
             (sh.root, sh.enabled) = (r % 12, true);
-            format!("Scale highlighting: {} {}", crate::views::piano::key_name(i32::from(sh.root)).trim_end_matches(|c: char| c.is_ascii_digit() || c == '-'), crate::chords::label(sh.scale_idx))
+            format!("Scale highlighting: {} {}", root_name(sh.root, sh.flats()), crate::chords::label(sh.scale_idx))
+        }
+        NCmd::ScaleSnap => {
+            let sh = &mut s.piano.scale_highlight;
+            sh.snap = !sh.snap;
+            format!("Snap notes to scale: {}", if sh.snap { "on" } else { "off" })
+        }
+        NCmd::ScaleNames(n) => {
+            s.piano.scale_highlight.names = n;
+            "Scale highlighting: black note names changed".to_string()
         }
         NCmd::ScaleKind(k) => {
             let sh = &mut s.piano.scale_highlight;
             (sh.scale_idx, sh.enabled) = (k, true);
-            format!("Scale highlighting: {} {}", crate::views::piano::key_name(i32::from(sh.root)).trim_end_matches(|c: char| c.is_ascii_digit() || c == '-'), crate::chords::label(k))
+            format!("Scale highlighting: {} {}", root_name(sh.root, sh.flats()), crate::chords::label(k))
         }
         NCmd::Target(row) => {
             if row >= s.project.channels.len() {
@@ -851,6 +878,31 @@ mod tests {
         assert!(scale.iter().any(|i| i.cmd == Cmd::Piano(NCmd::ScaleRoot(2)) && i.mark == Mark::Radio(true)));
         run(&mut a, NCmd::ScaleToggle);
         assert!(!a.state.piano.scale_highlight.enabled);
+    }
+
+    /// Notes drawn with scale highlighting on land on the scale (C# in C major goes down to C); off, or with the snap
+    /// switch off, they stay; the extra scales are listed; Automatic names F major's black notes with flats.
+    #[test]
+    fn notes_snap_to_the_scale_and_names_follow() {
+        use crate::piano::ScaleNames;
+        let mut a = app();
+        let ch = a.state.selected_channel as u16;
+        let tick = |a: &mut App, key| {
+            piano::pattern_mut(&mut a.state).notes.clear();
+            let i = piano::add_note(&mut a.state, ch, 0, key);
+            piano::notes(&a.state)[i].key
+        };
+        assert_eq!(tick(&mut a, 61), 61, "highlighting off: stays");
+        run(&mut a, NCmd::ScaleToggle);
+        assert_eq!(tick(&mut a, 61), 60, "C# in C major goes to C");
+        assert_eq!(tick(&mut a, 62), 62);
+        run(&mut a, NCmd::ScaleSnap);
+        assert_eq!(tick(&mut a, 61), 61, "snap off: stays");
+        let names: Vec<_> = crate::chords::menu_scales().iter().map(|s| s.0).collect();
+        assert!(names.contains(&"Other Hirajoshi") && names.contains(&"Minor Romanian") && names.len() == 31);
+        run(&mut a, NCmd::ScaleRoot(5));
+        run(&mut a, NCmd::ScaleNames(ScaleNames::Automatic));
+        assert_eq!(root_name(10, a.state.piano.scale_highlight.flats()), "B\u{266d}");
     }
 
     /// The Note properties menu: the three types as radios (the chosen one on), and the Make entries off without a
