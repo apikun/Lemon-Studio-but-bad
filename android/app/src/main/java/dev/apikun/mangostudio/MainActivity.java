@@ -5,12 +5,18 @@
 package dev.apikun.mangostudio;
 
 import android.app.NativeActivity;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.Settings;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
+import java.io.File;
+import java.io.IOException;
 
 /**
  * The one activity, as {@link NativeActivity} with the system bars handled. The manifest's theme
@@ -20,10 +26,47 @@ import android.view.WindowInsetsController;
  * itself again after a few seconds — as in every other fullscreen app.
  */
 public class MainActivity extends NativeActivity {
+    /** The marker that the All-files-access page was already opened once; per install (per user). */
+    private static final String ASKED_ALL_FILES = "asked-all-files";
+
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        askForAllFiles();
         hideBars();
+    }
+
+    /**
+     * The app saves in the public Documents ({@code Documents/Mango Studio}), which a file manager
+     * reaches on every device — the install's private /data folder many devices hide does not.
+     * Writing there on Android 11+ needs the All-files-access grant, a switch in the system's
+     * settings: once per install this opens that page (one toggle) at the launch, and the native
+     * side moves the user folder over when it finds the grant on. A device that never grants it
+     * keeps the app on the private folder, which works but stays hidden.
+     */
+    private void askForAllFiles() {
+        if (Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()) {
+            return;
+        }
+        File asked = new File(getFilesDir(), ASKED_ALL_FILES);
+        if (asked.exists()) {
+            return;
+        }
+        try {
+            Intent i =
+                new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:" + getPackageName()));
+            startActivity(i);
+        } catch (Exception e) {
+            try {
+                startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+            } catch (Exception ignored) {
+            }
+        }
+        try {
+            asked.createNewFile();
+        } catch (IOException ignored) {
+        }
     }
 
     @Override
