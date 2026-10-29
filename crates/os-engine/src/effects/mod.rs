@@ -22,6 +22,7 @@ pub mod soft_clipper;
 pub mod stereo_enhancer;
 pub mod stereo_shaper;
 pub mod transient_processor;
+pub mod vocoder;
 
 /// An insert effect processing interleaved stereo in place.
 pub trait Effect: Send {
