@@ -77,8 +77,6 @@ young, so read the warning below before trying it on real work.
 >
 > - **Greyed-out controls are not implemented yet.** Many menus and buttons are already laid out but do
 >   nothing so far; they are drawn dim and say "not available yet".
-> - **No prebuilt binaries** will be published until Mango Studio reaches a usable state. Until then it
->   can only be built from source.
 > - **Only projects saved by FL Studio 24.2 or later open for now** (25 and 26 included). Older projects
 >   are refused with a dialog that explains how to re-save them; support for them is on the roadmap.
 > - **Project-file support is at a very early stage.** Do not overwrite your original `.flp` projects
