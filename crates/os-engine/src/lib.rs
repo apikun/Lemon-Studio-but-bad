@@ -16,6 +16,7 @@
 
 pub mod clock;
 pub mod drums;
+pub mod kit;
 pub mod effects;
 pub mod engine;
 pub mod envelope;

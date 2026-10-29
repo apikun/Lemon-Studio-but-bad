@@ -3883,6 +3883,7 @@ impl App {
             TapAct::Apply => {
                 if crate::tapper::toggle_apply() {
                     if let Some(bpm) = self.state.tapper.count.tempo() {
+                        crate::history::tempo(&mut self.state, bpm.clamp(10.0, 522.0));
                         self.set_tempo(bpm);
                     }
                 }
@@ -3910,7 +3911,12 @@ impl App {
         tp.test_clicks.push(accent);
         #[cfg(not(test))]
         self.transport.tap_click(accent);
+        // A new count's first tap sets no tempo yet: its taps are a step of their own.
+        if bpm.is_none() {
+            crate::history::end_tap_run(&mut self.state);
+        }
         if let Some(bpm) = bpm.filter(|_| crate::tapper::get().apply) {
+            crate::history::tap_tempo(&mut self.state, bpm.clamp(10.0, 522.0));
             self.set_tempo(bpm);
         }
         self.damage_win(Win::Tapper);
@@ -8437,6 +8443,8 @@ impl App {
                 let x = self.mouse.0 / views::band_k(s); // the tempo box is laid out in band px
                 let n = s.tempo_digits.get().iter().filter(|&&d| x >= d).count();
                 let step = [1.0, 0.1, 0.01, 0.001][n];
+                // One undo step for the drag: a press that changes nothing leaves none (`history::settle` at the release).
+                crate::history::record(s, crate::history::TEMPO, crate::history::Snap::Tempo(s.tempo));
                 self.drag = Some(Drag::Tempo { y0: self.mouse.1, t0: s.tempo, step });
             }
             Action::SongPos => self.song_pos_press(),
@@ -11631,6 +11639,32 @@ mod tests {
         assert!(!app.cursor_locked());
     }
 
+    /// The tempo box's drag is one undo step, "Tempo": undo and redo move the tempo; a click that changes nothing leaves
+    /// no step.
+    #[test]
+    fn a_tempo_drag_is_an_undo_step() {
+        let Ok(mut a) = Canvas::new(1920, 1080, 1.0) else { return };
+        let mut app = App::new(None);
+        frame(&mut app, &mut a, None);
+        let r = hit_rect(&app, &Action::Tempo);
+        let (t0, steps) = (app.state.tempo, app.state.history.at());
+        let x = app.state.tempo_digits.get()[0] - 4.0;
+        app.mouse_move(x, r.cy());
+        app.mouse_down();
+        app.mouse_up();
+        assert_eq!(app.state.history.at(), steps, "a click on the tempo changes nothing: no step");
+        app.mouse_down();
+        app.mouse_move(x, r.cy() - 10.0);
+        app.mouse_move(x, r.cy() - 20.0);
+        app.mouse_up();
+        assert_eq!((app.state.tempo, app.state.history.at()), (t0 + 20.0, steps + 1), "one step for the whole drag");
+        assert_eq!(app.state.history.newest_done(), Some(crate::history::TEMPO));
+        assert_eq!(crate::history::undo(&mut app.state).as_deref(), Some(crate::history::TEMPO));
+        assert_eq!(app.state.tempo, t0);
+        assert_eq!(crate::history::redo(&mut app.state).as_deref(), Some(crate::history::TEMPO));
+        assert_eq!(app.state.tempo, t0 + 20.0);
+    }
+
     #[test]
     fn tempo_drag_steps_by_the_digit_it_starts_on() {
         let Ok(mut a) = Canvas::new(1920, 1080, 1.0) else { return };
@@ -14003,6 +14037,7 @@ mod tests {
         };
         assert!(crate::tapper::get().apply);
         assert_eq!(app.state.tempo, 130.0);
+        let steps = app.state.history.at();
         tap(&mut app, &mut c, 10.0);
         assert_eq!((app.state.tapper.count.tempo(), app.state.tempo), (None, 130.0), "one tap: TAP stays");
         assert!(app.state.tapper.flash == 1.0 && app.animating(), "a tap lights the pad, which then fades");
@@ -14012,6 +14047,7 @@ mod tests {
         tap(&mut app, &mut c, 11.4);
         assert_eq!(app.state.tempo, 129.0, "the average of every interval, rounded (128.57)");
         assert!(app.unsaved(), "a tapped tempo is a change to the project");
+        assert_eq!(app.state.history.at(), steps + 1, "a count's taps are one undo step");
         // Off: the pad shows the tempo, the project keeps its own; turning it on applies the pad's.
         let apply = hit_rect(&app, &Action::Tapper(TapAct::Apply));
         click(&mut app, &mut c, apply);
@@ -14026,6 +14062,16 @@ mod tests {
         assert_eq!((app.state.tapper.count.tempo(), app.state.tempo), (None, 133.0));
         tap(&mut app, &mut c, 20.05);
         assert_eq!((app.state.tapper.count.tempo(), app.state.tempo), (Some(1200.0), 522.0));
+        // Steps: the first count, turning Apply tempo on, the new count; each undoes to the tempo before it.
+        assert_eq!(app.state.history.at(), steps + 3);
+        for want in [133.0, 129.0, 130.0] {
+            assert_eq!(crate::history::undo(&mut app.state).as_deref(), Some(crate::history::TEMPO));
+            assert_eq!(app.state.tempo, want);
+        }
+        for want in [129.0, 133.0, 522.0] {
+            crate::history::redo(&mut app.state);
+            assert_eq!(app.state.tempo, want);
+        }
         // MIDI keys tap while the window is open; a chord's keys are one tap.
         for t in [30.0, 30.03, 30.5] {
             app.state.tapper.test_time = Some(t);
