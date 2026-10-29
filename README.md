@@ -103,7 +103,7 @@ Where Mango Studio stands against what a complete DAW offers:
 | Time-stretching | ✅ | All twelve stretch methods for samples and audio clips, played by one open-source stretcher |
 | Playback engine | 🚧 | Renders ahead of the audio device so edits do not cause dropouts; voice limits, cut groups, glides, layer channels; one audio thread for now |
 | Automation | 🚧 | Clips for channel, mixer and plugin parameters with every curve shape, their range and their LFO; channel volume and pan moves record into a pattern; not yet recording into automation clips |
-| Project files | 🚧 | Opens and saves projects from FL Studio 24.2 and later; older versions are on the roadmap. Keep backups |
+| Project files | 🚧 | Opens and saves projects from FL Studio 24.2 and later; projects from FL 20 to 24.1 open converted (Save asks for a new file); older ones are not read yet. Keep backups |
 | Built-in instruments and effects | 🚧 | Instruments: Mango Sampler (long samples can play straight from disk), Mango Trio (three oscillators), Citrus (a six-operator synth that plays Sytrus patches), Mango Kick (a kick drum), Mango Boom (a bass drum), Mango Bass (a bass guitar), Mango Acid (an acid bass), Mango
 Monk (a singing vocal synthesizer), Mango Pluck (a plucked string), Mango Mini (a two-oscillator synth), Mango DX (a small FM synth), Mango Autogun (a seed-grown patch synth), Mango Drums (a synthesized drum voice) and Mango Keys (an electric piano). Effects: Mango Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion, Transient Processor, Filter, Flanger, Phaser, Mango Beat (FL's Gross Beat: time and gate envelopes per beat), Press (FL's Maximus) and Pulp Filter (FL's Fruity Love Philter). All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Mango Limiter's sound, sidechain included |
 | Exporting audio | ✅ | Song, pattern or selection to WAV, FLAC, MP3 and OGG at once; bit depth, sample rate, interpolation, dither, mono, tails, stems and WAV markers; a pattern rendered as an audio clip (Quick render, Render and replace) |
@@ -747,7 +747,7 @@ every feature marked as done, in progress or not started.
 - ✅ VST2 plugins saved the way FL Studio 2026 saves them
 - ✅ Project settings saved: time signature, project info and credits, initial values, song or pattern mode, data folder
 - ✅ MIDI files: import and export
-- 🚧 Loading older project file versions (FL 20 to 24.1, in review)
+- ✅ Loading older project file versions (FL 20 to 24.1: converted when opened, checked against converted test files; files from before FL 20 are still refused)
 
 ### Platform and release
 
