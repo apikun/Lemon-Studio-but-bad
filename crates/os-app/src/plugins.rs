@@ -163,6 +163,9 @@ pub enum Request {
     Audio(String, bool),
     /// The window was clicked (or docked / detached): it goes to the front of the app's window stack.
     Raise(usize),
+    /// An undo key was pressed in the plugin's own window (`FrameEvent::Undo`).
+    #[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(dead_code))]
+    Undo { alt: bool, shift: bool },
     /// The menu arrow was clicked: open the window menu at this screen point.
     Menu(usize, i32, i32),
     /// The title-bar Presets box was clicked: open the preset list at this screen point (spec: plugins/presets.md).
@@ -1197,6 +1200,7 @@ impl Plugins {
                         FrameEvent::Track(t) => Request::Track(row, t),
                         FrameEvent::ShowTrack => Request::ShowTrack(row),
                         FrameEvent::Raise => Request::Raise(row),
+                        FrameEvent::Undo { alt, shift } => Request::Undo { alt, shift },
                         FrameEvent::Menu(x, y) => Request::Menu(row, x, y),
                         FrameEvent::Presets(x, y) => Request::Presets(row, x, y),
                         FrameEvent::PresetStep(d) => Request::PresetStep(row, d),

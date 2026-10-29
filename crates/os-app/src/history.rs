@@ -604,6 +604,8 @@ pub struct History {
     wheel: Option<crate::knobs::Control>,
     /// The newest step was recorded since the last button release (`settle` looks at it then).
     fresh: bool,
+    /// The plugin parameter the newest step's run of values (sent without a gesture) goes into (`plugin_run`).
+    param_run: Option<(usize, usize)>,
 }
 
 impl History {
@@ -679,6 +681,7 @@ pub fn record(s: &mut State, name: &'static str, snap: Snap) {
     h.undid = false;
     h.wheel = None;
     h.fresh = true;
+    h.param_run = None;
     h.trim();
 }
 
@@ -804,6 +807,38 @@ pub fn param(s: &mut State, key: usize, index: usize, before: Option<f64>, to: f
     record(s, PLUGIN_PARAMETER, Snap::Param(key, index, v));
     // A plugin may take the value on its next idle, so the button's release does not judge the step (`settle`).
     s.history.fresh = false;
+}
+
+/// A gesture starts in the plugin's own window on parameter `index` of instance `key`, which has `before` as its value:
+/// a step, "Plugin parameter", unless Undo knob tweaks is off. Returns the step's place (`plugin_end` finds it by it).
+pub fn plugin_begin(s: &mut State, key: usize, index: usize, before: f64) -> Option<usize> {
+    if !prefs::check(&prefs::UNDO_KNOB_TWEAKS) {
+        return None;
+    }
+    record(s, PLUGIN_PARAMETER, Snap::Param(key, index, before));
+    // The plugin takes the editor's values later: the button's release does not judge the step (`settle`).
+    s.history.fresh = false;
+    Some(s.history.done)
+}
+
+/// The editor sent a value for parameter `index` of instance `key` without a gesture (an editor that does not report
+/// them): one step for a run of such values, until another step comes.
+pub fn plugin_run(s: &mut State, key: usize, index: usize, before: f64) {
+    let h = &s.history;
+    if !prefs::check(&prefs::UNDO_KNOB_TWEAKS) || (h.param_run == Some((key, index)) && h.done == h.steps.len()) {
+        return;
+    }
+    record(s, PLUGIN_PARAMETER, Snap::Param(key, index, before));
+    s.history.fresh = false;
+    s.history.param_run = Some((key, index));
+}
+
+/// The gesture of step `step` (`plugin_begin`) ended; `unchanged`: the value is the one it started from. The step goes
+/// when nothing else was done since.
+pub fn plugin_end(s: &mut State, step: usize, unchanged: bool) {
+    if unchanged && s.history.done == step && s.history.done == s.history.steps.len() {
+        unrecord(s);
+    }
 }
 
 /// Before knob `id` turns: a step unless Undo knob tweaks is off. `wheel`: a mouse-wheel notch, which joins the step

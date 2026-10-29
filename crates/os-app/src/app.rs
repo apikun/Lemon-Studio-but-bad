@@ -2637,6 +2637,17 @@ impl App {
                 let chans = &mut self.state.project.channels;
                 match r {
                     Request::Close(_) => continue,
+                    // Ctrl+Z in a plugin's own window: what the main window's Ctrl+Z, Ctrl+Alt+Z and Ctrl+Shift+Z do.
+                    Request::Undo { alt, shift } => {
+                        if shift {
+                            let m = crate::history::ctrl_shift_z(&mut self.state);
+                            self.say(m);
+                            self.invalidate();
+                        } else {
+                            self.undo_key(alt);
+                        }
+                        continue;
+                    }
                     Request::Raise(row) => {
                         // A click in a plugin window closes an open app popup and the Song info box, as a click elsewhere
                         // does.

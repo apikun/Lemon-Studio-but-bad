@@ -267,6 +267,9 @@ impl FrameWindow {
             for b in [xproto::ButtonIndex::M1, xproto::ButtonIndex::M2, xproto::ButtonIndex::M3] {
                 c.grab_button(false, area, EventMask::BUTTON_PRESS, xproto::GrabMode::SYNC, xproto::GrabMode::ASYNC, x11rb::NONE, x11rb::NONE, b, xproto::ModMask::ANY)?;
             }
+            // Ctrl+Z, Ctrl+Alt+Z and Ctrl+Shift+Z in the plugin window come here first (`grab_undo_keys`), whichever of its
+            // windows has the keyboard: the frame's or the editor's.
+            grab_undo_keys(c, win)?;
             c.map_window(area)?;
             // The plugin parents its editor into `area` through its own connection: it must exist on the server first.
             c.flush()?;
@@ -747,6 +750,12 @@ impl Frame {
             Event::Expose(_) => self.dirty.set(true),
             // A click in the plugin's editor (the grab on the area; `pump` lets the editor have it).
             Event::ButtonPress(e) if e.event == self.area => self.clicked(),
+            // An undo key in the plugin window (the key grab on the frame; the editor does not get it).
+            Event::KeyPress(e) if e.event == self.win => {
+                if let Some((alt, shift)) = undo_key_of(e.state) {
+                    self.state.borrow_mut().events.push(FrameEvent::Undo { alt, shift });
+                }
+            }
             Event::ButtonPress(e) => {
                 if matches!(e.detail, 1..=3) {
                     self.clicked();
@@ -1002,6 +1011,40 @@ pub fn pointer_in_docked() -> bool {
     conn.frames.borrow().get(&r.child).and_then(Weak::upgrade).is_some_and(|f| !f.state.borrow().detached)
 }
 
+/// A passive grab of Ctrl+Z, Ctrl+Alt+Z and Ctrl+Shift+Z on `area`, the frame of a plugin window: a grab on a window takes
+/// the keys when the keyboard is in it or in any window below it (an editor that took the focus for itself, or the frame
+/// when it did not), before the editor sees them, and the app's undo history moves, as from the main window
+/// (`FrameEvent::Undo`). The Z key is found by its letter on any layout in the keymap, else by its place on a PC keyboard. The grabs'
+/// cookies are returned, so a caller that wants to know if the server refused one can check them.
+fn grab_undo_keys(c: &RustConnection, area: xproto::Window) -> Result<Vec<x11rb::cookie::VoidCookie<'_, RustConnection>>, x11rb::errors::ConnectionError> {
+    let z = z_keycode(c);
+    let mut grabs = Vec::new();
+    for base in [KeyButMask::CONTROL, KeyButMask::CONTROL | KeyButMask::SHIFT, KeyButMask::CONTROL | KeyButMask::MOD1] {
+        // Whatever Caps Lock and Num Lock are doing.
+        for locks in [KeyButMask::default(), KeyButMask::LOCK, KeyButMask::MOD2, KeyButMask::LOCK | KeyButMask::MOD2] {
+            grabs.push(c.grab_key(true, area, xproto::ModMask::from((base | locks).bits()), z, xproto::GrabMode::ASYNC, xproto::GrabMode::ASYNC)?);
+        }
+    }
+    Ok(grabs)
+}
+
+/// The keycode of the Z key: the first key whose keysyms include z or Z in any group of the keymap (so a layout with
+/// Latin letters on a second group still finds it), else 52, where it is on a PC keyboard.
+fn z_keycode(c: &RustConnection) -> u8 {
+    const PC_Z: u8 = 52;
+    let setup = c.setup();
+    let (min, max) = (setup.min_keycode, setup.max_keycode);
+    let Some(map) = c.get_keyboard_mapping(min, max - min + 1).ok().and_then(|r| r.reply().ok()) else { return PC_Z };
+    let per = usize::from(map.keysyms_per_keycode).max(1);
+    map.keysyms.chunks(per).position(|syms| syms.iter().any(|&k| k == 0x7a || k == 0x5a)).map_or(PC_Z, |i| min.saturating_add(i as u8))
+}
+
+/// Which undo key a key press with modifiers `state` was (`alt`: Ctrl+Alt+Z, `shift`: Ctrl+Shift+Z); `None` without
+/// Control. Lock modifiers do not count.
+fn undo_key_of(state: KeyButMask) -> Option<(bool, bool)> {
+    state.contains(KeyButMask::CONTROL).then(|| (state.contains(KeyButMask::MOD1), state.contains(KeyButMask::SHIFT)))
+}
+
 /// The window an event is about.
 fn window_of(e: &Event) -> Option<xproto::Window> {
     Some(match e {
@@ -1009,6 +1052,7 @@ fn window_of(e: &Event) -> Option<xproto::Window> {
         Event::ButtonPress(e) => e.event,
         Event::ButtonRelease(e) => e.event,
         Event::MotionNotify(e) => e.event,
+        Event::KeyPress(e) => e.event,
         Event::ClientMessage(e) => e.window,
         _ => return None,
     })
@@ -1199,5 +1243,40 @@ mod tests {
             assert_eq!(frame_scale(42, scale, 1.25), 1.25);
             assert_eq!(frame_scale(0, 2.0, scale), 1.0);
         }
+    }
+
+    /// An undo key in a plugin's editor: Control picks it up, Alt and Shift pick which (Ctrl+Alt+Z and Ctrl+Shift+Z), and
+    /// Caps Lock and Num Lock do not matter; without Control it is not one.
+    #[test]
+    fn undo_keys_are_told_apart() {
+        use super::undo_key_of;
+        use x11rb::protocol::xproto::KeyButMask as K;
+        assert_eq!(undo_key_of(K::CONTROL), Some((false, false)));
+        assert_eq!(undo_key_of(K::CONTROL | K::MOD1), Some((true, false)));
+        assert_eq!(undo_key_of(K::CONTROL | K::SHIFT), Some((false, true)));
+        assert_eq!(undo_key_of(K::CONTROL | K::LOCK | K::MOD2), Some((false, false)));
+        assert_eq!(undo_key_of(K::SHIFT), None);
+        assert_eq!(undo_key_of(K::MOD1), None);
+    }
+
+    /// The server takes the undo key grabs on a window (all twelve: three combinations, four lock states), and the Z key
+    /// is found. Skipped without an X server; an unmapped window, so nothing shows.
+    #[test]
+    fn the_server_accepts_the_undo_key_grabs() {
+        use x11rb::connection::Connection as _;
+        use x11rb::protocol::xproto::{ConnectionExt as _, CreateWindowAux, WindowClass};
+        let Ok((c, screen)) = x11rb::rust_connection::RustConnection::connect(None) else { return };
+        let root = c.setup().roots[screen].root;
+        let win = c.generate_id().unwrap();
+        c.create_window(0, win, root, 0, 0, 1, 1, 0, WindowClass::INPUT_OUTPUT, 0, &CreateWindowAux::new()).unwrap().check().unwrap();
+        let z = super::z_keycode(&c);
+        assert!((8..=255).contains(&z), "a keycode: {z}");
+        let grabs = super::grab_undo_keys(&c, win).unwrap();
+        assert_eq!(grabs.len(), 12);
+        for g in grabs {
+            g.check().expect("the server accepts the grab");
+        }
+        let _ = c.destroy_window(win);
+        let _ = c.flush();
     }
 }
