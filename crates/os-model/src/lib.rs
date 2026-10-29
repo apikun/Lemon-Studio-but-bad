@@ -1348,7 +1348,6 @@ pub struct MixerTrack {
     /// Armed for disk recording (the strip's record button). Not saved, and not part of the track: tracks that differ
     /// only here are equal (spec: audio/track-io.md §1.5).
     pub armed: bool,
->>>>>>> 4c504f6 (Mixer tracks: audio device inputs and outputs)
     /// Position of the file's track block this track was loaded from (`None` = made in Lemon Studio). When tracks are
     /// moved, deleted or trimmed, the writer takes the track's effect-slot events from that block (spec:
     /// flp/events/mixer.md "Removing tracks"). Bookkeeping, not part of the track: tracks that differ only here are
