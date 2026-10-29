@@ -948,6 +948,10 @@ impl Plugins {
             p.open_editor(w.area(), k)?
         };
         h.link = fit_editor(&w, size, k);
+        // A plugin that lets the host resize its editor (CLAP, VST 3): the frame's edges and maximize button resize it.
+        if h.link.is_none() {
+            fit_resizable(&w, &h.plugin, size, k);
+        }
         // On top: the app stacks it above its other windows (`State::raise`), and a new child window starts below
         // the open ones.
         w.raise();
@@ -1187,6 +1191,16 @@ impl Plugins {
                             l.set_size(*ew, *eh);
                             continue;
                         }
+                        // The same for a plugin without the host link: its editor is asked for the size, and the frame
+                        // follows the size it takes (the editor's size is polled below).
+                        (FrameEvent::Resize(ew, eh), None) => {
+                            let k = w.scale();
+                            let px = |v: u32| (v as f32 * k).round().max(1.0) as u32;
+                            if let Ok(mut p) = h.plugin.lock() {
+                                p.resize_editor(px(*ew), px(*eh));
+                            }
+                            continue;
+                        }
                         _ => {}
                     }
                     out.push(match e {
@@ -1258,6 +1272,29 @@ impl Plugins {
 fn stopped_message(name: &str, code: u32, effect: bool) -> String {
     let now = if effect { "its slot passes the sound through" } else { "its channel is silent" };
     format!("{}: {now}. Save your project and restart Mango Studio to use it again", os_host::guard::stopped_text(name, code))
+}
+
+/// Lets the user resize window `w` when its freshly opened editor (`size` in device px at `scale`) can be resized by the
+/// host (CLAP `gui.can_resize`, VST 3 `IPlugView::canResize`), and on Linux shrinks an editor whose window would not fit
+/// the monitor's work area to fit it. An editor that cannot be resized is left as it is.
+#[cfg(plugin_windows)]
+fn fit_resizable(w: &FrameWindow, plugin: &std::sync::Mutex<dyn os_host::Plugin>, size: (u32, u32), scale: f32) {
+    let Ok(can) = plugin.lock().map(|p| p.can_resize_editor()) else { return };
+    if !can {
+        return;
+    }
+    w.set_resizable(Some(crate::plugin_window::MIN_EDITOR));
+    #[cfg(target_os = "linux")]
+    {
+        let editor = (size.0 as f32 / scale, size.1 as f32 / scale);
+        let Some((ew, eh)) = w.work_size().and_then(|room| crate::plugin_window::fit_in(editor, w.chrome(), room)) else { return };
+        let px = |v: f32| (v * scale).round().max(1.0) as u32;
+        if let Ok(mut p) = plugin.lock() {
+            p.resize_editor(px(ew), px(eh));
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (size, scale);
 }
 
 /// Sizes window `w` to its freshly opened editor (`size` in device px at `scale`). A Lemon plugin answers the host

@@ -55,6 +55,8 @@ x11rb::atom_manager! {
         _NET_WM_STATE_ABOVE,
         _NET_WORKAREA,
         _NET_CURRENT_DESKTOP,
+        _NET_WM_WINDOW_TYPE,
+        _NET_WM_WINDOW_TYPE_DIALOG,
         _MOTIF_WM_HINTS,
     }
 }
@@ -219,8 +221,10 @@ impl FrameWindow {
         set_owner(&conn, owner);
         let docked = owner != 0 && !detached;
         let state = State::new(info, editor, !docked);
-        let (parent, at) = if docked { (owner, from_root(&conn, owner, pos)) } else { (conn.root, (0, 0)) };
         let (w, h) = state.size();
+        // A detached frame asks to be centred in the work area under the pointer, not for 0, 0 (which some window
+        // managers keep, under their bar and past the screen's edge).
+        let (parent, at) = if docked { (owner, from_root(&conn, owner, pos)) } else { (conn.root, centred(&conn, (px(w, k), px(h, k)))) };
         let ay = state.area_y();
         let title = state.info.name.clone();
         let c = &conn.c;
@@ -265,12 +269,17 @@ impl FrameWindow {
             if owner != 0 {
                 c.change_property32(PropMode::REPLACE, win, AtomEnum::WM_TRANSIENT_FOR, AtomEnum::WINDOW, &[owner as u32])?;
             }
+            // A dialog: tiling window managers float it, resizable or not (with a Wayland main window it has no owner to be
+            // transient for, and a window the user may resize is not marked as fixed in size).
+            if !docked {
+                c.change_property32(PropMode::REPLACE, win, a._NET_WM_WINDOW_TYPE, AtomEnum::ATOM, &[a._NET_WM_WINDOW_TYPE_DIALOG])?;
+            }
             // Opened from the active application: it starts above (taken when the window is mapped). Under X11 the main
             // window owns it instead (transient for it).
             if !docked && conn.above.get() {
                 c.change_property32(PropMode::REPLACE, win, a._NET_WM_STATE, AtomEnum::ATOM, &[a._NET_WM_STATE_ABOVE])?;
             }
-            fixed_size(c, win, px(w, k), px(h, k))?;
+            size_hints(c, win, px(w, k), px(h, k), (!docked).then_some(at))?;
             // Clicks in the plugin's editor come here first (then go on to it, `pump`): they bring the window to the
             // front of the app's windows, as clicks on the frame do.
             for b in [xproto::ButtonIndex::M1, xproto::ButtonIndex::M2, xproto::ButtonIndex::M3] {
@@ -412,6 +421,21 @@ impl FrameWindow {
             st.pages = pages;
             self.f.dirty.set(true);
         }
+    }
+
+    /// The size (logical px) of the work area of the monitor under the pointer (where the user opens the window), when it
+    /// is known.
+    pub fn work_size(&self) -> Option<(f32, f32)> {
+        let c = &self.f.conn.c;
+        let p = c.query_pointer(self.f.conn.root).ok().and_then(|r| r.reply().ok()).map_or((0, 0), |r| (i32::from(r.root_x), i32::from(r.root_y)));
+        let [x0, y0, x1, y1] = work_area(&self.f.conn, p)?;
+        let k = self.f.scale.get();
+        Some(((x1 - x0) as f32 / k, (y1 - y0) as f32 / k))
+    }
+
+    /// The window's chrome: what it adds to the editor (logical px).
+    pub fn chrome(&self) -> (f32, f32) {
+        self.f.state.borrow().chrome()
     }
 
     /// The plugin's smallest editor size when the frame's edges may resize it (`None`: a fixed size).
@@ -981,6 +1005,14 @@ fn work_area(conn: &Conn, p: (i32, i32)) -> Option<[i32; 4]> {
     let wa = [v[0] as i32, v[1] as i32, (v[0] + v[2]) as i32, (v[1] + v[3]) as i32];
     let r = [mon[0].max(wa[0]), mon[1].max(wa[1]), mon[2].min(wa[2]), mon[3].min(wa[3])];
     Some(if r[0] < r[2] && r[1] < r[3] { r } else { mon })
+}
+
+/// Where a detached frame of `size` (physical px) opens: centred in the work area under the pointer, its top no higher
+/// than the area's.
+fn centred(conn: &Conn, size: (u16, u16)) -> (i32, i32) {
+    let p = conn.c.query_pointer(conn.root).ok().and_then(|r| r.reply().ok()).map_or((0, 0), |r| (i32::from(r.root_x), i32::from(r.root_y)));
+    let Some([l, t, r, b]) = work_area(conn, p) else { return (0, 0) };
+    (l + ((r - l) - i32::from(size.0)).max(0) / 2, t + ((b - t) - i32::from(size.1)).max(0) / 2)
 }
 
 /// A screen point (physical px) in `win`'s coordinates.

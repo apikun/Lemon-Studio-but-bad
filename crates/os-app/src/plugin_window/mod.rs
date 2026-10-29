@@ -111,6 +111,8 @@ pub const TITLE_H: f32 = 27.0;
 pub const STRIP_H: f32 = 46.0;
 /// Left / right / bottom inset of the editor: 1 px outline, 5 px frame, 1 px editor outline.
 pub const BORDER: f32 = 7.0;
+/// The smallest editor (logical px) a window of a plugin that lets the host resize it (CLAP, VST 3) goes down to.
+pub const MIN_EDITOR: (f32, f32) = (240.0, 80.0);
 /// Width of the Presets box in the title bar (its right edge is 49 px from the window's).
 const PRESETS_W: f32 = 80.0;
 
@@ -405,6 +407,11 @@ impl State {
         self.resize_min.is_some() && !self.misc
     }
     /// Top of the editor (below the strip, or the title bar, and the editor's 1 px outline).
+    /// The frame around the editor: what the window adds to the editor's width and height (logical px).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    fn chrome(&self) -> (f32, f32) {
+        (2.0 * BORDER, self.area_y() + BORDER)
+    }
     fn area_y(&self) -> f32 {
         TITLE_H + if self.strip { STRIP_H } else { 0.0 } + 1.0
     }
@@ -807,6 +814,15 @@ enum Btn {
     Left,
     Right,
     Middle,
+}
+
+/// An editor of `editor` logical px in a window with `chrome` around it, that has `room` (logical px) to open in: the
+/// editor size that fits, shrinking only the side that is too large and never below [`MIN_EDITOR`]; `None` when it fits.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn fit_in(editor: (f32, f32), chrome: (f32, f32), room: (f32, f32)) -> Option<(f32, f32)> {
+    let fit = |e: f32, c: f32, r: f32, min: f32| if e + c > r { (r - c).max(min) } else { e };
+    let fitted = (fit(editor.0, chrome.0, room.0, MIN_EDITOR.0), fit(editor.1, chrome.1, room.1, MIN_EDITOR.1));
+    (fitted != editor).then_some(fitted)
 }
 
 /// Window point (logical px) to screen point (physical px), for the app's popups.
@@ -1584,5 +1600,18 @@ mod tests {
         let notes: Vec<(u8, bool)> = st.events.iter().filter_map(|e| if let FrameEvent::Note(k, _, on) = e { Some((*k, *on)) } else { None }).collect();
         assert_eq!(notes, [(60, true), (60, false), (61, true), (61, false)]);
         assert_eq!(st.misc_ui.held, None);
+    }
+
+    /// An editor larger than the monitor's work area opens fitted to it, one side at a time and never below the smallest
+    /// editor; one that fits is left as it is.
+    #[test]
+    fn oversize_editors_are_fitted_to_the_work_area() {
+        let chrome = (14.0, 81.0);
+        let room = (1536.0, 864.0);
+        assert_eq!(fit_in((800.0, 600.0), chrome, room), None, "fits");
+        assert_eq!(fit_in((1600.0, 1000.0), chrome, room), Some((1522.0, 783.0)));
+        assert_eq!(fit_in((800.0, 1000.0), chrome, room), Some((800.0, 783.0)), "only the side too large shrinks");
+        assert_eq!(fit_in((1522.0, 783.0), chrome, room), None, "exactly fits");
+        assert_eq!(fit_in((900.0, 900.0), chrome, (200.0, 120.0)), Some(MIN_EDITOR), "a tiny screen: the smallest editor");
     }
 }
