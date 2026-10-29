@@ -46,6 +46,27 @@ pub enum NCmd {
     MakeType(crate::piano::NoteType),
     /// Make a channel rack row the piano roll's channel (the title's channel menu).
     Target(usize),
+    /// A menu entry that does what its shortcut does: the key pressed with the modifiers (ctrl, shift, alt).
+    Press(PKey, bool, bool, bool),
+    /// Cut: the selected notes to the clipboard, then deleted.
+    Cut,
+    /// Scale highlighting (Alt+H): on or off, the root note (0 = C), the scale (a `chords` entry).
+    ScaleToggle,
+    ScaleRoot(u8),
+    ScaleKind(usize),
+    ScaleSnap,
+    ScaleNames(crate::piano::ScaleNames),
+}
+
+/// A key a menu entry presses (`NCmd::Press`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PKey {
+    Ch(&'static str),
+    Delete,
+    Left,
+    Right,
+    Up,
+    Down,
 }
 
 fn item(label: &'static str, c: NCmd) -> PItem {
@@ -83,6 +104,160 @@ pub fn tools_menu(s: &State, x: f32, y: f32) -> Popup {
         PItem::head("View"),
         item("Ghost channels", Ghosts).key("Alt+V").mark(Mark::Check(s.piano.ghosts)),
         item("Add time marker", AddMarker).key("Alt+T"),
+    ];
+    Popup { x, y, items, sub: None, scroll: [0; 2] }
+}
+
+/// The ▸ menu's Edit submenu (FL's): the selection's clipboard, move and rotate, transpose, mute. Entries without a
+/// command behind them yet are greyed.
+fn edit_menu(s: &State) -> Vec<PItem> {
+    use NCmd::*;
+    let key = |label: &'static str, k: PKey, ctrl: bool, shift: bool, alt: bool, hint: &'static str| item(label, Press(k, ctrl, shift, alt)).key(hint);
+    let ch = PKey::Ch;
+    let mut paste = key("Paste", ch("v"), true, false, false, "Ctrl+V");
+    paste.enabled = !s.piano.clipboard.is_empty();
+    vec![
+        item("Cut", Cut).key("Ctrl+X"),
+        key("Copy", ch("c"), true, false, false, "Ctrl+C"),
+        paste,
+        item("Duplicate", Duplicate).key("Ctrl+B"),
+        key("Delete", PKey::Delete, false, false, false, "Del"),
+        PItem::sep(),
+        key("Shift left", PKey::Left, false, true, false, "Shift+Left"),
+        key("Shift right", PKey::Right, false, true, false, "Shift+Right"),
+        key("Rotate left", PKey::Left, true, true, false, "Shift+Ctrl+Left"),
+        key("Rotate right", PKey::Right, true, true, false, "Shift+Ctrl+Right"),
+        key("Transpose up", PKey::Up, false, true, false, "Shift+Up"),
+        key("Transpose down", PKey::Down, false, true, false, "Shift+Down"),
+        key("Transpose one octave up", PKey::Up, true, false, false, "Ctrl+Up"),
+        key("Transpose one octave down", PKey::Down, true, false, false, "Ctrl+Down"),
+        item("Discard lengths", DiscardLengths).key("Shift+D"),
+        PItem::sep(),
+        PItem::not_yet("Allow resizing from left").key("Ctrl+Alt+Home"),
+        PItem::not_yet("Nudge notes with mouse wheel"),
+        PItem::sep(),
+        PItem::not_yet("Change color").key("Alt+C"),
+        item("Mute", Mute(true)).key("Alt+M"),
+        item("Unmute", Mute(false)).key("Alt+Shift+M"),
+        PItem::sep(),
+        PItem::not_yet("Insert space").key("Ctrl+Ins"),
+        PItem::not_yet("Slice & insert space").key("Ctrl+Alt+Ins"),
+        PItem::not_yet("Delete space").key("Ctrl+Del"),
+        PItem::not_yet("Trim selection"),
+        PItem::sep(),
+        PItem::not_yet("Insert current controller value").key("Ctrl+I"),
+        PItem::not_yet("Turn into automation clip..."),
+        PItem::not_yet("Purge unused audio clips"),
+        PItem::sep(),
+        PItem::not_yet("Select tracks when samples are dropped"),
+    ]
+}
+
+/// Root note `r` (0 = C) as the scale menu names it.
+fn root_name(r: u8, flats: bool) -> String {
+    crate::note_names::name_in(i32::from(r), crate::prefs::index(&crate::prefs::NOTE_NAMES), flats).trim_end_matches(|c: char| c.is_ascii_digit() || c == '-').to_string()
+}
+
+/// The Scale highlighting menu's items (`NCmd::ScaleMenu`): FL's two columns, the root notes, then the switches, the
+/// black-note naming and the scales.
+pub fn scale_menu(s: &State) -> Vec<PItem> {
+    use crate::piano::{ScaleHighlight, ScaleNames};
+    let sh = s.piano.scale_highlight;
+    let ScaleHighlight { root, scale_idx, enabled, snap, names } = sh;
+    let flats = sh.flats();
+    // FL's two columns: the root notes, then the scale's switches, the naming and the scales.
+    let mut scale = vec![PItem::head("Root note")];
+    scale.extend((0..12u8).map(|r| PItem::new(root_name(r, flats), Cmd::Piano(NCmd::ScaleRoot(r))).mark(Mark::Radio(root == r && enabled))));
+    scale.push(PItem::col());
+    scale.push(PItem::head("Scale"));
+    scale.push(item("Highlight scale", NCmd::ScaleToggle).key("Alt+H").mark(Mark::Check(enabled)));
+    scale.push(item("Snap PR notes to scale", NCmd::ScaleSnap).mark(Mark::Check(snap)));
+    scale.push(PItem::not_yet("Snap incoming MIDI"));
+    scale.push(PItem::sep());
+    for (label, n) in [("Default", ScaleNames::Default), ("Black notes", ScaleNames::BlackNotes), ("Automatic", ScaleNames::Automatic)] {
+        scale.push(PItem::new(label, Cmd::Piano(NCmd::ScaleNames(n))).mark(Mark::Radio(names == n)));
+    }
+    scale.push(PItem::sep());
+    scale.extend(crate::chords::menu_scales().into_iter().map(|(label, k)| PItem::new(label, Cmd::Piano(NCmd::ScaleKind(k))).mark(Mark::Radio(scale_idx == k && enabled))));
+    scale
+}
+
+/// The ▸ menu's View submenu (FL's): Scale highlighting lists the root notes and the scales in two columns; Ghost
+/// channels is the Alt+V switch. The rest of FL's entries are greyed until they are built.
+fn view_menu(s: &State) -> Vec<PItem> {
+    vec![
+        PItem::head("Grid"),
+        PItem::not_yet("Grid color..."),
+        PItem::not_yet("Grid contrast"),
+        PItem::not_yet("Invert grid"),
+        PItem::not_yet("Time segments"),
+        PItem::head("Content"),
+        PItem::not_yet("Keep labels on screen"),
+        PItem::not_yet("Shadow"),
+        PItem::not_yet("Rounded"),
+        PItem::not_yet("Note colors"),
+        PItem::head("Time"),
+        PItem::not_yet("Incremental scrolling"),
+        PItem::not_yet("Precise time indicator"),
+        PItem::not_yet("Mini piano roll preview"),
+        PItem::head("Helpers"),
+        PItem::not_yet("Note grid highlights").key("Alt+B"),
+        PItem::sub("Scale highlighting", scale_menu(s)),
+        PItem::not_yet("Show chord name for selection"),
+        PItem::not_yet("Note length in note properties"),
+        PItem::sep(),
+        item("Ghost channels", NCmd::Ghosts).key("Alt+V").mark(Mark::Check(s.piano.ghosts)),
+        PItem::not_yet("Editable ghosts").key("Ctrl+Alt+V"),
+        PItem::sep(),
+        PItem::not_yet("Background waveform").key("Alt+N"),
+        PItem::head("Piano roll"),
+        PItem::not_yet("Keyboard options"),
+        PItem::not_yet("Swap panels"),
+        PItem::not_yet("Flip separator").key("Shift+Enter"),
+        PItem::sep(),
+        PItem::not_yet("Remove background picture"),
+    ]
+}
+
+/// The piano roll's ▸ menu (the toolbar's first button; FL's options menu): its groups open as submenus, made from
+/// the Tools, Snap and target-channel menus. Stamp, Select, Group, Zoom, Time markers, Target control, Auto smoothing,
+/// Preview notes, Center and Detached are not built yet: listed, greyed.
+pub fn options_menu(s: &State, x: f32, y: f32) -> Popup {
+    // The Tools menu's groups, by its headers.
+    let mut groups: Vec<(String, Vec<PItem>)> = Vec::new();
+    for it in tools_menu(s, 0.0, 0.0).items {
+        if it.head {
+            groups.push((it.label.to_string(), Vec::new()));
+        } else if let Some(g) = groups.last_mut() {
+            g.1.push(it);
+        }
+    }
+    let mut group = |name: &str| groups.iter().position(|g| g.0 == name).map(|i| std::mem::take(&mut groups[i].1)).unwrap_or_default();
+    let (file, _, mut tools, _) = (group("File"), group("Edit"), group("Tools"), group("View"));
+    // Glue is the Tools menu's Edit group's; FL lists it under Tools.
+    tools.insert(0, item("Glue", NCmd::Glue).key("Ctrl+G"));
+    let strip = |p: Popup| p.items.into_iter().filter(|it| !it.head || !it.label.is_empty()).collect::<Vec<_>>();
+    let items = vec![
+        PItem::sub("File", file),
+        PItem::sub("Edit", edit_menu(s)),
+        PItem::sub("Tools", tools),
+        PItem::not_yet("Stamp"),
+        PItem::sub("View", view_menu(s)),
+        PItem::sub("Snap", strip(crate::piano_snap::snap_menu(s, 0.0, 0.0))),
+        PItem::not_yet("Select"),
+        PItem::not_yet("Group"),
+        PItem::not_yet("Zoom"),
+        PItem::not_yet("Time markers"),
+        PItem::sep(),
+        PItem::sub("Target channel", strip(target_menu(s, 0.0, 0.0))),
+        PItem::not_yet("Target control"),
+        PItem::sep(),
+        PItem::not_yet("Auto smoothing"),
+        PItem::not_yet("Preview notes during playback"),
+        PItem::sep(),
+        PItem::not_yet("Center").key("Shift+0"),
+        PItem::sep(),
+        PItem::not_yet("Detached"),
     ];
     Popup { x, y, items, sub: None, scroll: [0; 2] }
 }
@@ -330,6 +505,37 @@ pub fn target_menu(s: &State, x: f32, y: f32) -> Popup {
 /// Run a command; returns a status message.
 pub fn run(app: &mut App, cmd: NCmd) -> Option<String> {
     app.state.playlist.popup = None;
+    // A menu entry that is a shortcut presses it (the editing keys are `App::key`'s).
+    let press = |app: &mut App, k: PKey, ctrl: bool, shift: bool, alt: bool| {
+        use winit::keyboard::{Key, NamedKey};
+        let key = match k {
+            PKey::Ch(c) => Key::Character(c.into()),
+            PKey::Delete => Key::Named(NamedKey::Delete),
+            PKey::Left => Key::Named(NamedKey::ArrowLeft),
+            PKey::Right => Key::Named(NamedKey::ArrowRight),
+            PKey::Up => Key::Named(NamedKey::ArrowUp),
+            PKey::Down => Key::Named(NamedKey::ArrowDown),
+        };
+        let was = std::mem::replace(&mut app.shift, shift);
+        app.key(&key, ctrl, alt);
+        app.shift = was;
+    };
+    match cmd {
+        NCmd::Press(k, ctrl, shift, alt) => {
+            press(app, k, ctrl, shift, alt);
+            return None;
+        }
+        NCmd::Cut => {
+            let s = &app.state;
+            if s.piano.selection(s.pattern, crate::piano::channel(s)).is_empty() {
+                return Some("Piano roll: cut: nothing selected".into());
+            }
+            press(app, PKey::Ch("c"), true, false, false);
+            press(app, PKey::Delete, false, false, false);
+            return Some("Piano roll: cut".into());
+        }
+        _ => {}
+    }
     let s = &mut app.state;
     // Quick quantize, Discard lengths and Quick chop use the piano roll's snap (spec: ui/piano-snap.md §6,
     // ui/global-snap.md §3).
@@ -390,6 +596,31 @@ pub fn run(app: &mut App, cmd: NCmd) -> Option<String> {
             }
             let made = apply(s, |_, ns| ns.into_iter().map(|mut n| { ty.apply(&mut n); n }).collect());
             done(made, &format!("made the selected notes {}", ty.label()))
+        }
+        NCmd::Press(..) | NCmd::Cut => unreachable!("handled above"),
+        NCmd::ScaleToggle => {
+            let sh = &mut s.piano.scale_highlight;
+            sh.enabled = !sh.enabled;
+            format!("Scale highlighting: {}", if sh.enabled { "on" } else { "off" })
+        }
+        NCmd::ScaleRoot(r) => {
+            let sh = &mut s.piano.scale_highlight;
+            (sh.root, sh.enabled) = (r % 12, true);
+            format!("Scale highlighting: {} {}", root_name(sh.root, sh.flats()), crate::chords::label(sh.scale_idx))
+        }
+        NCmd::ScaleSnap => {
+            let sh = &mut s.piano.scale_highlight;
+            sh.snap = !sh.snap;
+            format!("Snap notes to scale: {}", if sh.snap { "on" } else { "off" })
+        }
+        NCmd::ScaleNames(n) => {
+            s.piano.scale_highlight.names = n;
+            "Scale highlighting: black note names changed".to_string()
+        }
+        NCmd::ScaleKind(k) => {
+            let sh = &mut s.piano.scale_highlight;
+            (sh.scale_idx, sh.enabled) = (k, true);
+            format!("Scale highlighting: {} {}", root_name(sh.root, sh.flats()), crate::chords::label(k))
         }
         NCmd::Target(row) => {
             if row >= s.project.channels.len() {
@@ -607,6 +838,77 @@ mod tests {
         let mut a = App::new(None);
         a.state.selected_channel = 4;
         a
+    }
+
+    /// The ▸ menu's Edit entries do what their shortcuts do: Transpose up moves the selected note a key, Cut takes it to
+    /// the clipboard, Paste (on once there is one) puts it back.
+    #[test]
+    fn the_edit_menu_acts_on_the_selection() {
+        let Ok(mut c) = os_ui::Canvas::new(1920, 1080, 1.0) else { return };
+        let mut a = app();
+        a.state.raise(crate::app::Win::PianoRoll);
+        a.paint(&mut c, None);
+        piano::pattern_mut(&mut a.state).notes.push(Note::step(4, 0));
+        let ch = piano::channel(&a.state).unwrap();
+        a.state.piano.select(a.state.pattern, ch, vec![0]);
+        let entry = |a: &App, name: &str| edit_menu(&a.state).into_iter().find(|i| i.label == name).unwrap();
+        assert!(!entry(&a, "Paste").enabled, "nothing copied yet");
+        let key0 = piano::notes(&a.state)[0].key;
+        let Cmd::Piano(up) = entry(&a, "Transpose up").cmd else { panic!() };
+        run(&mut a, up);
+        assert_eq!(piano::notes(&a.state)[0].key, key0 + 1);
+        let n = piano::notes(&a.state).len();
+        run(&mut a, NCmd::Cut);
+        assert_eq!(piano::notes(&a.state).len(), n - 1, "cut");
+        assert!(entry(&a, "Paste").enabled);
+        let Cmd::Piano(paste) = entry(&a, "Paste").cmd else { panic!() };
+        run(&mut a, paste);
+        assert_eq!(piano::notes(&a.state).len(), n, "pasted");
+    }
+
+    /// The ▸ menu's View ▸ Scale highlighting: picking a root or a scale turns the highlighting on and sets it; the
+    /// entries' radios follow.
+    #[test]
+    fn the_view_menu_sets_the_scale_highlighting() {
+        let mut a = app();
+        assert!(!a.state.piano.scale_highlight.enabled);
+        let k = (crate::chords::FIRST_SCALE..=88).find(|&k| crate::chords::label(k) == "Minor Natural (Aeolian)").expect("natural minor is a scale");
+        run(&mut a, NCmd::ScaleRoot(2));
+        run(&mut a, NCmd::ScaleKind(k));
+        let sh = a.state.piano.scale_highlight;
+        assert!(sh.enabled && sh.root == 2 && sh.scale_idx == k);
+        assert!(crate::chords::in_scale(2, k, 62) && !crate::chords::in_scale(2, k, 63), "D minor has D and no D#");
+        let view = view_menu(&a.state);
+        let scale = &view.iter().find(|i| i.label == "Scale highlighting").unwrap().children;
+        assert!(scale.iter().any(|i| i.cmd == Cmd::Piano(NCmd::ScaleKind(k)) && i.mark == Mark::Radio(true)));
+        assert!(scale.iter().any(|i| i.cmd == Cmd::Piano(NCmd::ScaleRoot(2)) && i.mark == Mark::Radio(true)));
+        run(&mut a, NCmd::ScaleToggle);
+        assert!(!a.state.piano.scale_highlight.enabled);
+    }
+
+    /// Notes drawn with scale highlighting on land on the scale (C# in C major goes down to C); off, or with the snap
+    /// switch off, they stay; the extra scales are listed; Automatic names F major's black notes with flats.
+    #[test]
+    fn notes_snap_to_the_scale_and_names_follow() {
+        use crate::piano::ScaleNames;
+        let mut a = app();
+        let ch = a.state.selected_channel as u16;
+        let tick = |a: &mut App, key| {
+            piano::pattern_mut(&mut a.state).notes.clear();
+            let i = piano::add_note(&mut a.state, ch, 0, key);
+            piano::notes(&a.state)[i].key
+        };
+        assert_eq!(tick(&mut a, 61), 61, "highlighting off: stays");
+        run(&mut a, NCmd::ScaleToggle);
+        assert_eq!(tick(&mut a, 61), 60, "C# in C major goes to C");
+        assert_eq!(tick(&mut a, 62), 62);
+        run(&mut a, NCmd::ScaleSnap);
+        assert_eq!(tick(&mut a, 61), 61, "snap off: stays");
+        let names: Vec<_> = crate::chords::menu_scales().iter().map(|s| s.0).collect();
+        assert!(names.contains(&"Other Hirajoshi") && names.contains(&"Minor Romanian") && names.len() == 31);
+        run(&mut a, NCmd::ScaleRoot(5));
+        run(&mut a, NCmd::ScaleNames(ScaleNames::Automatic));
+        assert_eq!(root_name(10, a.state.piano.scale_highlight.flats()), "B\u{266d}");
     }
 
     /// The Note properties menu: the three types as radios (the chosen one on), and the Make entries off without a

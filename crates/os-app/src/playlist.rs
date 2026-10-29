@@ -643,6 +643,8 @@ pub struct PlaylistState {
     pub gain_clip: Option<f32>,
     pub overlay: Option<Overlay>,
     pub popup: Option<Popup>,
+    /// The open submenu's own submenu: (the popup item whose submenu is open, that submenu's item).
+    pub popup_sub2: Option<(usize, usize)>,
     pub edit: Option<TextEdit>,
     /// The value box's mode last accepted: normalized (spec: ui/type-in-value.md §3).
     pub typein_norm: bool,
@@ -700,6 +702,7 @@ impl Default for PlaylistState {
             gain_clip: None,
             overlay: None,
             popup: None,
+            popup_sub2: None,
             edit: None,
             typein_norm: false,
             solo: None,

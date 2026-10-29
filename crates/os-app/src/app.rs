@@ -300,6 +300,8 @@ pub enum Action {
     PianoLaneMenu,
     /// Toolbar "Piano roll tools" button: the Tools menu (spec: ui/piano-roll.md §11).
     PianoToolsMenu,
+    /// The piano roll's ▸ menu (`piano_tools::options_menu`).
+    PianoOptionsMenu,
     /// Toolbar magnet: the Snap menu; right-click: Stock note lengths (spec: ui/piano-snap.md §1).
     PianoSnapMenu,
     /// Toolbar note button: the Note properties menu (the type new notes are drawn as, the selected notes' type).
@@ -344,6 +346,8 @@ pub enum Action {
     PlPickAdd,
     PlPopup(usize),
     PlPopupSub(usize),
+    /// A row of a submenu's own submenu (the piano roll ▸ menu goes three levels deep).
+    PlPopupSub2(usize),
     /// Channel rack title bar (spec: ui/channel-rack.md §7): options ▸, display filter combo, name-width dots,
     /// speaker (play / pause pattern), pattern length box, loop mode, graph editor; per-row loop boxes (§15),
     /// graph editor area and tabs (§14), Advanced fill dialog (§22).
@@ -6101,7 +6105,7 @@ impl App {
             // The time signature dialog's value list (the app's popup) takes its own; a click anywhere else closes it.
             if crate::timesig::list_open(&self.state).is_some() {
                 match action {
-                    Some(a @ (Action::PlPopup(_) | Action::PlPopupSub(_))) => {
+                    Some(a @ (Action::PlPopup(_) | Action::PlPopupSub(_) | Action::PlPopupSub2(_))) => {
                         self.act(a);
                     }
                     _ => self.state.playlist.popup = None,
@@ -6145,7 +6149,7 @@ impl App {
         if self.state.playlist.popup.is_some() && matches!(action, Some(Action::MenuSub(_, j)) if self.state.menu_sub == Some(j)) {
             return;
         }
-        if self.state.playlist.popup.is_some() && !matches!(action, Some(Action::PlPopup(_) | Action::PlPopupSub(_) | Action::Scrollbar(Scroll::Popup | Scroll::PopupSub))) {
+        if self.state.playlist.popup.is_some() && !matches!(action, Some(Action::PlPopup(_) | Action::PlPopupSub(_) | Action::PlPopupSub2(_) | Action::Scrollbar(Scroll::Popup | Scroll::PopupSub))) {
             self.state.playlist.popup = None;
             // A dropdown's submenu: the click goes on to the dropdown (below), but one on the submenu's own ▸ entry only
             // closes it.
@@ -6191,7 +6195,7 @@ impl App {
         // Any click outside an open menu closes it. VIEW's window entries are window toggles: one clicked in the menu
         // closes the menu and toggles its window. Its open submenu takes its own clicks.
         if self.state.menu_open.is_some()
-            && !matches!(action, Some(Action::MenuItem(..) | Action::MenuSub(..) | Action::Menu(_) | Action::PlPopup(_) | Action::PlPopupSub(_) | Action::Scrollbar(Scroll::Popup | Scroll::PopupSub)))
+            && !matches!(action, Some(Action::MenuItem(..) | Action::MenuSub(..) | Action::Menu(_) | Action::PlPopup(_) | Action::PlPopupSub(_) | Action::PlPopupSub2(_) | Action::Scrollbar(Scroll::Popup | Scroll::PopupSub)))
         {
             self.state.menu_open = None;
             if !(matches!(action, Some(Action::ToggleWin(_))) && self.overlays.iter().any(|r| r.contains(x, y))) {
@@ -6658,7 +6662,7 @@ impl App {
             }
             _ => {}
         }
-        if self.state.playlist.popup.is_some() && !matches!(action, Some(Action::PlPopup(_) | Action::PlPopupSub(_))) {
+        if self.state.playlist.popup.is_some() && !matches!(action, Some(Action::PlPopup(_) | Action::PlPopupSub(_) | Action::PlPopupSub2(_))) {
             self.state.playlist.popup = None;
             self.invalidate();
             if !matches!(action, Some(Action::PlaylistArea)) {
@@ -8319,8 +8323,32 @@ impl App {
                     self.state.message = Some(off_text(name));
                 }
             }
+            Action::PlPopupSub2(i) => {
+                let item = self.state.playlist.popup.as_ref().and_then(|p| {
+                    let (a, b) = self.state.playlist.popup_sub2?;
+                    p.items.get(a).and_then(|it| it.children.get(b)).and_then(|it| it.children.get(i))
+                });
+                match item.cloned().filter(|it| !it.head && !it.sep) {
+                    Some(item) if item.enabled => {
+                        if let Some(m) = pl::run(self, item.cmd) {
+                            self.state.message = Some(m);
+                        }
+                    }
+                    Some(pl::PItem { cmd: pl::Cmd::NotYet(name), .. }) => self.state.message = Some(off_text(name)),
+                    _ => {}
+                }
+            }
             Action::PlPopupSub(i) => {
+                let parent = self.state.playlist.popup.as_ref().and_then(|p| p.sub);
                 let item = self.state.playlist.popup.as_ref().and_then(|p| p.sub.and_then(|s| p.items.get(s))).and_then(|it| it.children.get(i)).cloned();
+                // An entry with its own submenu (hover opened it already): the click keeps it open.
+                if let (Some(a), Some(it)) = (parent, &item) {
+                    if !it.children.is_empty() {
+                        self.state.playlist.popup_sub2 = Some((a, i));
+                        self.invalidate();
+                        return true;
+                    }
+                }
                 match item.filter(|it| !it.head && !it.sep) {
                     Some(item) if item.enabled => {
                         if let Some(m) = pl::run(self, item.cmd) {
@@ -8334,7 +8362,7 @@ impl App {
             _ => return false,
         }
         // A pick in a dropdown's submenu closes the dropdown with it.
-        if matches!(a, Action::PlPopup(_) | Action::PlPopupSub(_)) && self.state.playlist.popup.is_none() && self.state.menu_sub.take().is_some() {
+        if matches!(a, Action::PlPopup(_) | Action::PlPopupSub(_) | Action::PlPopupSub2(_)) && self.state.playlist.popup.is_none() && self.state.menu_sub.take().is_some() {
             self.state.menu_open = None;
         }
         self.invalidate();
@@ -8639,6 +8667,10 @@ impl App {
                 let (x, y) = self.mouse;
                 s.playlist.popup = Some(crate::piano_tools::tools_menu(s, x - 6.0, y + 10.0));
             }
+            Action::PianoOptionsMenu => {
+                let b = self.hits.iter().rev().find(|h| h.action == Action::PianoOptionsMenu).map_or(Rect::new(self.mouse.0, self.mouse.1, 0.0, 0.0), |h| h.rect);
+                s.playlist.popup = Some(crate::piano_tools::options_menu(s, b.cx() - 11.0, b.cy() + 11.0));
+            }
             Action::PianoTarget => {
                 // Top-left 4 px left of the name, 11 px below the title text's centre (spec: ui/piano-target-channel.md §2).
                 let b = self.hits.iter().rev().find(|h| h.action == Action::PianoTarget).map_or(Rect::new(self.mouse.0, self.mouse.1, 0.0, 0.0), |h| h.rect);
@@ -8795,7 +8827,8 @@ impl App {
             | Action::PlPickTab(_)
             | Action::PlPick(_)
             | Action::PlPopup(_)
-            | Action::PlPopupSub(_) => {}
+            | Action::PlPopupSub(_)
+            | Action::PlPopupSub2(_) => {}
         }
     }
 
@@ -9293,6 +9326,18 @@ impl App {
                 if p.sub != sub {
                     p.sub = sub;
                     p.scroll[1] = 0;
+                    self.state.playlist.popup_sub2 = None;
+                    self.invalidate();
+                }
+            }
+            // A row of a submenu with a submenu of its own opens it on hover; any other row of that list closes it.
+            Some(Action::PlPopupSub(i)) => {
+                let Some(p) = self.state.playlist.popup.as_ref() else { return };
+                let Some(a) = p.sub else { return };
+                let child = p.items.get(a).and_then(|it| it.children.get(i)).is_some_and(|it| !it.children.is_empty() && it.enabled);
+                let want = if child { Some((a, i)) } else { None };
+                if self.state.playlist.popup_sub2 != want {
+                    self.state.playlist.popup_sub2 = want;
                     self.invalidate();
                 }
             }
@@ -18074,6 +18119,19 @@ mod tests {
         app.mouse_up();
         assert!(app.state.playlist.popup.take().is_some_and(|p| p.items.iter().any(|i| i.cmd == Cmd::Piano(NCmd::Glue))));
 
+        // The ▸ button opens the options menu: its groups are submenus holding the Tools, Snap and channel entries.
+        let r = hit_rect(&app, &Action::PianoOptionsMenu);
+        app.mouse_move(r.cx(), r.cy());
+        app.mouse_down();
+        app.mouse_up();
+        let menu = app.state.playlist.popup.take().expect("options menu");
+        let sub = |name: &str| menu.items.iter().find(|i| i.label == name).map(|i| i.children.clone()).unwrap_or_default();
+        assert!(sub("Edit").iter().any(|i| i.cmd == Cmd::Piano(NCmd::Duplicate)));
+        assert!(sub("Tools").iter().any(|i| i.cmd == Cmd::Piano(NCmd::Glue)));
+        assert!(sub("Tools").iter().any(|i| i.cmd == Cmd::Piano(NCmd::Legato)));
+        assert!(sub("Snap").iter().any(|i| matches!(i.cmd, Cmd::Piano(NCmd::Snap(_)))));
+        assert!(sub("Target channel").iter().any(|i| matches!(i.cmd, Cmd::Piano(NCmd::Target(_)))));
+
         // Alt+V hides and shows the ghost channels.
         assert!(app.state.piano.ghosts);
         key(&mut app, "v", false, true, false);
@@ -22432,6 +22490,38 @@ mod tests {
         // Escape on empty closes palette
         app.key(&Key::Named(NamedKey::Escape), false, false);
         assert!(!app.state.palette.open);
+    }
+
+    #[test]
+    fn piano_options_menu_opens_its_third_level_on_hover() {
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let mut app = App::new(None);
+        app.state.raise(Win::PianoRoll);
+        frame(&mut app, &mut c, None);
+        let b = hit_rect(&app, &Action::PianoOptionsMenu);
+        app.mouse_move(b.cx(), b.cy());
+        app.mouse_down();
+        app.mouse_up();
+        frame(&mut app, &mut c, None);
+        let view = app.state.playlist.popup.as_ref().unwrap().items.iter().position(|i| i.label == "View").unwrap();
+        let r = hit_rect(&app, &Action::PlPopup(view));
+        app.mouse_move(r.cx(), r.cy());
+        frame(&mut app, &mut c, None);
+        let scale = app.state.playlist.popup.as_ref().unwrap().items[view].children.iter().position(|i| i.label == "Scale highlighting").unwrap();
+        let r = hit_rect(&app, &Action::PlPopupSub(scale));
+        app.mouse_move(r.cx(), r.cy());
+        frame(&mut app, &mut c, None);
+        assert_eq!(app.state.playlist.popup_sub2, Some((view, scale)), "hover opens it");
+        // A scale picked in it is set.
+        let k = crate::chords::menu_scales().iter().find(|s| s.0 == "Other Hirajoshi").unwrap().1;
+        let items = &app.state.playlist.popup.as_ref().unwrap().items[view].children[scale].children;
+        let at = items.iter().position(|i| i.cmd == crate::playlist::Cmd::Piano(crate::piano_tools::NCmd::ScaleKind(k))).unwrap();
+        let r = hit_rect(&app, &Action::PlPopupSub2(at));
+        app.mouse_move(r.cx(), r.cy());
+        app.mouse_down();
+        app.mouse_up();
+        assert_eq!(app.state.piano.scale_highlight.scale_idx, k);
+        assert!(app.state.piano.scale_highlight.enabled);
     }
 
     #[test]

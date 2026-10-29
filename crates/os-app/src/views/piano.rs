@@ -368,7 +368,7 @@ fn toolbar(ui: &mut Ui, s: &State, r: Rect, shift: f32) {
     let active = s.piano.tool;
     let ox = r.x - 209.0 + shift;
     let items: [(f32, Icon, &'static str, Option<Action>); 15] = [
-        (222.0, Icon::ArrowRight, "Piano roll options", None),
+        (222.0, Icon::ArrowRight, "Piano roll options", Some(Action::PianoOptionsMenu)),
         (242.0, Icon::MidiControl, "Piano roll tools: quantize, chop, glue, strum, arpeggiate, randomize...", Some(Action::PianoToolsMenu)),
         (263.0, Icon::Magnet, "", Some(Action::PianoSnapMenu)),
         (283.0, Icon::Note, "", Some(Action::PianoNoteMenu)),
