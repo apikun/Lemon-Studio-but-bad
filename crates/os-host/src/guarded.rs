@@ -218,6 +218,12 @@ impl<P: Plugin> Plugin for Guarded<P> {
     fn can_resize_editor(&self) -> bool {
         self.look(false, |p| p.can_resize_editor())
     }
+    fn begin_editor(&mut self, parent: *mut std::ffi::c_void, scale: f32) -> Option<Result<Box<dyn crate::PendingEditor>, String>> {
+        self.run(None, |p| p.begin_editor(parent, scale))
+    }
+    fn finish_editor(&mut self, pending: Box<dyn crate::PendingEditor>) -> Result<(u32, u32), String> {
+        self.run(Err("the plugin stopped".into()), move |p| p.finish_editor(pending))
+    }
     fn resize_editor(&mut self, w: u32, h: u32) -> Option<(u32, u32)> {
         self.run(None, |p| p.resize_editor(w, h))
     }
