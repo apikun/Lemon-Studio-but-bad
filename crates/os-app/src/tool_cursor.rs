@@ -57,8 +57,8 @@ fn hot_spot(icon: Icon, size: u32) -> (u16, u16) {
 mod tests {
     use super::*;
 
-    /// Over the playlist's grid the cursor is the playlist tool's icon (Draw shows the brush, the Select tool keeps the
-    /// arrow), and the arrow away from it (FL).
+    /// Over the playlist's grid the cursor is the playlist tool's icon (Draw shows the pencil, the Select tool keeps
+    /// the arrow), and the arrow away from it (FL).
     #[test]
     fn the_playlist_shows_its_tool() {
         use crate::app::{App, Cursor, Win};
@@ -69,7 +69,7 @@ mod tests {
         app.paint(&mut c, None);
         let g = app.pl_grid().expect("the grid");
         let tools = [
-            (PlTool::Draw, Cursor::Tool(Icon::Brush)),
+            (PlTool::Draw, Cursor::Tool(Icon::Pencil)),
             (PlTool::Paint, Cursor::Tool(Icon::Brush)),
             (PlTool::Slice, Cursor::Tool(Icon::Slice)),
             (PlTool::Select, Cursor::Default),
