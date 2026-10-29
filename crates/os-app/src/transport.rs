@@ -1193,12 +1193,45 @@ fn engine(project: &Project, library: &mut SampleLibrary, rate: u32, mode: PlayM
     e
 }
 
+/// What one pass of pattern `pattern` plays: the rows of the channels with notes in it and of their layers' children,
+/// and which mixer tracks they reach (their own, those routes lead on to, and the master). The other channels'
+/// plugins, and the effects of the tracks none of them reach, would only process silence in its render.
+fn pattern_parts(project: &Project, pattern: u16) -> (Vec<usize>, Vec<bool>) {
+    let mut playing: Vec<u16> = project.pattern(pattern).map(|p| p.notes.iter().map(|n| n.channel).collect()).unwrap_or_default();
+    let children: Vec<u16> =
+        project.channels.iter().filter(|c| playing.contains(&c.index)).flat_map(|c| c.layer_children.iter().copied()).collect();
+    playing.extend(children);
+    let rows: Vec<usize> = project.channels.iter().enumerate().filter(|(_, c)| playing.contains(&c.index)).map(|(row, _)| row).collect();
+    let mut reached = vec![false; project.mixer.len()];
+    let mut todo: Vec<usize> = rows.iter().map(|&r| usize::from(project.channels[r].mixer_track)).collect();
+    todo.push(0);
+    while let Some(t) = todo.pop() {
+        if t >= reached.len() || reached[t] {
+            continue;
+        }
+        reached[t] = true;
+        todo.extend(project.mixer[t].routes.iter().map(|&r| usize::from(r)));
+    }
+    (rows, reached)
+}
+
 /// Renders a whole song (or one pass of a pattern, or a span of either) with the hosted plugins and writes the files of
 /// `job`; returns the written length in seconds and the files. Runs on the audio thread with no stream open.
 // spec: audio/export.md
 fn export(project: &Project, mode: PlayMode, rate: u32, job: &crate::export::Job, library: &mut SampleLibrary, inst: &Instruments, shared: &Shared) -> Result<(f64, Vec<PathBuf>), String> {
     let o = &job.options;
-    let mut e = engine(project, library, rate, mode, inst, true);
+    let mut e = match mode {
+        // A pattern's render hosts only what plays in it (`pattern_parts`).
+        PlayMode::Pattern(p) => {
+            let (rows, reached) = pattern_parts(project, p);
+            let (list, fx) = inst.lock().map(|l| (l.inst.clone(), l.fx.clone())).unwrap_or_default();
+            let list: Vec<_> = list.into_iter().filter(|(row, _)| rows.contains(row)).collect();
+            let mut e = Engine::with_instruments(project, library, rate, mode, &list);
+            crate::project_plugins::attach_effects(&mut e, project, fx.into_iter().filter(|&(t, _, _)| reached.get(t).copied().unwrap_or(true)));
+            e
+        }
+        _ => engine(project, library, rate, mode, inst, true),
+    };
     e.set_interpolation(o.points);
     e.set_effects(o.insert_fx, o.master_fx);
     match job.span {
@@ -2273,6 +2306,27 @@ mod tests {
         drop(t);
         assert_eq!(Arc::strong_count(&fx), 1, "the audio thread let go of the effect");
         let _ = std::fs::remove_file(path);
+    }
+
+    /// A pattern's render plays only the channels with notes in it and their layers' children, and runs the effects of
+    /// the mixer tracks they reach: their own, the tracks those route on to, and the master.
+    #[test]
+    fn a_pattern_render_hosts_only_what_plays() {
+        let mut p = crate::app::test_project();
+        p.patterns[0].notes = vec![os_model::Note::step(1, 0), os_model::Note::step(1, 96)];
+        p.patterns.push(os_model::Pattern { number: 2, notes: vec![os_model::Note::step(3, 0)], ..Default::default() });
+        // Channel 3 is a layer of channel 4; insert 4 (channel 3's) routes on to insert 9.
+        p.channels[3].layer_children = vec![4];
+        p.mixer[4].routes = vec![9];
+        let (rows, reached) = pattern_parts(&p, 1);
+        assert_eq!(rows, [1]);
+        let on: Vec<usize> = reached.iter().enumerate().filter(|(_, r)| **r).map(|(t, _)| t).collect();
+        assert_eq!(on, [0, 2], "the master and channel 1's insert");
+        let (rows, reached) = pattern_parts(&p, 2);
+        assert_eq!(rows, [3, 4], "the layer and its child");
+        let on: Vec<usize> = reached.iter().enumerate().filter(|(_, r)| **r).map(|(t, _)| t).collect();
+        assert_eq!(on, [0, 4, 5, 9]);
+        assert_eq!(pattern_parts(&p, 7).0, Vec::<usize>::new(), "a pattern that is not there plays nothing");
     }
 
     /// An export renders one pass of the pattern (not a loop) on the audio thread, with progress, into a WAV file.
