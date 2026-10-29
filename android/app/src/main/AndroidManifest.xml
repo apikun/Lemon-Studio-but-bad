@@ -7,6 +7,9 @@
          the settings page for it once), older systems use the runtime WRITE permission. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <!-- The mixer's tracks and One-click recording take an input device in (the microphone): the
+         runtime grant is asked for once at the launch (MainActivity). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
         android:allowBackup="false"
         android:requestLegacyExternalStorage="true"

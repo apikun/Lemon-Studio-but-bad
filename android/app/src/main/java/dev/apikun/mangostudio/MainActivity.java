@@ -6,6 +6,7 @@ package dev.apikun.mangostudio;
 
 import android.app.NativeActivity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -28,12 +29,38 @@ import java.io.IOException;
 public class MainActivity extends NativeActivity {
     /** The marker that the All-files-access page was already opened once; per install (per user). */
     private static final String ASKED_ALL_FILES = "asked-all-files";
+    /** The marker that the microphone was already asked about once; per install (per user). */
+    private static final String ASKED_MICROPHONE = "asked-microphone";
+    /** The code the microphone's runtime permission ask answers. */
+    private static final int ASK_MICROPHONE = 1;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         askForAllFiles();
+        askForMicrophone();
         hideBars();
+    }
+
+    /**
+     * The mixer's tracks and One-click audio recording take an input device in (Settings > Audio's
+     * input device): recording hears the microphone, which needs the runtime {@code RECORD_AUDIO}
+     * grant. Once per install this asks for it at the launch; a device that never grants it records
+     * no input, and everything else keeps working.
+     */
+    private void askForMicrophone() {
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        File asked = new File(getFilesDir(), ASKED_MICROPHONE);
+        if (asked.exists()) {
+            return;
+        }
+        requestPermissions(new String[] {android.Manifest.permission.RECORD_AUDIO}, ASK_MICROPHONE);
+        try {
+            asked.createNewFile();
+        } catch (IOException ignored) {
+        }
     }
 
     /**
