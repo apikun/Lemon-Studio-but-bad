@@ -300,6 +300,8 @@ pub enum Action {
     PianoLaneMenu,
     /// Toolbar "Piano roll tools" button: the Tools menu (spec: ui/piano-roll.md §11).
     PianoToolsMenu,
+    /// The piano roll's ▸ menu (`piano_tools::options_menu`).
+    PianoOptionsMenu,
     /// Toolbar magnet: the Snap menu; right-click: Stock note lengths (spec: ui/piano-snap.md §1).
     PianoSnapMenu,
     /// Toolbar note button: the Note properties menu (the type new notes are drawn as, the selected notes' type).
@@ -8637,6 +8639,10 @@ impl App {
             Action::PianoToolsMenu => {
                 let (x, y) = self.mouse;
                 s.playlist.popup = Some(crate::piano_tools::tools_menu(s, x - 6.0, y + 10.0));
+            }
+            Action::PianoOptionsMenu => {
+                let b = self.hits.iter().rev().find(|h| h.action == Action::PianoOptionsMenu).map_or(Rect::new(self.mouse.0, self.mouse.1, 0.0, 0.0), |h| h.rect);
+                s.playlist.popup = Some(crate::piano_tools::options_menu(s, b.cx() - 11.0, b.cy() + 11.0));
             }
             Action::PianoTarget => {
                 // Top-left 4 px left of the name, 11 px below the title text's centre (spec: ui/piano-target-channel.md §2).
@@ -18072,6 +18078,19 @@ mod tests {
         app.mouse_down();
         app.mouse_up();
         assert!(app.state.playlist.popup.take().is_some_and(|p| p.items.iter().any(|i| i.cmd == Cmd::Piano(NCmd::Glue))));
+
+        // The ▸ button opens the options menu: its groups are submenus holding the Tools, Snap and channel entries.
+        let r = hit_rect(&app, &Action::PianoOptionsMenu);
+        app.mouse_move(r.cx(), r.cy());
+        app.mouse_down();
+        app.mouse_up();
+        let menu = app.state.playlist.popup.take().expect("options menu");
+        let sub = |name: &str| menu.items.iter().find(|i| i.label == name).map(|i| i.children.clone()).unwrap_or_default();
+        assert!(sub("Edit").iter().any(|i| i.cmd == Cmd::Piano(NCmd::Duplicate)));
+        assert!(sub("Tools").iter().any(|i| i.cmd == Cmd::Piano(NCmd::Glue)));
+        assert!(sub("Tools").iter().any(|i| i.cmd == Cmd::Piano(NCmd::Legato)));
+        assert!(sub("Snap").iter().any(|i| matches!(i.cmd, Cmd::Piano(NCmd::Snap(_)))));
+        assert!(sub("Target channel").iter().any(|i| matches!(i.cmd, Cmd::Piano(NCmd::Target(_)))));
 
         // Alt+V hides and shows the ghost channels.
         assert!(app.state.piano.ghosts);

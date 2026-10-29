@@ -46,6 +46,21 @@ pub enum NCmd {
     MakeType(crate::piano::NoteType),
     /// Make a channel rack row the piano roll's channel (the title's channel menu).
     Target(usize),
+    /// A menu entry that does what its shortcut does: the key pressed with the modifiers (ctrl, shift, alt).
+    Press(PKey, bool, bool, bool),
+    /// Cut: the selected notes to the clipboard, then deleted.
+    Cut,
+}
+
+/// A key a menu entry presses (`NCmd::Press`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PKey {
+    Ch(&'static str),
+    Delete,
+    Left,
+    Right,
+    Up,
+    Down,
 }
 
 fn item(label: &'static str, c: NCmd) -> PItem {
@@ -83,6 +98,94 @@ pub fn tools_menu(s: &State, x: f32, y: f32) -> Popup {
         PItem::head("View"),
         item("Ghost channels", Ghosts).key("Alt+V").mark(Mark::Check(s.piano.ghosts)),
         item("Add time marker", AddMarker).key("Alt+T"),
+    ];
+    Popup { x, y, items, sub: None, scroll: [0; 2] }
+}
+
+/// The ▸ menu's Edit submenu (FL's): the selection's clipboard, move and rotate, transpose, mute. Entries without a
+/// command behind them yet are greyed.
+fn edit_menu(s: &State) -> Vec<PItem> {
+    use NCmd::*;
+    let key = |label: &'static str, k: PKey, ctrl: bool, shift: bool, alt: bool, hint: &'static str| item(label, Press(k, ctrl, shift, alt)).key(hint);
+    let ch = PKey::Ch;
+    let mut paste = key("Paste", ch("v"), true, false, false, "Ctrl+V");
+    paste.enabled = !s.piano.clipboard.is_empty();
+    vec![
+        item("Cut", Cut).key("Ctrl+X"),
+        key("Copy", ch("c"), true, false, false, "Ctrl+C"),
+        paste,
+        item("Duplicate", Duplicate).key("Ctrl+B"),
+        key("Delete", PKey::Delete, false, false, false, "Del"),
+        PItem::sep(),
+        key("Shift left", PKey::Left, false, true, false, "Shift+Left"),
+        key("Shift right", PKey::Right, false, true, false, "Shift+Right"),
+        key("Rotate left", PKey::Left, true, true, false, "Shift+Ctrl+Left"),
+        key("Rotate right", PKey::Right, true, true, false, "Shift+Ctrl+Right"),
+        key("Transpose up", PKey::Up, false, true, false, "Shift+Up"),
+        key("Transpose down", PKey::Down, false, true, false, "Shift+Down"),
+        key("Transpose one octave up", PKey::Up, true, false, false, "Ctrl+Up"),
+        key("Transpose one octave down", PKey::Down, true, false, false, "Ctrl+Down"),
+        item("Discard lengths", DiscardLengths).key("Shift+D"),
+        PItem::sep(),
+        PItem::not_yet("Allow resizing from left").key("Ctrl+Alt+Home"),
+        PItem::not_yet("Nudge notes with mouse wheel"),
+        PItem::sep(),
+        PItem::not_yet("Change color").key("Alt+C"),
+        item("Mute", Mute(true)).key("Alt+M"),
+        item("Unmute", Mute(false)).key("Alt+Shift+M"),
+        PItem::sep(),
+        PItem::not_yet("Insert space").key("Ctrl+Ins"),
+        PItem::not_yet("Slice & insert space").key("Ctrl+Alt+Ins"),
+        PItem::not_yet("Delete space").key("Ctrl+Del"),
+        PItem::not_yet("Trim selection"),
+        PItem::sep(),
+        PItem::not_yet("Insert current controller value").key("Ctrl+I"),
+        PItem::not_yet("Turn into automation clip..."),
+        PItem::not_yet("Purge unused audio clips"),
+        PItem::sep(),
+        PItem::not_yet("Select tracks when samples are dropped"),
+    ]
+}
+
+/// The piano roll's ▸ menu (the toolbar's first button; FL's options menu): its groups open as submenus, made from
+/// the Tools, Snap and target-channel menus. Stamp, Select, Group, Zoom, Time markers, Target control, Auto smoothing,
+/// Preview notes, Center and Detached are not built yet: listed, greyed.
+pub fn options_menu(s: &State, x: f32, y: f32) -> Popup {
+    // The Tools menu's groups, by its headers.
+    let mut groups: Vec<(String, Vec<PItem>)> = Vec::new();
+    for it in tools_menu(s, 0.0, 0.0).items {
+        if it.head {
+            groups.push((it.label.to_string(), Vec::new()));
+        } else if let Some(g) = groups.last_mut() {
+            g.1.push(it);
+        }
+    }
+    let mut group = |name: &str| groups.iter().position(|g| g.0 == name).map(|i| std::mem::take(&mut groups[i].1)).unwrap_or_default();
+    let (file, _, mut tools, view) = (group("File"), group("Edit"), group("Tools"), group("View"));
+    // Glue is the Tools menu's Edit group's; FL lists it under Tools.
+    tools.insert(0, item("Glue", NCmd::Glue).key("Ctrl+G"));
+    let strip = |p: Popup| p.items.into_iter().filter(|it| !it.head || !it.label.is_empty()).collect::<Vec<_>>();
+    let items = vec![
+        PItem::sub("File", file),
+        PItem::sub("Edit", edit_menu(s)),
+        PItem::sub("Tools", tools),
+        PItem::not_yet("Stamp"),
+        PItem::sub("View", view),
+        PItem::sub("Snap", strip(crate::piano_snap::snap_menu(s, 0.0, 0.0))),
+        PItem::not_yet("Select"),
+        PItem::not_yet("Group"),
+        PItem::not_yet("Zoom"),
+        PItem::not_yet("Time markers"),
+        PItem::sep(),
+        PItem::sub("Target channel", strip(target_menu(s, 0.0, 0.0))),
+        PItem::not_yet("Target control"),
+        PItem::sep(),
+        PItem::not_yet("Auto smoothing"),
+        PItem::not_yet("Preview notes during playback"),
+        PItem::sep(),
+        PItem::not_yet("Center").key("Shift+0"),
+        PItem::sep(),
+        PItem::not_yet("Detached"),
     ];
     Popup { x, y, items, sub: None, scroll: [0; 2] }
 }
@@ -330,6 +433,37 @@ pub fn target_menu(s: &State, x: f32, y: f32) -> Popup {
 /// Run a command; returns a status message.
 pub fn run(app: &mut App, cmd: NCmd) -> Option<String> {
     app.state.playlist.popup = None;
+    // A menu entry that is a shortcut presses it (the editing keys are `App::key`'s).
+    let press = |app: &mut App, k: PKey, ctrl: bool, shift: bool, alt: bool| {
+        use winit::keyboard::{Key, NamedKey};
+        let key = match k {
+            PKey::Ch(c) => Key::Character(c.into()),
+            PKey::Delete => Key::Named(NamedKey::Delete),
+            PKey::Left => Key::Named(NamedKey::ArrowLeft),
+            PKey::Right => Key::Named(NamedKey::ArrowRight),
+            PKey::Up => Key::Named(NamedKey::ArrowUp),
+            PKey::Down => Key::Named(NamedKey::ArrowDown),
+        };
+        let was = std::mem::replace(&mut app.shift, shift);
+        app.key(&key, ctrl, alt);
+        app.shift = was;
+    };
+    match cmd {
+        NCmd::Press(k, ctrl, shift, alt) => {
+            press(app, k, ctrl, shift, alt);
+            return None;
+        }
+        NCmd::Cut => {
+            let s = &app.state;
+            if s.piano.selection(s.pattern, crate::piano::channel(s)).is_empty() {
+                return Some("Piano roll: cut: nothing selected".into());
+            }
+            press(app, PKey::Ch("c"), true, false, false);
+            press(app, PKey::Delete, false, false, false);
+            return Some("Piano roll: cut".into());
+        }
+        _ => {}
+    }
     let s = &mut app.state;
     // Quick quantize, Discard lengths and Quick chop use the piano roll's snap (spec: ui/piano-snap.md §6,
     // ui/global-snap.md §3).
@@ -391,6 +525,7 @@ pub fn run(app: &mut App, cmd: NCmd) -> Option<String> {
             let made = apply(s, |_, ns| ns.into_iter().map(|mut n| { ty.apply(&mut n); n }).collect());
             done(made, &format!("made the selected notes {}", ty.label()))
         }
+        NCmd::Press(..) | NCmd::Cut => unreachable!("handled above"),
         NCmd::Target(row) => {
             if row >= s.project.channels.len() {
                 return None;
@@ -607,6 +742,32 @@ mod tests {
         let mut a = App::new(None);
         a.state.selected_channel = 4;
         a
+    }
+
+    /// The ▸ menu's Edit entries do what their shortcuts do: Transpose up moves the selected note a key, Cut takes it to
+    /// the clipboard, Paste (on once there is one) puts it back.
+    #[test]
+    fn the_edit_menu_acts_on_the_selection() {
+        let Ok(mut c) = os_ui::Canvas::new(1920, 1080, 1.0) else { return };
+        let mut a = app();
+        a.state.raise(crate::app::Win::PianoRoll);
+        a.paint(&mut c, None);
+        piano::pattern_mut(&mut a.state).notes.push(Note::step(4, 0));
+        let ch = piano::channel(&a.state).unwrap();
+        a.state.piano.select(a.state.pattern, ch, vec![0]);
+        let entry = |a: &App, name: &str| edit_menu(&a.state).into_iter().find(|i| i.label == name).unwrap();
+        assert!(!entry(&a, "Paste").enabled, "nothing copied yet");
+        let key0 = piano::notes(&a.state)[0].key;
+        let Cmd::Piano(up) = entry(&a, "Transpose up").cmd else { panic!() };
+        run(&mut a, up);
+        assert_eq!(piano::notes(&a.state)[0].key, key0 + 1);
+        let n = piano::notes(&a.state).len();
+        run(&mut a, NCmd::Cut);
+        assert_eq!(piano::notes(&a.state).len(), n - 1, "cut");
+        assert!(entry(&a, "Paste").enabled);
+        let Cmd::Piano(paste) = entry(&a, "Paste").cmd else { panic!() };
+        run(&mut a, paste);
+        assert_eq!(piano::notes(&a.state).len(), n, "pasted");
     }
 
     /// The Note properties menu: the three types as radios (the chosen one on), and the Make entries off without a
