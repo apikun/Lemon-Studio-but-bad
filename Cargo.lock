@@ -1958,7 +1958,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-filter"
-version = "0.2.1"
+version = "0.4.0"
 dependencies = [
  "lemon-small-fx",
  "nih_plug",
@@ -1967,7 +1967,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-flanger"
-version = "0.2.1"
+version = "0.4.0"
 dependencies = [
  "lemon-small-fx",
  "nih_plug",
@@ -2015,7 +2015,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-phaser"
-version = "0.2.1"
+version = "0.4.0"
 dependencies = [
  "lemon-small-fx",
  "nih_plug",
@@ -2122,7 +2122,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-wavetable"
-version = "0.2.1"
+version = "0.4.0"
 dependencies = [
  "nih_plug",
  "os-hostlink",
