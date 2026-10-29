@@ -44,9 +44,9 @@ is not confused with the original. Almost all of its code, design and documentat
 Studio contributors' work, used under the GNU GPL, version 3 or later; their copyright lines stay in every file they
 wrote. Mango Studio does not claim to be Lemon Studio or to be made or endorsed by its author.
 
-**Mango Studio's own work** since the fork (the new name and logo, FL-style playlist and piano roll improvements, new
-effects, the Android port and the releases) is by [apikun](https://github.com/apikun) and
-[Artig3nce](https://github.com/Artig3nce), with work brought in from other forks, each kept under its author's name in
+**The Mango Studio name, logo and mango look are by [Artig3nce](https://github.com/Artig3nce).** The Android port is by
+[apikun](https://github.com/apikun). The other changes since the fork (FL-style playlist and piano roll improvements,
+new effects and the releases) are by both of them, with work brought in from other forks kept under its author's name in
 the commit history, such as [battlemountain2](https://github.com/battlemountain2) and
 [mikobuntu](https://github.com/mikobuntu).
 
