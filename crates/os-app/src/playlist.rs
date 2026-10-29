@@ -2060,21 +2060,29 @@ pub fn track_after_used(s: &State) -> u16 {
 /// a clip over the time selection, else `automation_span` (spec: plugins/plugin-parameters.md §5), on the first free
 /// track below the last used one.
 pub fn create_automation(s: &mut State, tgt: u32, name: &str, value: f64) -> u16 {
+    let span = match s.playlist.range {
+        Some((r0, r1)) if r1 > r0 => (r0, r1),
+        _ => automation_span(s),
+    };
+    create_automation_in(s, tgt, name, value, span, true)
+}
+
+/// `create_automation` over the ticks `a..b` of the playlist. `undo`: the step "Create automation clip" is recorded;
+/// recording automation (`record`) makes the clip inside the take's own step instead.
+pub fn create_automation_in(s: &mut State, tgt: u32, name: &str, value: f64, (a, b): (u32, u32), undo: bool) -> u16 {
     // One undo step, "Create automation clip": the playlist, and the control's initial value while "Initialize controls
     // automatically" is on (spec: ui/settings-choices.md "Advanced: Initialize controls automatically").
     let init = crate::init::automatic(tgt, value);
     arr_mut(s);
-    let mut snap = crate::history::Snap::Playlist(Box::new(capture(s)));
-    if init.is_some() {
-        snap = crate::history::Snap::Several(vec![snap, crate::history::Snap::Init(tgt, crate::init::entry(s, tgt))]);
+    if undo {
+        let mut snap = crate::history::Snap::Playlist(Box::new(capture(s)));
+        if init.is_some() {
+            snap = crate::history::Snap::Several(vec![snap, crate::history::Snap::Init(tgt, crate::init::entry(s, tgt))]);
+        }
+        crate::history::record(s, crate::history::CREATE_AUTOMATION, snap);
     }
-    crate::history::record(s, crate::history::CREATE_AUTOMATION, snap);
     let name = &unique_channel_name(s, name);
     let index = s.project.channels.iter().map(|c| c.index + 1).max().unwrap_or(0);
-    let (a, b) = match s.playlist.range {
-        Some((r0, r1)) if r1 > r0 => (r0, r1),
-        _ => automation_span(s),
-    };
     let beats = f64::from(b - a) / f64::from(ppq(s));
     s.project.channels.push(Channel {
         index,

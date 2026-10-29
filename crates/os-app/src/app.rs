@@ -5733,6 +5733,7 @@ impl App {
                         self.state.piano.dirty = true;
                     }
                     self.hint = Cow::Owned(crate::mixer::level_text("Volume", v));
+                    self.record_host_control(&Action::Fader(track));
                     let col = self.hits.iter().rev().find(|h| h.action == Action::Fader(track)).map(|h| h.rect);
                     match col {
                         Some(r) => self.damage_rect(r.outset(10.0)),
