@@ -393,6 +393,14 @@ pub fn last() -> Option<DeviceInfo> {
     LAST.lock().ok()?.as_ref().map(|(_, i)| i.clone())
 }
 
+/// A test's device, as if it had opened (`last` says so).
+#[cfg(test)]
+pub(crate) fn set_test_device(info: DeviceInfo) {
+    if let Ok(mut l) = LAST.lock() {
+        *l = Some((AudioCfg::current(), info));
+    }
+}
+
 /// Counts the devices opened: a change means `last` is another (or the same opened again).
 pub fn opens() -> u64 {
     OPENS.load(Ordering::Acquire)
@@ -460,6 +468,15 @@ pub(crate) struct Open {
 
 /// A mixer track hears its input or is armed (`want_inputs`).
 static INPUT_WANTED: AtomicBool = AtomicBool::new(false);
+
+/// The system input device's name while its stream is open (`sync_inputs` keeps it), for a take that records from it
+/// instead of opening the device again.
+static INPUT_OPEN: Mutex<Option<String>> = Mutex::new(None);
+
+/// The system input device the mixer's inputs come from while it is open (`None`: none, or an ASIO driver's).
+pub(crate) fn system_input_name() -> Option<String> {
+    INPUT_OPEN.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
 
 /// Whether a mixer track with an input chosen hears it or is armed: the system's input device is open with the output
 /// only then (`OutputDevice::sync_inputs`).
@@ -602,12 +619,17 @@ impl OutputDevice {
     /// none does (an ASIO driver's inputs open with it). What went wrong opening it, once.
     pub(crate) fn sync_inputs(&mut self) -> Option<String> {
         let want = INPUT_WANTED.load(Ordering::Relaxed);
-        let o = self.open.as_mut().filter(|o| o.info.host != ASIO)?;
+        let Some(o) = self.open.as_mut().filter(|o| o.info.host != ASIO) else {
+            *INPUT_OPEN.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            return None;
+        };
         if o.input.as_ref().is_some_and(|i| i.failed()) {
             o.input = None;
             o.input_failed = true;
             return Some("The audio input stopped".into());
         }
+        // A take records from this stream while it serves the device it asks for (`system_input_name`).
+        *INPUT_OPEN.lock().unwrap_or_else(|e| e.into_inner()) = o.input.as_ref().map(|i| i.name.clone());
         if !want {
             (o.input, o.input_failed) = (None, false);
             return None;
