@@ -474,9 +474,11 @@ fn strip(ui: &mut Ui, s: &State, n: u16, left: f32, bottom: f32, f: &FrameInfo, 
         }
     }
 
-    // Dark head panel (name, LED, pan) with a rounded bottom.
-    ui.c.fill_rrect(Rect::new(left + 1.0, ly.y(PANEL_Y0), STRIP_W - 2.0, ly.y(PANEL_Y1) - ly.y(PANEL_Y0)), 9.0, ui.t.s(0x1d1f21));
-    ui.c.fill_rect(Rect::new(left + 1.0, ly.y(PANEL_Y0), STRIP_W - 2.0, 12.0), ui.t.s(0x1d1f21));
+    // Dark head panel (name, LED, pan) with a rounded bottom. Mango's black skin makes it a soft charcoal, not black: the
+    // name and the light on it were hard to see on the near-black the skin maps this grey to.
+    let panel = if lemon { Color::rgb(0x2b2e31) } else { ui.t.s(0x1d1f21) };
+    ui.c.fill_rrect(Rect::new(left + 1.0, ly.y(PANEL_Y0), STRIP_W - 2.0, ly.y(PANEL_Y1) - ly.y(PANEL_Y0)), 9.0, panel);
+    ui.c.fill_rect(Rect::new(left + 1.0, ly.y(PANEL_Y0), STRIP_W - 2.0, 12.0), panel);
 
     // Meter slot with its tick marks; the selected strip gets a green frame.
     let meter = Rect::new(mx - 7.5, ly.y(METER_Y0), 16.0, ly.y(METER_Y1) - ly.y(METER_Y0));
