@@ -562,7 +562,7 @@ impl Shell {
 
     /// The software presentation on `window`'s native one. Made again after a suspend (Android): the old surface's
     /// native window is gone, and the fresh one can still be on its way, which is the error the frame retries on.
-    fn remake_surface(&mut self, window: &Window) -> Result<(), String> {
+    fn remake_surface(&mut self, window: &Rc<Window>) -> Result<(), String> {
         let context = softbuffer::Context::new(window.clone()).map_err(|e| format!("could not create the graphics context: {e}"))?;
         let surface = softbuffer::Surface::new(&context, window.clone()).map_err(|e| format!("could not create the drawing surface: {e}"))?;
         self.surface = Some(surface);
@@ -652,7 +652,7 @@ impl ApplicationHandler for Shell {
         if frame.is_some_and(|m| m.max) {
             set_maximized(&window, true);
         }
-        self.remake_surface(window).unwrap_or_else(|e| fatal("could not create the drawing surface", e));
+        self.remake_surface(&window).unwrap_or_else(|e| fatal("could not create the drawing surface", e));
         // Hosted plugins: windows are owned by the main window; scanning loads the .clap files found.
         #[cfg(windows)]
         {
