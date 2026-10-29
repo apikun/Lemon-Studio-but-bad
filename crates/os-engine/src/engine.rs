@@ -941,6 +941,9 @@ pub struct EngineReport {
     pub effects_bypassed: usize,
     pub effects_active: usize,
     pub missing_samples: Vec<String>,
+    /// Sampler channels whose missing sample plays the built-in tone instead (Android: a file the
+    /// device does not have is beyond fixing there, and a tone beats silence).
+    pub substituted: usize,
 }
 
 pub struct Engine {
@@ -1194,13 +1197,22 @@ impl Engine {
                 });
                 let sample = if plays_sample && length.is_none() {
                     match ch.sample_path.as_deref() {
-                        Some(p) => {
-                            let s = library.get(p);
-                            if s.is_none() {
+                        Some(p) => match library.get(p) {
+                            Some(s) => Some(s),
+                            None => {
                                 report.missing_samples.push(p.to_string());
+                                // Android: a sample the device does not have has no way there (no FL install
+                                // to point a factory folder at, no file system to copy from mid-playback), so
+                                // a sampler channel plays the built-in tone rather than nothing; the project
+                                // keeps its paths, and `substituted` says how many played the tone.
+                                if cfg!(target_os = "android") && ch.kind == ChannelKind::Sampler {
+                                    report.substituted += 1;
+                                    Some(library.tones.entry(rate).or_insert_with(|| fallback_tone(rate)).clone())
+                                } else {
+                                    None
+                                }
                             }
-                            s
-                        }
+                        },
                         // Lemon Studio choice: an empty sampler channel plays a built-in tone so new
                         // projects make sound (FL's empty sampler is silent).
                         None if ch.kind == ChannelKind::Sampler => {

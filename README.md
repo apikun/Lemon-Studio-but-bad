@@ -44,6 +44,10 @@ is not confused with the original. Almost all of its code, design and documentat
 Studio contributors' work, used under the GNU GPL, version 3 or later; their copyright lines stay in every file they
 wrote. Mango Studio does not claim to be Lemon Studio or to be made or endorsed by its author.
 
+**The Android port's scaffolding follows [honeydew](https://github.com/daijro/honeydew) by daijro** — an independent,
+clean-room FL Studio Mobile rebuilt in Rust (GPL 3.0 or later): the gradle project, the NativeActivity wiring and the
+APK build flow. Credited in THIRD-PARTY-NOTICES.txt.
+
 What Mango Studio changes from Lemon Studio:
 
 - The name, logo and icons (a mango with an equalizer inside), and the built-in plugins' names (Mango Sampler, Mango Trio, ...).
@@ -132,9 +136,9 @@ Per-area details are in [docs/status.md](docs/status.md). The full, item-by-item
 
 ## Getting started
 
-At the moment, ready-to-run builds are attached to this repository's GitHub releases for **Windows and Linux (x64)
-only**: portable binaries, with no installer and no runtime to install. macOS has no prebuilt binary yet — there Mango
-Studio is built from source for now. Each platform below goes from a fresh machine to Mango Studio installed with its
+Ready-to-run builds are attached to this repository's GitHub releases for **Windows and Linux (x64)** and **Android
+(arm64)**: portable binaries, with no installer and no runtime to install. macOS has no prebuilt binary yet — there
+Mango Studio is built from source for now. Each platform below goes from a fresh machine to Mango Studio installed with its
 icon, and Mango Studio's own plugins installed for any DAW. Building from source works on all three and needs
 **Rust**, stable toolchain 1.89 or newer, installed through [rustup](https://rustup.rs/), and a clone of this
 repository:
@@ -228,6 +232,31 @@ Drop a sample from the browser onto the channel, or add an instrument with the c
 Mango Kick, Mango Bass, Mango Acid ... all built in). If the hint bar says a plugin did not follow the audio rate,
 or nothing helps, set `OS_DEBUG=1` in the container's environment and run once more: the log names the plugin and
 the rates it was asked for.
+
+### Android
+
+Mango Studio Mobile, Android 8.0 (API 26) or newer, arm64 phones and tablets. A ready-to-run build is attached to this
+repository's GitHub releases: `Mango-Studio-android-arm64.apk`. Install it (Android asks to allow installs from the
+browser or file manager once) and open Mango Studio from the launcher. It is the whole desktop app — the device rack,
+the playlist, the mixer and every built-in plugin, Mango Beat included — with touch in place of the mouse:
+
+- One finger is the mouse: it moves the pointer and presses the left button, so notes draw, drags drag and the browser scrolls.
+- A finger held still for about half a second is a right click: the menus are right-click menus, and that is how they open.
+- Multi-finger gestures (pinch to zoom, two-finger scroll) and the on-screen keyboard are planned next; a hardware or
+  Bluetooth keyboard works today, and so does the Touch controller (VIEW > Touch controller) with it.
+
+The audio device is the Android one (AAudio, shared): Settings > Audio lists it, at the device's own rate and buffer.
+Projects, settings, themes and presets live in the app's private folder, which Android keeps to the app itself; a
+document picker for opening files from shared storage is on the roadmap, next to the on-screen keyboard.
+
+**Build it from source** with the Android SDK and NDK r28b installed (`ANDROID_HOME` set, `cargo` and Java 17+ on the
+path) and the `aarch64-linux-android` rustup target:
+
+```bash
+rustup target add aarch64-linux-android
+tools/android-dist.sh          # writes Mango-Studio-android-arm64.apk
+tools/android-dist.sh --debug  # the debug-name build for a side-by-side install
+```
 
 ### Linux
 

@@ -7944,3 +7944,53 @@ the following restrictions:
     misrepresented as being the original software.
 
 3. This notice may not be removed or altered from any source distribution.
+
+
+--- GNU General Public License, version 3: honeydew (the Android port's scaffolding)
+
+Mango Studio's Android build follows the scaffolding of daijro's honeydew
+(https://github.com/daijro/honeydew): the gradle project's shape, the NativeActivity
+wiring and the APK build flow (android/, tools/android-dist.sh, the comments that point
+at them). honeydew is an independent, clean-room reimplementation of FL Studio Mobile in
+Rust, written by daijro and honeydew's contributors, licensed under the GNU General
+Public License, version 3.0 or later. Mango Studio's own code stays GPL-3.0-or-later
+and shares no code with FL Studio Mobile or Image-Line.
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+The full licence text is LICENSE, which Mango Studio shares with honeydew (GPL-3.0-or-later).
+
+
+--- Apache License 2.0: the vendored cpal tree (vendor/cpal)
+
+The audio device layer is cpal (https://github.com/RustAudio/cpal), version
+0.18.2, by the RustAudio contributors, licensed under the Apache License,
+version 2.0. A copy of the crate is kept in vendor/cpal, patched by
+[patch.crates-io] in Cargo.toml with one change: the AAudio stream asks for
+the low-latency performance mode on Android too, where upstream asks only
+under its `realtime` feature (see the comment at the change,
+vendor/cpal/src/host/aaudio/mod.rs). Everything else is cpal 0.18.2 as
+published, and desktop targets compile it exactly as upstream's.
+
+Copyright 2015 The cpal Authors
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use this file except in compliance with the License. You may obtain a copy
+of the License at vendor/cpal/LICENSE.
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+License for the specific language governing permissions and limitations
+under the License.

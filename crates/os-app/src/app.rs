@@ -4882,9 +4882,18 @@ impl App {
                 format!("Status: opens with the first note or Play ({host})")
             }
         };
+        // The engine's load answers the line above: at 100 % or more it cannot keep up with real time, and no
+        // buffer length will hold the dropouts (the render has to get lighter); well under it, dropouts are the
+        // device's scheduling, which a longer buffer does hold.
+        let load = tp.load();
+        let load_note = if load > 0.0 {
+            format!(" The engine renders in {}% of a core.", (load * 100.0).round() as i32)
+        } else {
+            String::new()
+        };
         let second = match tp.underruns() {
-            0 => "No dropouts so far.".to_string(),
-            n => format!("Dropouts so far: {n} (device blocks the engine could not fill in time; a longer buffer helps)"),
+            0 => format!("No dropouts so far.{load_note}"),
+            n => format!("Dropouts so far: {n} (device blocks the engine could not fill in time; a longer buffer helps).{load_note}"),
         };
         let st = &mut self.state.settings;
         let changed = st.status[0] != first || st.status[1] != second || (&st.driver, st.asio_open, &st.instead) != (&driver, asio_open, &instead);
@@ -6166,11 +6175,12 @@ impl App {
             return Cursor::Move;
         }
         let icon = match &self.hover {
-            // The playlist's Draw tool shows the brush (as FL's playlist does); the piano roll's keeps the pencil.
-            Some(Action::PlaylistArea) => match self.state.playlist.tool {
-                crate::playlist::PlTool::Draw => Some(crate::icons::Icon::Brush),
-                t => crate::playlist::PlTool::ALL.iter().position(|&x| x == t).map(|i| views::playlist::TOOL_ICONS[i]),
-            },
+            // The playlist's and the piano roll's tools show their toolbar icons over their grids: the Draw tool is
+            // the pencil in both (as FL's playlist does).
+            Some(Action::PlaylistArea) => crate::playlist::PlTool::ALL
+                .iter()
+                .position(|&t| t == self.state.playlist.tool)
+                .map(|i| views::playlist::TOOL_ICONS[i]),
             Some(Action::PianoGrid | Action::PianoNote(_) | Action::PianoGhostNote(_)) => Some(match self.state.piano.tool {
                 Tool::Draw => crate::icons::Icon::Pencil,
                 Tool::Paint => crate::icons::Icon::Brush,
@@ -7653,7 +7663,16 @@ impl App {
                 CloseAll::All
             }),
             Key::Named(NamedKey::Escape) => {
-                self.smart_escape();
+                let taken = self.smart_escape();
+                // Android's back (which arrives here as Esc, main_body's translation): when the
+                // levels left nothing to close, the app finishes, as the system's button does on
+                // every other app.
+                #[cfg(target_os = "android")]
+                if !taken {
+                    crate::mobile::finish_activity();
+                }
+                #[cfg(not(target_os = "android"))]
+                let _ = taken;
             }
             // Piano roll editing keys (spec: ui/piano-roll.md §8).
             // Ctrl+A also makes the whole pattern the time selection, as FL does (spec: ui/piano-keys.md §4 rule 4).
@@ -9547,9 +9566,65 @@ pub(crate) fn add_channel(p: &mut Project) -> usize {
 }
 
 /// A new project (owner's choice, 2026-10-10): one empty sampler channel, played and edited by Lemon Sampler, on
-/// insert 1, and pattern 1.
+/// insert 1, and pattern 1. Android: the starter project (the kit's samples are on the device), which plays a beat
+/// from Play with nothing loaded — a phone has no samples or plugins to load, and a silent new project reads as a
+/// broken one.
 pub fn default_project() -> Project {
+    #[cfg(target_os = "android")]
+    if let Some(p) = mobile_starter_project() {
+        return p;
+    }
     template_project(&[crate::plugins::LEMON_SAMPLER])
+}
+
+/// The starter kit's sample file names, as `Sounds/Mango Kit` of the user folder holds them (`mobile::run` copies
+/// them out of the APK's assets on the first run). `starter_project`'s channels play them, and the browser lists the
+/// folder as any other.
+pub const STARTER_KIT: [&str; 6] =
+    ["Mango Kick.wav", "Mango Snare.wav", "Mango Hat.wav", "Mango Clap.wav", "Mango Pluck C.wav", "Mango Pluck G.wav"];
+
+pub fn starter_kit() -> &'static [&'static str] {
+    &STARTER_KIT
+}
+
+/// The mobile starter project (`default_project` on Android): the kit's drums and two plucks on channels 1-6 (their
+/// inserts), and pattern 1 with two bars of a beat the plucks play over — music before anything is loaded. `None`
+/// where the kit's files are not there (`mobile::run` did not extract them, or were deleted): the plain default
+/// template then, whose empty sampler plays the built-in tone.
+#[cfg(target_os = "android")]
+fn mobile_starter_project() -> Option<Project> {
+    let dir = os_paths::user_dir()?.join("Sounds").join("Mango Kit");
+    let kit: Vec<String> = STARTER_KIT.iter().map(|n| dir.join(n).to_string_lossy().into_owned()).collect();
+    if !kit.iter().all(|p| std::path::Path::new(p).is_file()) {
+        return None;
+    }
+    let names = ["Mango Kick", "Mango Snare", "Mango Hat", "Mango Clap", "Mango Pluck C", "Mango Pluck G"];
+    let mut p = template_project(&names);
+    for (ch, path) in p.channels.iter_mut().zip(&kit) {
+        ch.sample_path = Some(path.clone());
+    }
+    // Two bars at 130 BPM, ppq 96: a bar is 4 beats of 96 ticks. Kick on every beat, snare and
+    // clap on 2 and 4, hats on the eighths, and the plucks alternate C and G on beats 1 and 3.
+    let (ppq, beat, eighth) = (u32::from(p.ppq.max(1)), u32::from(p.ppq.max(1)), u32::from(p.ppq.max(1)) / 2);
+    let mut notes = Vec::new();
+    for bar in 0..2u32 {
+        let off = bar * 4 * ppq;
+        for b in 0..4u32 {
+            notes.push(os_model::Note::step(0, off + b * beat));
+        }
+        notes.push(os_model::Note::step(1, off + beat));
+        notes.push(os_model::Note::step(3, off + beat));
+        notes.push(os_model::Note::step(1, off + 3 * beat));
+        notes.push(os_model::Note::step(3, off + 3 * beat));
+        for e in 0..8u32 {
+            notes.push(os_model::Note::step(2, off + e * eighth));
+        }
+        notes.push(os_model::Note { length: 2 * ppq, ..os_model::Note::step(4, off) });
+        notes.push(os_model::Note { length: 2 * ppq, ..os_model::Note::step(5, off + 2 * beat) });
+    }
+    notes.sort_by_key(|n| (n.position, n.channel));
+    p.patterns[0].notes = notes;
+    Some(p)
 }
 
 /// The project's bar as the Project page names it: "Time signature: 3/8" or "Time division: 5 beats of 3 steps".

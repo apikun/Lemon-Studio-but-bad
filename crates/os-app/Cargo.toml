@@ -56,7 +56,6 @@ winit = "0.30"
 softbuffer = "0.4"
 cpal = "0.18"
 crossbeam-queue = "0.3"
-midir = "0.11"
 tiny-skia = "0.11"
 # JPEG workspace pictures of theme files (`wallpaper`; PNG goes through tiny-skia). Pure Rust, no threads.
 jpeg-decoder = { version = "0.3", default-features = false }
@@ -69,6 +68,21 @@ flacenc = "0.5"
 mp3lame-encoder = "0.2"
 vorbis_rs = "0.5"
 zip = { version = "9.1.2", default-features = false, features = ["deflate"] }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+# MIDI in and out (WinMM, ALSA, CoreMIDI). Android does not build it: midir links ALSA there; the
+# MIDI code uses the no-device stand-in `midi_shim` instead (the pages list nothing, as on a
+# machine without MIDI). AMIDI can replace it when Android MIDI arrives.
+midir = "0.11"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# The event loop runs on the NativeActivity (`mobile::run`).
+winit = { version = "0.30", features = ["android-native-activity"] }
+# The activity's handle, for the private data folder (`mobile::run`).
+android-activity = { version = "0.6", features = ["native-activity"] }
+# The JVM handle (`vm_as_ptr`) raises the feeder thread's priority (`raise_priority`), the way
+# android.os.Process.setThreadPriority does for native audio apps. The version android-activity uses.
+jni = "0.21"
 
 [target.'cfg(windows)'.dependencies]
 # ASIO output (`device::asio`), built from the ASIO SDK's host files in `asiosdk` (`.cargo/config.toml`).

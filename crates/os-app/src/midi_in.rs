@@ -9,6 +9,11 @@
 //!
 // spec: ui/midi-settings.md §2, §8; ui/midi-input.md §3
 
+// Android has no system MIDI for midir (it links ALSA): the stand-in lists no devices and refuses
+// every connect, so the pages compile untouched and show an empty device list.
+#[cfg(target_os = "android")]
+use crate::midi_shim as midir;
+
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};

@@ -572,12 +572,20 @@ fn open_system(cfg: &AudioCfg, xruns: &Arc<AtomicU64>) -> Result<Open, String> {
     let mut stream = build_any(&device, format, &config, mix(), &errors);
     if stream.is_err() && fixed.is_some() {
         // A buffer length the device refuses: its own.
+        crate::audiolog::log(&format!(
+            "open: {} refused the buffer {:?} ({:?}); its own",
+            out.host, config.buffer_size, stream.as_ref().err()
+        ));
         config.buffer_size = BufferSize::Default;
         fixed = None;
         stream = build_any(&device, format, &config, mix(), &errors);
     }
     let stream = stream?;
     stream.play().map_err(|e| e.to_string())?;
+    crate::audiolog::log(&format!(
+        "device open: host {host} rate {} channels {} format {format:?} fixed {fixed:?} buffers {buffers:?}",
+        config.sample_rate, config.channels
+    ));
     let info = DeviceInfo { host, name: out.name, rate: config.sample_rate, fixed, buffers, channels: config.channels, inputs: 0, input_latency: None, rates: Vec::new(), sizes: Vec::new(), latency: None, instead: None };
     Ok(Open { _stream: Stream::Cpal(stream), inbox, outbox, info, note: None, failed: errors.failed, fault: errors.fault })
 }
@@ -593,6 +601,7 @@ struct Errors {
 impl Errors {
     fn report(&self, e: cpal::Error) {
         use cpal::ErrorKind::*;
+        crate::audiolog::log(&format!("stream error: {e} (kind {:?})", e.kind()));
         match e.kind() {
             Xrun => self.xrun(),
             // The stream plays on (moved to the new default device, or at a normal priority).
