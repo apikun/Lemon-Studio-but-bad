@@ -16,6 +16,8 @@ use winit::event_loop::EventLoop;
 
 /// The app's JVM, for native threads that ask Android for a priority (`raise_priority`), set at entry.
 static JAVA_VM: OnceLock<JavaVM> = OnceLock::new();
+/// The NativeActivity as a JNI global reference (`AndroidApp::activity_as_ptr`), for `finish_activity`.
+static ACTIVITY: OnceLock<usize> = OnceLock::new();
 
 /// The JVM `raise_priority` uses; `None` before `run` (and a desktop build never asks).
 pub(crate) fn audio_vm() -> Option<&'static JavaVM> {
@@ -53,10 +55,29 @@ pub fn run(app: AndroidApp) {
     if let Ok(vm) = (unsafe { JavaVM::from_raw(app.vm_as_ptr().cast()) }) {
         let _ = JAVA_VM.set(vm);
     }
+    // The back button's last step (`App::key`'s Escape arm) asks the activity to finish: keep its
+    // global reference. SAFETY: the pointer is the live activity object, owned by android-activity.
+    unsafe { let _ = ACTIVITY.set(app.activity_as_ptr() as usize); }
     let mut builder = EventLoop::<()>::with_user_event();
     use winit::platform::android::EventLoopBuilderExtAndroid;
     builder.with_android_app(app);
     crate::run_from(builder, None, true);
+}
+
+/// The system back with nothing left to close: `Activity.finish()`, what the button does on any
+/// other app. The JNI call comes back false-quietly when the VM or the activity is not there (the
+/// app then simply stays), and a pending exception is cleared, as `raise_priority` does.
+pub fn finish_activity() {
+    let Some(vm) = JAVA_VM.get() else { return };
+    let Some(&activity) = ACTIVITY.get() else { return };
+    let Ok(mut env) = vm.attach_current_thread() else { return };
+    // SAFETY: the reference is android-activity's live global one (it says never to delete it;
+    // `from_raw` borrows it without owning, and the `JObject` frees no reference when dropped).
+    let activity = unsafe { jni::objects::JObject::from_raw(activity as jni::sys::jobject) };
+    let finish = env.call_method(activity, "finish", "()V", &[]);
+    if finish.is_err() {
+        let _ = env.exception_clear();
+    }
 }
 
 /// Copies the starter kit's WAVs out of the APK's assets into `dir` (the user folder's

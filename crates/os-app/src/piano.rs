@@ -221,6 +221,12 @@ impl PianoState {
         self.range = None;
     }
 
+    /// Nothing selected (notes nor a time range); the Android back takes a cleared selection as
+    /// its step, as Esc does (`App::key`'s Escape arm).
+    pub fn sel_empty(&self) -> bool {
+        self.sel.is_empty()
+    }
+
     /// Forget everything tied to the previous project.
     pub fn reset(&mut self) {
         *self = PianoState { px_per_beat: self.px_per_beat, row_h: self.row_h, ghosts: self.ghosts, tool: self.tool, rng: self.rng, split: self.split, snap: self.snap, ..PianoState::default() };

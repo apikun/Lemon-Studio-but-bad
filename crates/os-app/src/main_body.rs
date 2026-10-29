@@ -948,6 +948,18 @@ impl ApplicationHandler for Shell {
                         }
                         event
                     };
+                    // Android: the system back (the nav bar's button, BrowserBack to winit) is the desktop's Esc. The
+                    // Escape arms in `App::key` walk back through what is open (dialogs, menus, the window on top), and
+                    // with nothing left the app finishes (`finish_activity`), as the button does on any other app.
+                    #[cfg(target_os = "android")]
+                    let event = {
+                        use winit::keyboard::{Key, NamedKey};
+                        let mut event = event;
+                        if event.logical_key == Key::Named(NamedKey::BrowserBack) {
+                            event.logical_key = Key::Named(NamedKey::Escape);
+                        }
+                        event
+                    };
                     self.app.repeat = event.repeat;
                     self.app.key(&event.logical_key, ctrl(self.mods), self.mods.alt_key());
                     self.app.repeat = false;

@@ -3289,6 +3289,19 @@ impl App {
         self.invalidate();
     }
 
+    /// Android's back, past the menus: the window on top closes as its × does, and `false` when
+    /// there is none (the app finishes then). Desktop Esc has no part here.
+    #[cfg(target_os = "android")]
+    fn android_close_top(&mut self) -> bool {
+        match self.state.z.last().copied() {
+            Some(w) => {
+                self.act(Action::CloseWin(w));
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Every hosted instance for the monitor, rack rows then mixer slots.
     fn perf_sources(&self) -> Vec<crate::perf::Source> {
         let p = &self.state.project;
@@ -7254,10 +7267,23 @@ impl App {
             Key::Named(NamedKey::Escape) if self.state.settings.open && self.state.settings.picker.is_some() => self.picker_close(),
             Key::Named(NamedKey::Escape) if self.state.settings.open => self.state.settings.open = false,
             Key::Named(NamedKey::Escape) => {
+                #[cfg(target_os = "android")]
+                let menu_was = self.state.menu_open.is_some()
+                    || self.state.menu_sub.is_some()
+                    || self.state.playlist.popup.is_some()
+                    || self.state.piano.range.is_some()
+                    || !self.state.piano.sel_empty();
                 self.state.menu_open = None;
                 self.state.menu_sub = None;
                 self.state.playlist.popup = None;
                 self.state.piano.clear_selection();
+                // Android's back (which arrives here as Esc, main_body's translation): past the menus it
+                // closes the window on top — the plugin window over the rack, the playlist... — and with
+                // nothing left it finishes the app, as the system's button does on every other app.
+                #[cfg(target_os = "android")]
+                if !menu_was && !self.android_close_top() {
+                    crate::mobile::finish_activity();
+                }
             }
             // Piano roll editing keys (spec: ui/piano-roll.md §8).
             // Ctrl+A also makes the whole pattern the time selection, as FL does (spec: ui/piano-keys.md §4 rule 4).
