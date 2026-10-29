@@ -22511,7 +22511,6 @@ mod tests {
         app.mouse_move(r.cx(), r.cy());
         frame(&mut app, &mut c, None);
         assert_eq!(app.state.playlist.popup_sub2, Some((view, scale)), "hover opens it");
-        c.pixmap.save_png("/tmp/claude-1000/-home-saud-Apps-Lemon-Studio/57292166-4c9d-4f97-9f2a-6c0b616cc468/scratchpad/scale_menu3.png").unwrap();
         // A scale picked in it is set.
         let k = crate::chords::menu_scales().iter().find(|s| s.0 == "Other Hirajoshi").unwrap().1;
         let items = &app.state.playlist.popup.as_ref().unwrap().items[view].children[scale].children;
