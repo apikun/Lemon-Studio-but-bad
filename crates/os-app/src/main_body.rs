@@ -49,6 +49,8 @@ struct Shell {
     unmax: Option<((i32, i32), i32)>,
     /// A tick or mouse input left damage that is not painted yet: `about_to_wait` asks for the frame (see `FRAME`).
     pending: bool,
+    /// Whether the soft keyboard shows (Android): a text box has the focus. `set_ime_allowed` shows and hides it.
+    ime: bool,
     /// When the last frame was painted (finished presenting), and when its paint started.
     painted: Instant,
     frame_start: Instant,
@@ -505,6 +507,16 @@ impl Shell {
             menu_bar::update(views::menus::bar_model(&self.app.state));
         }
         self.pending |= self.app.tick();
+        // Android: the soft keyboard follows the text box that has the focus (`set_ime_allowed` shows and hides
+        // it; the typing itself arrives as characters either way).
+        #[cfg(target_os = "android")]
+        if let Some(window) = &self.window {
+            let editing = self.app.text_editing();
+            if editing != self.ime {
+                self.ime = editing;
+                window.set_ime_allowed(editing);
+            }
+        }
         // The startup splash: the opened project's loading moves its gauge on; once the main window has shown and
         // nothing is loading, it finishes. It is dropped when it has faded away.
         if let Some(s) = &self.splash {
@@ -547,11 +559,25 @@ impl Shell {
         el.set_control_flow(ControlFlow::WaitUntil(wake));
         self.watchdog.next(wake, held);
     }
+
+    /// The software presentation on `window`'s native one. Made again after a suspend (Android): the old surface's
+    /// native window is gone, and the fresh one can still be on its way, which is the error the frame retries on.
+    fn remake_surface(&mut self, window: &Window) -> Result<(), String> {
+        let context = softbuffer::Context::new(window.clone()).map_err(|e| format!("could not create the graphics context: {e}"))?;
+        let surface = softbuffer::Surface::new(&context, window.clone()).map_err(|e| format!("could not create the drawing surface: {e}"))?;
+        self.surface = Some(surface);
+        Ok(())
+    }
 }
 
 impl ApplicationHandler for Shell {
     fn resumed(&mut self, el: &ActiveEventLoop) {
-        if self.window.is_some() {
+        if let Some(window) = self.window.clone() {
+            // Back from a suspend (Android): the app lives on, but the surface it presented into died with its
+            // native window. The next frame remakes it (lazily: the fresh native window can still be on its way)
+            // and paints whole into it — without this the reopened app stayed a black screen.
+            self.app.invalidate();
+            window.request_redraw();
             return;
         }
         splash::step(&self.splash, splash::WINDOW, "Opening the main window");
@@ -626,9 +652,7 @@ impl ApplicationHandler for Shell {
         if frame.is_some_and(|m| m.max) {
             set_maximized(&window, true);
         }
-        let context = softbuffer::Context::new(window.clone()).unwrap_or_else(|e| fatal("could not create the graphics context", e.to_string()));
-        let surface = softbuffer::Surface::new(&context, window.clone()).unwrap_or_else(|e| fatal("could not create the drawing surface", e.to_string()));
-        self.surface = Some(surface);
+        self.remake_surface(window).unwrap_or_else(|e| fatal("could not create the drawing surface", e));
         // Hosted plugins: windows are owned by the main window; scanning loads the .clap files found.
         #[cfg(windows)]
         {
@@ -672,6 +696,12 @@ impl ApplicationHandler for Shell {
         splash::step(&self.splash, splash::LOADING, "Loading project");
         self.window = Some(window);
         el.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(16)));
+    }
+
+    /// Android backgrounded the app: its surface goes with the ANativeWindow it was made from, and presenting into
+    /// the stale one does nothing (the reopened app was a black screen). The next `resumed` frame remakes it.
+    fn suspended(&mut self, _el: &ActiveEventLoop) {
+        self.surface = None;
     }
 
     fn user_event(&mut self, el: &ActiveEventLoop, _e: ()) {
@@ -1070,6 +1100,16 @@ impl ApplicationHandler for Shell {
                             el.exit();
                             return;
                         }
+                    }
+                }
+                // Back from a suspend (Android): the surface takes the fresh native window. It is not there yet
+                // between the resume and the system's window callback: the frame asks for another one instead, and
+                // that next one (or one after) makes it.
+                if self.surface.is_none() {
+                    if let Err(e) = self.remake_surface(&window) {
+                        eprintln!("mangostudio: {e}");
+                        window.request_redraw();
+                        return;
                     }
                 }
                 let canvas = self.canvas.as_mut().expect("canvas");
@@ -1932,6 +1972,7 @@ pub(crate) fn run_from(mut builder: winit::event_loop::EventLoopBuilder<()>, pat
         grab: None,
         unmax: None,
         pending: false,
+        ime: false,
         painted: Instant::now(),
         frame_start: Instant::now(),
         frame: FRAME,
