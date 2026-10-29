@@ -20,6 +20,7 @@
 
 pub mod balance;
 pub mod chorus;
+pub mod crusher;
 pub mod editor;
 pub mod fast_distortion;
 pub mod filter;
@@ -319,7 +320,7 @@ impl<K: Kind> Vst3Plugin for SmallFx<K> {
 mod tests {
     use super::*;
 
-    pub const SPECS: [&Spec; 10] = [
+    pub const SPECS: [&Spec; 11] = [
         soft_clipper::SPEC,
         fast_distortion::SPEC,
         balance::SPEC,
@@ -330,6 +331,7 @@ mod tests {
         filter::SPEC,
         flanger::SPEC,
         phaser::SPEC,
+        crusher::SPEC,
     ];
 
     /// Every effect: ids unique, starts inside the ranges, a control per setting, the plugin ids distinct.
@@ -364,6 +366,7 @@ mod tests {
             <filter::LemonFilter as ClapPlugin>::CLAP_ID,
             <flanger::LemonFlanger as ClapPlugin>::CLAP_ID,
             <phaser::LemonPhaser as ClapPlugin>::CLAP_ID,
+            <crusher::MangoCrusher as ClapPlugin>::CLAP_ID,
         ];
         let classes = [
             <soft_clipper::LemonSoftClipper as Vst3Plugin>::VST3_CLASS_ID,
@@ -376,6 +379,7 @@ mod tests {
             <filter::LemonFilter as Vst3Plugin>::VST3_CLASS_ID,
             <flanger::LemonFlanger as Vst3Plugin>::VST3_CLASS_ID,
             <phaser::LemonPhaser as Vst3Plugin>::VST3_CLASS_ID,
+            <crusher::MangoCrusher as Vst3Plugin>::VST3_CLASS_ID,
         ];
         for i in 0..ids.len() {
             for j in i + 1..ids.len() {

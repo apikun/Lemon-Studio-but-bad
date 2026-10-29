@@ -163,13 +163,16 @@ pub fn paint(ui: &mut Ui, s: &State, r: Rect, f: &FrameInfo) {
     // Notes: ghosts of the other channels first (when shown, Alt+V), then this channel's (§5).
     ui.hit(l.grid, Action::PianoGrid, "Piano roll: click to add a note, drag a note to move it or its end to resize, right-click to delete");
     ui.c.push_clip(l.grid);
-    let ghost = t.text_faint.with_alpha(110);
+    // Ghosts as FL draws them: the note's shape filled dim, with a lighter edge so short notes still show.
+    let (ghost_body, ghost_rim) = (t.note_bottom.shade(-0.45).with_alpha(120), t.note_top.with_alpha(110));
     for n in notes.iter().filter(|n| s.piano.ghosts && Some(n.channel) != ch) {
         if let Some(nr) = g.note_rect(n).filter(|nr| nr.intersect(&l.grid).w > 0.0) {
             let vis = nr.intersect(&l.grid);
             let hint = format!("Ghost note (channel {}): right-click to switch channel", n.channel + 1);
             ui.hit(vis, Action::PianoGhostNote(n.channel), hint);
-            ui.c.stroke_rrect(nr.inset(1.5), if lemon { 3.0 } else { 2.0 }, 1.0, ghost);
+            let rad = if lemon { 3.5f32.min(nr.w / 2.0).min(nr.h / 2.0) } else { 2.0 };
+            ui.c.fill_rrect(nr.inset(0.5), rad, ghost_body);
+            ui.c.stroke_rrect(nr.inset(1.0), rad, 1.0, ghost_rim);
         }
     }
     for (i, n) in notes.iter().enumerate().filter(|(_, n)| Some(n.channel) == ch) {
