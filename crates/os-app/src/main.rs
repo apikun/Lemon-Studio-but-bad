@@ -150,6 +150,9 @@ mod touch_mouse;
 #[cfg(windows)]
 mod file_assoc;
 
+#[cfg(target_os = "android")]
+mod mobile;
+
 include!("main_body.rs");
 
 #[cfg(not(target_os = "android"))]
