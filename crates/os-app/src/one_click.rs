@@ -12,11 +12,22 @@
 //! and the playlist plays, that input is taken into a new clip; every stop places it, and the next play records again.
 
 use crate::app::{Action, App, State};
-use crate::capture::{self, capture, Input, InputStream, Recorder, ASIO_SOURCE};
+use crate::capture::{self, capture, Input, InputStream, Recorder};
 use crate::playlist::{Cmd, Mark, PItem, Popup};
 
 /// The undo step a take is placed with (as FL's History names it).
 pub const RECORDED: &str = "Recorded items";
+
+/// Input number `n` of a device with `channels` inputs as (first, stereo): the stereo pairs first, then each input
+/// alone — the mirror of the engine's `input_channels` (spec: audio/track-io.md §2.1).
+fn input_at(n: usize, channels: usize) -> Option<(u16, bool)> {
+    let pairs = channels / 2;
+    if n < pairs {
+        Some((2 * n as u16, true))
+    } else {
+        (n - pairs < channels).then_some(((n - pairs) as u16, false))
+    }
+}
 
 /// A recording under way, or its file being made.
 pub struct AudioRec {
@@ -140,7 +151,7 @@ impl App {
             self.act(Action::Stop);
         }
         // A system input the mixer's tracks already hear is recorded from that stream.
-        let stream = if input.asio || self.monitored(&input).is_some() {
+        let stream = if input.asio || self.from_monitor(&input) {
             None
         } else {
             match capture::open_input(&input.device) {
@@ -164,25 +175,27 @@ impl App {
         self.invalidate();
     }
 
-    /// The system input stream the mixer's tracks hear `input` on, if they do: its rate and source.
-    fn monitored(&self, input: &Input) -> Option<(u32, u32)> {
-        self.monitor_in.as_ref().filter(|(d, _)| !input.asio && *d == input.device).map(|(_, s)| (s.rate, s.source))
+    /// Whether the mixer's own input stream (the system's input device) serves `input`: a take records from it
+    /// instead of opening the device again.
+    fn from_monitor(&self, input: &Input) -> bool {
+        !input.asio && crate::device::system_input_name().is_some_and(|n| n == input.device)
     }
 
     /// Starts taking in `input` into a new file from `stream` (`None`: the ASIO driver's callback, or the stream the
     /// mixer's tracks hear it on); no playback: `one_click_start` plays.
     pub(crate) fn one_click_begin(&mut self, input: Input, stream: Option<InputStream>, editor: bool) -> Result<(), String> {
-        let (rate, source) = match (&stream, self.monitored(&input)) {
-            (Some(s), _) => (Some(s.rate), s.source),
-            (None, Some((rate, source))) => (Some(rate), source),
-            (None, None) => (None, ASIO_SOURCE),
+        let rate = match &stream {
+            Some(s) => Some(s.rate),
+            // The mixer's input stream runs at the output's rate; an ASIO driver's take reads the device's at the end.
+            None if self.from_monitor(&input) => crate::device::last().map(|d| d.rate),
+            None => None,
         };
         let dir = crate::data_folder::folder(&self.state).or_else(crate::app::theme_dir).unwrap_or_else(std::env::temp_dir).join("Recorded");
         let name = capture::file_name(&crate::backup::project_name(self.state.path.as_deref()), chrono::Local::now().naive_local());
         // Takes within the same second: "…_REC 2.wav", "…_REC 3.wav".
         let stem = name.trim_end_matches(".wav");
         let file = (1..).map(|k| dir.join(if k == 1 { name.clone() } else { format!("{stem} {k}.wav") })).find(|f| !f.exists()).unwrap_or_else(|| dir.join(&name));
-        capture().start(source, input.first, input.stereo);
+        capture().start(input.first, input.stereo);
         let recorder = match Recorder::start(file, rate.unwrap_or(48000)) {
             Ok(r) => r,
             Err(e) => {
@@ -199,12 +212,21 @@ impl App {
         Ok(())
     }
 
-    /// The mixer track input a take records: the current track's, else the first track's that has one.
+    /// The mixer track input a take records: the current track's, else the first track's that has one. The stored
+    /// number names an input of the device that opened (its stereo pairs first, then each input alone).
     pub(crate) fn track_input(&self) -> Option<Input> {
         let m = &self.state.project.mixer;
-        let i = m.iter().find(|t| t.index == self.state.selected_mixer).and_then(|t| t.input.as_ref()).or_else(|| m.iter().find_map(|t| t.input.as_ref()))?;
-        let asio = crate::audio_cfg::AudioCfg::current().asio_driver().is_some();
-        Some(Input { device: i.device.clone(), asio, first: i.first, stereo: i.stereo })
+        let t = m.iter().find(|t| t.index == self.state.selected_mixer).filter(|t| t.monitored()).or_else(|| m.iter().find(|t| t.monitored()))?;
+        let n = usize::try_from(t.audio_in).ok()?;
+        let d = crate::device::last()?;
+        if d.host == crate::device::ASIO {
+            let (first, stereo) = input_at(n, usize::from(d.inputs))?;
+            Some(Input { device: d.name.clone(), asio: true, first, stereo })
+        } else {
+            let info = crate::device::system_input::info()?;
+            let (first, stereo) = input_at(n, info.channels)?;
+            Some(Input { device: info.name, asio: false, first, stereo })
+        }
     }
 
     /// Play from stopped with Record armed and a mixer track taking an input: the take starts with the playback, in
@@ -226,7 +248,6 @@ impl App {
     /// it is at; follows where the song's start falls in the input; on stop, pause or disarm finishes the file; once it
     /// is made, places it (spec §2 The take).
     pub(crate) fn one_click_tick(&mut self) {
-        self.monitor_tick();
         let t = &self.transport;
         if self.audio_rec.is_none() && self.state.rec.armed && t.playing() && !t.paused() && t.song() && self.state.rec.count.is_none() {
             let (tick, secs) = (t.tick(), t.seconds());
@@ -330,31 +351,6 @@ impl App {
         }
     }
 
-    /// The mixer tracks' inputs: the device of the first track that takes one is kept open while one does (the ASIO
-    /// driver's inputs come with its outputs), every few seconds tried again when it does not open.
-    fn monitor_tick(&mut self) {
-        let want = self.state.project.mixer.iter().find_map(|t| t.input.as_ref()).map(|i| i.device.clone());
-        let asio = crate::audio_cfg::AudioCfg::current().asio_driver().is_some();
-        // What is open for it: nothing, the ASIO driver's inputs, or that system device.
-        let key = want.as_ref().map(|d| if asio { String::new() } else { d.clone() });
-        let now = std::time::Instant::now();
-        // A take recording from the stream goes on with it.
-        if key == self.monitor_key || self.monitor_retry.is_some_and(|t| now < t) || self.audio_rec.as_ref().is_some_and(|r| !r.ending) {
-            return;
-        }
-        match capture::monitor_inputs(want.as_deref(), &mut self.monitor_in) {
-            Ok(()) => {
-                self.monitor_key = key;
-                self.monitor_retry = None;
-            }
-            Err(e) => {
-                self.monitor_retry = Some(now + std::time::Duration::from_secs(3));
-                self.state.message = Some(format!("Audio input: {e}"));
-                self.invalidate();
-            }
-        }
-    }
-
     /// Whether the empty-playlist check is waived: a recording plays an empty song all the same.
     pub(crate) fn one_click_starting(&self) -> bool {
         self.audio_rec.as_ref().is_some_and(|r| !r.ending)
@@ -373,6 +369,26 @@ mod tests {
         let mut app = App::new(None);
         app.state.project = crate::app::test_project();
         app
+    }
+
+    /// A test's ASIO driver with `inputs` inputs and `outputs` outputs, as if it had opened.
+    fn test_asio(inputs: u16, outputs: u16) {
+        crate::device::set_test_device(crate::device::DeviceInfo {
+            host: crate::device::ASIO,
+            name: "Test ASIO".into(),
+            rate: 48000,
+            fixed: None,
+            buffers: None,
+            channels: outputs,
+            inputs,
+            out_names: (1..=outputs).map(|c| format!("Out {c}")).collect(),
+            in_names: (1..=inputs).map(|c| format!("In {c}")).collect(),
+            input_latency: None,
+            rates: Vec::new(),
+            sizes: Vec::new(),
+            latency: None,
+            instead: None,
+        });
     }
 
     /// The menu: the audio editor, the device's stereo and mono inputs, the last pick dotted (spec §2).
@@ -401,7 +417,7 @@ mod tests {
         app.transport.pretend_at(0.0, true);
         app.state.rec.armed = true;
         app.one_click_tick();
-        capture().push(ASIO_SOURCE, 4800, |ch, f| if ch == 0 { f as f32 / 4800.0 } else { 0.5 });
+        capture().push(4800, |ch, f| if ch == 0 { f as f32 / 4800.0 } else { 0.5 });
         app.transport.stop();
         for _ in 0..500 {
             app.one_click_tick();
@@ -440,7 +456,9 @@ mod tests {
     fn an_armed_track_records_take_after_take() {
         let _one = RECORDING.lock().unwrap_or_else(|e| e.into_inner());
         let mut app = app();
-        crate::mixer::track_mut(&mut app.state, 1).unwrap().input = Some(os_model::TrackInput { device: "Test ASIO".into(), first: 0, stereo: true });
+        test_asio(2, 2);
+        let m = crate::mixer::track_mut(&mut app.state, 1).unwrap();
+        (m.audio_in, m.monitor) = (0, os_model::MONITOR_ON);
         app.state.selected_mixer = 1;
         app.state.song_mode = true;
         app.state.rec.armed = true;
@@ -450,7 +468,7 @@ mod tests {
             app.transport.pretend_at(0.0, true);
             app.one_click_tick();
             assert!(app.audio_rec.is_some() && app.state.rec.audio && capture().on(), "take {take} started");
-            capture().push(ASIO_SOURCE, 4800, |ch, f| if ch == 0 { f as f32 / 4800.0 } else { 0.5 });
+            capture().push(4800, |ch, f| if ch == 0 { f as f32 / 4800.0 } else { 0.5 });
             app.one_click_tick();
             app.transport.stop();
             placed(&mut app);
@@ -473,7 +491,10 @@ mod tests {
     fn play_armed_starts_a_track_take() {
         let _one = RECORDING.lock().unwrap_or_else(|e| e.into_inner());
         let mut app = app();
-        crate::mixer::track_mut(&mut app.state, 2).unwrap().input = Some(os_model::TrackInput { device: "Test ASIO".into(), first: 1, stereo: false });
+        test_asio(2, 2);
+        let m = crate::mixer::track_mut(&mut app.state, 2).unwrap();
+        // Input 2 of the menu: the mono "In 2" (its stereo pair first, then each input alone).
+        (m.audio_in, m.monitor) = (2, os_model::MONITOR_ON);
         app.state.song_mode = false;
         app.track_take_before_play();
         assert!(app.audio_rec.is_none(), "not armed");
@@ -482,7 +503,7 @@ mod tests {
         assert!(app.state.song_mode && app.audio_rec.is_some() && capture().source() == (1, false));
         app.transport.pretend_at(0.0, true);
         app.one_click_tick();
-        capture().push(ASIO_SOURCE, 4800, |ch, f| if ch == 1 { f as f32 / 4800.0 } else { 0.0 });
+        capture().push(4800, |ch, f| if ch == 1 { f as f32 / 4800.0 } else { 0.0 });
         app.transport.stop();
         placed(&mut app);
         let path = app.state.project.channels.last().unwrap().sample_path.clone().unwrap();
@@ -513,7 +534,7 @@ mod tests {
         app.transport.pretend_at(0.0, true);
         app.state.rec.armed = true;
         app.one_click_tick();
-        capture().push(ASIO_SOURCE, 4800, |ch, f| if ch == 0 { f as f32 / 4800.0 } else { 0.5 });
+        capture().push(4800, |ch, f| if ch == 0 { f as f32 / 4800.0 } else { 0.5 });
         app.transport.stop();
         for _ in 0..500 {
             app.one_click_tick();
