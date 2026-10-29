@@ -6019,11 +6019,39 @@ impl App {
         }
     }
 
+    /// Whether a text box is being typed into anywhere: the dialogs' (Rename, Save as and Export) boxes, the Info
+    /// and theme-name panels, the browser's folder cells and the toolbar's preset editor. Android shows the soft
+    /// keyboard while one is (`Window::set_ime_allowed`) and hides it when none is.
+    pub fn text_editing(&self) -> bool {
+        self.state.bar.editing
+            || self.info_editing()
+            || self.folder_cell_editing()
+            || self.name_editing()
+            || self.state.dialogs.iter().any(|d| {
+                matches!(
+                    d.body,
+                    crate::dialog::Body::Project(crate::project_forms::Form::Rename(_))
+                        | crate::dialog::Body::Project(crate::project_forms::Form::Save(_))
+                        | crate::dialog::Body::Project(crate::project_forms::Form::Export(_))
+                )
+            })
+    }
+
     pub fn mouse_down(&mut self) {
         self.invalidate();
         self.hold = None;
         self.tooltip_pause();
         let (x, y) = self.mouse;
+        // Android: a press outside the rack and its graph editor closes the editor (its toggle is a small target,
+        // and there was no other way to close it).
+        #[cfg(target_os = "android")]
+        if self.state.rack.graph_open
+            && self.state.shown(Win::ChannelRack)
+            && !self.state.win_rect(Win::ChannelRack).contains(x, y)
+            && views::rack::graph_rect(&self.state).map_or(true, |g| !g.contains(x, y))
+        {
+            self.state.rack.graph_open = false;
+        }
         // A ghost note takes the left button as the grid under it does.
         let action = self.top_hit(x, y).map(|h| match h.action {
             Action::PianoGhostNote(_) => Action::PianoGrid,
@@ -8641,6 +8669,15 @@ impl App {
                 s.fl_layout = false;
                 if s.is_max(win) {
                     return;
+                }
+                // Android: a collapsed window comes back on a press on its title bar (its buttons are a small
+                // target for a finger, and nothing else brought it back). Desktop keeps dragging the bar.
+                #[cfg(target_os = "android")]
+                if let Some(i) = win.slot() {
+                    if s.wins[i].mini {
+                        s.wins[i].mini = false;
+                        return;
+                    }
                 }
                 let pos = match win {
                     Win::Plugin => s.plugin_pos,
