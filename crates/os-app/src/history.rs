@@ -1,4 +1,5 @@
 // Copyright (C) 2026 ItsAlphaNeon
+// Copyright (C) 2026 thacer13
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -52,6 +53,8 @@ pub const PROJECT_SETTINGS: &str = "Project settings";
 pub const REPLACE_CHANNEL: &str = "Replace channel";
 /// Settings > Info's text changed (`project_info`).
 pub const PROJECT_INFO: &str = "Project info";
+/// The tempo changed: the tempo box's drag, a count of the tempo tapper (`tempo`).
+pub const TEMPO: &str = "Tempo";
 
 /// What a step changes, as it is on the other side of the step.
 #[derive(Debug, Clone, PartialEq)]
@@ -66,6 +69,8 @@ pub enum Snap {
     Fader(u16, Option<f64>),
     /// Parameter `.1` of hosted plugin instance `.0` (normalized), set by Lemon Studio itself (`crate::params`).
     Param(usize, usize, f64),
+    /// The tempo, in BPM (the tempo box, the tempo tapper).
+    Tempo(f64),
     /// What a sample load changes on channel `row`: its sample, its name ("Auto name channels"), its root note and its
     /// stretch ("Read sample root note" and "Read sample tempo information", `rack::read_tags`) and its sampler flags
     /// (Keep on disk, "Auto keep long audio on disk").
@@ -332,6 +337,7 @@ impl Snap {
             // A track or an instance gone since is left as the step has it (`put` does nothing then).
             Snap::Fader(t, _) => crate::mixer::track(s, *t).map_or_else(|| self.clone(), |m| Snap::Fader(*t, m.volume)),
             Snap::Param(key, i, _) => crate::params::param_value(s, *key, *i).map_or_else(|| self.clone(), |v| Snap::Param(*key, *i, v)),
+            Snap::Tempo(_) => Snap::Tempo(s.tempo),
             // A channel gone since is left as the step has it (`put` does nothing then).
             Snap::Sample { row, .. } => Snap::sample(s, *row).unwrap_or_else(|| self.clone()),
             Snap::Channel { row, .. } => Snap::Channel { row: *row, ch: s.project.channels.get(*row).cloned().map(Box::new) },
@@ -389,6 +395,7 @@ impl Snap {
             Snap::Knob(..)
             | Snap::Fader(..)
             | Snap::Param(..)
+            | Snap::Tempo(_)
             | Snap::Sample { .. }
             | Snap::Channel { .. }
             | Snap::Init(..)
@@ -432,6 +439,11 @@ impl Snap {
             }
             Snap::Param(key, i, v) => {
                 crate::params::set_param_value(s, key, i, v);
+            }
+            // The engine and the piano roll follow from the next tick, as for any tempo edit (`App::set_tempo`).
+            Snap::Tempo(v) => {
+                s.tempo = v;
+                s.piano.dirty = true;
             }
             Snap::Sample { row, path, name, root, stretch, flags } => {
                 if let Some(ch) = s.project.channels.get_mut(row) {
@@ -604,6 +616,8 @@ pub struct History {
     wheel: Option<crate::knobs::Control>,
     /// The newest step was recorded since the last button release (`settle` looks at it then).
     fresh: bool,
+    /// The newest step is a tempo tapper's count, which the count's later taps go into (`tap_tempo`).
+    tap_run: bool,
 }
 
 impl History {
@@ -679,6 +693,7 @@ pub fn record(s: &mut State, name: &'static str, snap: Snap) {
     h.undid = false;
     h.wheel = None;
     h.fresh = true;
+    h.tap_run = false;
     h.trim();
 }
 
@@ -804,6 +819,34 @@ pub fn param(s: &mut State, key: usize, index: usize, before: Option<f64>, to: f
     record(s, PLUGIN_PARAMETER, Snap::Param(key, index, v));
     // A plugin may take the value on its next idle, so the button's release does not judge the step (`settle`).
     s.history.fresh = false;
+}
+
+/// Before the tempo changes (the tempo box's press, turning the tapper's Apply tempo on): a step, "Tempo". A press that
+/// goes on to change nothing leaves none (`settle`), and neither does a tempo that stays.
+pub fn tempo(s: &mut State, to: f64) {
+    if s.tempo != to {
+        record(s, TEMPO, Snap::Tempo(s.tempo));
+    }
+}
+
+/// A new tempo tapper count starts: its taps are a step of their own (`tap_tempo`).
+pub fn end_tap_run(s: &mut State) {
+    s.history.tap_run = false;
+}
+
+/// Before a tapper count's tap sets the tempo to `to`: the count's first tap that sets it is a step, "Tempo", and the
+/// taps after it (the count's average moves on) go into that step, until a new count or another step.
+pub fn tap_tempo(s: &mut State, to: f64) {
+    let h = &s.history;
+    if h.tap_run && h.done == h.steps.len() {
+        return;
+    }
+    if s.tempo != to {
+        record(s, TEMPO, Snap::Tempo(s.tempo));
+        s.history.tap_run = true;
+        // The tap is no press: the button's release does not judge the step (`settle`).
+        s.history.fresh = false;
+    }
 }
 
 /// Before knob `id` turns: a step unless Undo knob tweaks is off. `wheel`: a mouse-wheel notch, which joins the step
