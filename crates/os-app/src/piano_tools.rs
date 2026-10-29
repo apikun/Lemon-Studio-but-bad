@@ -55,6 +55,8 @@ pub enum NCmd {
     ScaleRoot(u8),
     ScaleKind(usize),
     ScaleSnap,
+    /// Opens the Scale highlighting menu (a menu opened from a submenu: menus here go two levels deep).
+    ScaleMenu,
     ScaleNames(crate::piano::ScaleNames),
 }
 
@@ -158,9 +160,9 @@ fn root_name(r: u8, flats: bool) -> String {
     crate::note_names::name_in(i32::from(r), crate::prefs::index(&crate::prefs::NOTE_NAMES), flats).trim_end_matches(|c: char| c.is_ascii_digit() || c == '-').to_string()
 }
 
-/// The ▸ menu's View submenu (FL's): Scale highlighting lists the root notes and the scales in two columns; Ghost
-/// channels is the Alt+V switch. The rest of FL's entries are greyed until they are built.
-fn view_menu(s: &State) -> Vec<PItem> {
+/// The Scale highlighting menu's items (`NCmd::ScaleMenu`): FL's two columns, the root notes, then the switches, the
+/// black-note naming and the scales.
+pub fn scale_menu(s: &State) -> Vec<PItem> {
     use crate::piano::{ScaleHighlight, ScaleNames};
     let sh = s.piano.scale_highlight;
     let ScaleHighlight { root, scale_idx, enabled, snap, names } = sh;
@@ -179,6 +181,12 @@ fn view_menu(s: &State) -> Vec<PItem> {
     }
     scale.push(PItem::sep());
     scale.extend(crate::chords::menu_scales().into_iter().map(|(label, k)| PItem::new(label, Cmd::Piano(NCmd::ScaleKind(k))).mark(Mark::Radio(scale_idx == k && enabled))));
+    scale
+}
+
+/// The ▸ menu's View submenu (FL's): Scale highlighting lists the root notes and the scales in two columns; Ghost
+/// channels is the Alt+V switch. The rest of FL's entries are greyed until they are built.
+fn view_menu(s: &State) -> Vec<PItem> {
     vec![
         PItem::head("Grid"),
         PItem::not_yet("Grid color..."),
@@ -196,7 +204,7 @@ fn view_menu(s: &State) -> Vec<PItem> {
         PItem::not_yet("Mini piano roll preview"),
         PItem::head("Helpers"),
         PItem::not_yet("Note grid highlights").key("Alt+B"),
-        PItem::sub("Scale highlighting", scale),
+        item("Scale highlighting", NCmd::ScaleMenu).mark(Mark::Check(s.piano.scale_highlight.enabled)),
         PItem::not_yet("Show chord name for selection"),
         PItem::not_yet("Note length in note properties"),
         PItem::sep(),
@@ -592,6 +600,11 @@ pub fn run(app: &mut App, cmd: NCmd) -> Option<String> {
             done(made, &format!("made the selected notes {}", ty.label()))
         }
         NCmd::Press(..) | NCmd::Cut => unreachable!("handled above"),
+        NCmd::ScaleMenu => {
+            let (x, y) = app.mouse;
+            app.state.playlist.popup = Some(Popup { x: x - 6.0, y: y - 6.0, items: scale_menu(&app.state), sub: None, scroll: [0; 2] });
+            return None;
+        }
         NCmd::ScaleToggle => {
             let sh = &mut s.piano.scale_highlight;
             sh.enabled = !sh.enabled;
@@ -872,8 +885,11 @@ mod tests {
         let sh = a.state.piano.scale_highlight;
         assert!(sh.enabled && sh.root == 2 && sh.scale_idx == k);
         assert!(crate::chords::in_scale(2, k, 62) && !crate::chords::in_scale(2, k, 63), "D minor has D and no D#");
+        // The View entry opens the Scale highlighting menu.
         let view = view_menu(&a.state);
-        let scale = &view.iter().find(|i| i.label == "Scale highlighting").unwrap().children;
+        let Cmd::Piano(open) = view.iter().find(|i| i.label == "Scale highlighting").unwrap().cmd.clone() else { panic!() };
+        run(&mut a, open);
+        let scale = a.state.playlist.popup.take().expect("the scale menu opens").items;
         assert!(scale.iter().any(|i| i.cmd == Cmd::Piano(NCmd::ScaleKind(k)) && i.mark == Mark::Radio(true)));
         assert!(scale.iter().any(|i| i.cmd == Cmd::Piano(NCmd::ScaleRoot(2)) && i.mark == Mark::Radio(true)));
         run(&mut a, NCmd::ScaleToggle);
