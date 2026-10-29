@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
-//! Lemon Studio's small generators as VST3 / CLAP plugins (nih-plug): Lemon Kick, Lemon Boom, Lemon Bass and Lemon
-//! Acid. Each is a handful of settings over a small synthesizer, so they share everything but their description: the
-//! plugin, its parameters and saved state ([`params`]), the Pith editor ([`editor`], [`view`]). A description
-//! ([`GenSpec`]) gives the settings, their value texts, the editor's cards and controls, and the sound. The plugin
-//! modules (`plugins/lemon-kick` and the others) export one each, the way the small effects do.
+//! Lemon Studio's small generators as VST3 / CLAP plugins (nih-plug): Lemon Kick, Lemon Boom, Lemon Bass, Lemon
+//! Acid, Mango Pluck, Mango Mini, Mango DX, Mango Autogun, Mango Drums and Mango Keys. Each is a handful of settings
+//! over a small synthesizer, so they share everything but their description: the plugin, its parameters and saved
+//! state ([`params`]), the Pith editor ([`editor`], [`view`]). A description ([`GenSpec`]) gives the settings, their
+//! value texts, the editor's cards and controls, and the sound. The plugin modules (`plugins/lemon-kick` and the
+//! others) export one each, the way the small effects do.
 //!
 // spec: plugins/lemon-small-generators.md, plugins/plugin-formats.md
 #![allow(semicolon_in_expressions_from_non_local_macros)]
@@ -20,6 +21,12 @@ pub mod monk;
 pub mod boobass;
 pub mod fruit_kick;
 pub mod lemon_boom;
+pub mod autogun;
+pub mod drums;
+pub mod dx;
+pub mod keys;
+pub mod mini;
+pub mod pluck;
 
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
@@ -425,7 +432,18 @@ impl<K: Kind> Vst3Plugin for SmallGen<K> {
 mod tests {
     use super::*;
 
-    pub const SPECS: [&GenSpec; 4] = [fruit_kick::SPEC, lemon_boom::SPEC, boobass::SPEC, acid::SPEC];
+    pub const SPECS: [&GenSpec; 10] = [
+        fruit_kick::SPEC,
+        lemon_boom::SPEC,
+        boobass::SPEC,
+        acid::SPEC,
+        pluck::SPEC,
+        mini::SPEC,
+        dx::SPEC,
+        autogun::SPEC,
+        drums::SPEC,
+        keys::SPEC,
+    ];
 
     /// Every generator: ids unique, starts inside the ranges, a control per setting, the plugin ids distinct.
     #[test]
@@ -493,12 +511,24 @@ mod tests {
             <lemon_boom::LemonBoom as ClapPlugin>::CLAP_ID,
             <boobass::LemonBass as ClapPlugin>::CLAP_ID,
             <acid::LemonAcid as ClapPlugin>::CLAP_ID,
+            <pluck::MangoPluck as ClapPlugin>::CLAP_ID,
+            <mini::MangoMini as ClapPlugin>::CLAP_ID,
+            <dx::MangoDx as ClapPlugin>::CLAP_ID,
+            <autogun::MangoAutogun as ClapPlugin>::CLAP_ID,
+            <drums::MangoDrums as ClapPlugin>::CLAP_ID,
+            <keys::MangoKeys as ClapPlugin>::CLAP_ID,
         ];
         let classes = [
             <fruit_kick::LemonKick as Vst3Plugin>::VST3_CLASS_ID,
             <lemon_boom::LemonBoom as Vst3Plugin>::VST3_CLASS_ID,
             <boobass::LemonBass as Vst3Plugin>::VST3_CLASS_ID,
             <acid::LemonAcid as Vst3Plugin>::VST3_CLASS_ID,
+            <pluck::MangoPluck as Vst3Plugin>::VST3_CLASS_ID,
+            <mini::MangoMini as Vst3Plugin>::VST3_CLASS_ID,
+            <dx::MangoDx as Vst3Plugin>::VST3_CLASS_ID,
+            <autogun::MangoAutogun as Vst3Plugin>::VST3_CLASS_ID,
+            <drums::MangoDrums as Vst3Plugin>::VST3_CLASS_ID,
+            <keys::MangoKeys as Vst3Plugin>::VST3_CLASS_ID,
         ];
         for i in 0..ids.len() {
             for j in i + 1..ids.len() {
@@ -507,6 +537,12 @@ mod tests {
             }
         }
         assert_eq!(<fruit_kick::LemonKick as Plugin>::NAME, "Mango Kick");
+        assert_eq!(<pluck::MangoPluck as Plugin>::NAME, "Mango Pluck");
+        assert_eq!(<mini::MangoMini as Plugin>::NAME, "Mango Mini");
+        assert_eq!(<dx::MangoDx as Plugin>::NAME, "Mango DX");
+        assert_eq!(<autogun::MangoAutogun as Plugin>::NAME, "Mango Autogun");
+        assert_eq!(<drums::MangoDrums as Plugin>::NAME, "Mango Drums");
+        assert_eq!(<keys::MangoKeys as Plugin>::NAME, "Mango Keys");
     }
 
     /// The saved state round-trips through the plugin state, and the editor's live edits reach the sound.

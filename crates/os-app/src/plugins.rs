@@ -251,6 +251,12 @@ pub fn builtin() -> Vec<Available> {
     static BOOM: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static BASS: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static ACID: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static PLUCK: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static MINI: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static DX: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static AUTOGUN: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static DRUMS: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static KEYS: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static MONK: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static WAVETABLE: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     let mut v = linked(&LIB, &lemon_sampler::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, LEMON_SAMPLER);
@@ -261,6 +267,13 @@ pub fn builtin() -> Vec<Available> {
     v.extend(linked(&BOOM, &lemon_boom::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Boom"));
     v.extend(linked(&BASS, &lemon_bass::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Bass"));
     v.extend(linked(&ACID, &lemon_acid::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Acid"));
+    // The rest of the small generators (spec: plugins/lemon-small-generators.md).
+    v.extend(linked(&PLUCK, &lemon_pluck::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Pluck"));
+    v.extend(linked(&MINI, &lemon_mini::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Mini"));
+    v.extend(linked(&DX, &lemon_dx::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango DX"));
+    v.extend(linked(&AUTOGUN, &lemon_autogun::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Autogun"));
+    v.extend(linked(&DRUMS, &lemon_drums::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Drums"));
+    v.extend(linked(&KEYS, &lemon_keys::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Keys"));
     // Mango Wavetable, from battlemountain2's fork (spec: docs/lemon-wavetable.md).
     v.extend(linked(&WAVETABLE, &lemon_wavetable::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_WAVETABLE));
     // The chanting monk (a port of MonkSynth, MIT; the third-party notices carry its notice).
