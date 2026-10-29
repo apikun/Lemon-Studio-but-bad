@@ -18059,6 +18059,28 @@ mod tests {
         assert_eq!(app.state.tempo, 140.0, "the initial tempo");
     }
 
+    /// A clip narrower than its gain badge ("+0.0 dB") shows the badge when its gain handle is hovered, without a crash
+    /// (a short sample dropped from a folder).
+    #[test]
+    fn a_short_clips_gain_badge_paints() {
+        use crate::playlist as pl;
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let (mut app, _, _, _) = ruler_app(&mut c);
+        app.state.playlist_bar_w = 200.0;
+        let wav = std::env::temp_dir().join(format!("os-app-short-{}.wav", std::process::id()));
+        os_engine::wav::write_f32_stereo(&mut std::fs::File::create(&wav).unwrap(), 48000, &[0.5; 20000]).unwrap();
+        pl::add_audio_clip(&mut app.state, &wav.to_string_lossy(), 0, 0).expect("audio clip added");
+        app.state.playlist.tool = pl::PlTool::Draw;
+        frame(&mut app, &mut c, None);
+        let g = pl::PGeom::new(&app.state, app.pl_grid().unwrap());
+        let body = g.body(&pl::clips(&app.state)[pl::clips(&app.state).len() - 1]);
+        assert!(body.w > 14.0 && body.w < 30.0, "narrower than the badge: {}", body.w);
+        app.mouse_move(body.cx(), body.bottom() - 2.0);
+        assert_eq!(app.state.playlist.hover_handle, Some(pl::Handle::Gain));
+        frame(&mut app, &mut c, None);
+        let _ = std::fs::remove_file(&wav);
+    }
+
     /// An audio clip's gain handle shows the hand, over it and while it is dragged (not the Draw tool's brush); the clip
     /// beside it keeps the move cursor.
     #[test]
