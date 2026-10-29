@@ -106,7 +106,7 @@ fn info_plist() -> String {
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Lemon Studio records and monitors your audio inputs on its mixer tracks.</string>
+	<string>Mango Studio records and monitors your audio inputs on its mixer tracks.</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

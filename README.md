@@ -369,7 +369,7 @@ that stay above Mango Studio while it is the active application. A few things di
   it back. A sample dragged from Mango Studio's browser onto a plugin window reaches Mango Sampler only (other plugins
   take dropped files only from the Finder).
 - **Microphone:** the first time a mixer track monitors or records an input (the Mac's microphone, an audio
-  interface's inputs), macOS asks whether Lemon Studio may use the microphone; System Settings > Privacy & Security >
+  interface's inputs), macOS asks whether Mango Studio may use the microphone; System Settings > Privacy & Security >
   Microphone changes the answer. Started from a terminal, macOS asks on the terminal's behalf instead.
 - **FL Studio's factory content** (samples that projects name through `%FLStudioFactoryData%`) is found in the newest
   `/Applications/FL Studio *.app`; `OPENSTUDIO_FACTORY` overrides it.
