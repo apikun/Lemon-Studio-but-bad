@@ -44,6 +44,12 @@ is not confused with the original. Almost all of its code, design and documentat
 Studio contributors' work, used under the GNU GPL, version 3 or later; their copyright lines stay in every file they
 wrote. Mango Studio does not claim to be Lemon Studio or to be made or endorsed by its author.
 
+**Mango Studio's own work** since the fork (the new name and logo, FL-style playlist and piano roll improvements, new
+effects, the Android port and the releases) is by [apikun](https://github.com/apikun) and
+[Artig3nce](https://github.com/Artig3nce), with work brought in from other forks, each kept under its author's name in
+the commit history, such as [battlemountain2](https://github.com/battlemountain2) and
+[mikobuntu](https://github.com/mikobuntu).
+
 **The Android port's scaffolding follows [honeydew](https://github.com/daijro/honeydew) by daijro** — an independent,
 clean-room FL Studio Mobile rebuilt in Rust (GPL 3.0 or later): the gradle project, the NativeActivity wiring and the
 APK build flow. Credited in THIRD-PARTY-NOTICES.txt.
@@ -800,7 +806,7 @@ ASIO is a registered trademark of Steinberg Media Technologies GmbH.
 
 ## License
 
-Copyright (C) 2026 ItsAlphaNeon and the Lemon Studio contributors, and the Mango Studio contributors. Each source
+Copyright (C) 2026 ItsAlphaNeon and the Lemon Studio contributors, and the Mango Studio contributors (apikun, Artig3nce and others). Each source
 file names its copyright holders in its header.
 
 Mango Studio, like Lemon Studio, is free software: you can redistribute it and/or modify it under the terms of the
@@ -829,5 +835,5 @@ property of their respective owners.
 <br>
 <img alt="" src="docs/assets/mark.png" width="48">
 <br>
-<sub>Mango Studio, based on Lemon Studio. Copyright © 2026 ItsAlphaNeon and the Lemon Studio contributors, and the Mango Studio contributors. Free software under the GNU GPL, version 3 or later.</sub>
+<sub>Mango Studio, based on Lemon Studio. Copyright © 2026 ItsAlphaNeon and the Lemon Studio contributors, and the Mango Studio contributors (apikun, Artig3nce and others). Free software under the GNU GPL, version 3 or later.</sub>
 </div>
