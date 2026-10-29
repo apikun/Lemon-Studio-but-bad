@@ -139,7 +139,9 @@ fn registered(token: Token) -> bool {
 
 /// UI thread: runs what other threads handed over, then the callbacks of ready descriptors and due timers. Never blocks.
 pub fn dispatch() {
-    let handed: Vec<Box<dyn FnOnce() + Send>> = HANDED.lock().map(|mut h| std::mem::take(&mut *h)).unwrap_or_default();
+    // Only the UI thread runs what other threads handed over (a dispatch on another thread leaves it queued).
+    let handed: Vec<Box<dyn FnOnce() + Send>> =
+        if on_ui_thread() { HANDED.lock().map(|mut h| std::mem::take(&mut *h)).unwrap_or_default() } else { Vec::new() };
     for f in handed {
         f();
     }
@@ -286,6 +288,10 @@ mod tests {
         .unwrap();
         assert!(active(), "something waits for the UI thread");
         assert_eq!(*ran.lock().unwrap(), None, "not before the UI thread dispatches");
+        // A dispatch on any other thread leaves it queued (the run loop's own state is the UI thread's).
+        std::thread::spawn(dispatch).join().unwrap();
+        assert!(active(), "still queued after another thread's dispatch");
+        assert_eq!(*ran.lock().unwrap(), None);
         dispatch();
         assert_eq!(*ran.lock().unwrap(), Some(me), "run on the UI thread");
     }
