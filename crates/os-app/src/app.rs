@@ -12514,6 +12514,40 @@ mod tests {
         assert!(((app.scroll_get(t) + b.view) / ppb(&app) - stop).abs() < 0.01, "the right end keeps its time");
     }
 
+    /// Ghost notes (Alt+V) are filled as FL draws them: their middle stands out from the empty grid, dimmer than the
+    /// channel's own notes, and gone when ghosts are off.
+    #[test]
+    fn ghost_notes_are_filled() {
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let mut app = App::new(None);
+        app.state.project = test_project();
+        app.state.selected_channel = 0;
+        let pat = app.state.pattern;
+        let p = app.state.project.patterns.iter_mut().find(|p| p.number == pat).expect("the pattern");
+        p.notes = vec![Note { length: 96, key: 60, ..Note::step(0, 0) }, Note { length: 96, key: 64, ..Note::step(1, 0) }];
+        app.state.z = vec![Win::PianoRoll];
+        app.paint(&mut c, None);
+        let g = app.piano_geom().expect("the piano roll");
+        let notes = app.state.project.patterns.iter().find(|p| p.number == pat).unwrap().notes.clone();
+        let (own, ghost) = (g.note_rect(&notes[0]).expect("own"), g.note_rect(&notes[1]).expect("ghost"));
+        let light = |c: &Canvas, x: f32, y: f32| {
+            let p = c.pixmap.pixel(x as u32, y as u32).unwrap().demultiply();
+            u32::from(p.red()) + u32::from(p.green()) + u32::from(p.blue())
+        };
+        // The empty grid at the ghost's time, a few keys above it.
+        let (gx, gy) = (ghost.x + 10.0, ghost.cy());
+        let empty = light(&c, gx, gy - ghost.h * 3.0);
+        let (lit, mine) = (light(&c, gx, gy), light(&c, own.x + 10.0, own.cy()));
+        if std::env::var_os("OS_GHOST_PNG").is_some() {
+            let _ = c.pixmap.save_png(std::env::temp_dir().join("ghost-notes.png"));
+        }
+        assert!(lit > empty + 40, "the ghost shows: {lit} on a grid of {empty}");
+        assert!(lit < mine, "dimmer than the channel's own notes: {lit} vs {mine}");
+        app.state.piano.ghosts = false;
+        app.paint(&mut c, None);
+        assert!(light(&c, gx, gy).abs_diff(empty) < 25, "ghosts off");
+    }
+
     /// Scroll bars: left-drag scrolls one axis, right-drag both (piano roll), middle-drag grabs.
     #[test]
     fn scrollbar_drags() {
