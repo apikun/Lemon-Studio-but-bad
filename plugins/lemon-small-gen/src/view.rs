@@ -418,8 +418,8 @@ fn tile(ui: &mut Ui, id: &str, r: Rect, caption: &str) {
     ui.hit(hr, target);
 }
 
-/// The wordmark (as Lemon Delay's): the lemon mark and "LEMON" in lemon beside the effect's name in large grey
-/// capitals, or LEMON over the name (`stacked`), placed by the spec's [`Mark`]; returns where it is.
+/// The wordmark (as Lemon Delay's): "MANGO" in mango beside the effect's name in large grey
+/// capitals, or MANGO over the name (`stacked`), placed by the spec's [`Mark`]; returns where it is.
 fn logo(ui: &mut Ui, spec: &GenSpec) -> Rect {
     let Mark {
         x,
@@ -427,19 +427,18 @@ fn logo(ui: &mut Ui, spec: &GenSpec) -> Rect {
         anchor,
         stacked,
     } = spec.mark;
-    let ws = lemon::spaced_width(ui.c, MARK_SMALL, "LEMON", 2.5);
+    let ws = lemon::spaced_width(ui.c, MARK_SMALL, "MANGO", 2.5);
     let (lh_b, lh_s) = (ui.c.line_height(MARK_BIG), ui.c.line_height(MARK_SMALL));
     if stacked {
-        // The mark and LEMON centred over the name.
+        // MANGO centred over the name.
         let (wn, wl) = (
             lemon::spaced_width(ui.c, MARK_BIG, spec.word, 2.0),
-            14.0 + ws,
+            ws,
         );
         let w = wn.max(wl);
         let left = (x - w * anchor).round();
         let lx = (left + (w - wl) / 2.0).round();
-        lemon::lemon_mark(ui.c, lx + 5.0, y + lh_s / 2.0, 4.0, brand::MAIN);
-        lemon::spaced(ui.c, MARK_SMALL, lx + 14.0, y, brand::MAIN, "LEMON", 2.5);
+        lemon::spaced(ui.c, MARK_SMALL, lx, y, brand::MAIN, "MANGO", 2.5);
         lemon::spaced(
             ui.c,
             MARK_BIG,
@@ -454,7 +453,7 @@ fn logo(ui: &mut Ui, spec: &GenSpec) -> Rect {
         return r;
     }
     let wb = lemon::spaced_width(ui.c, MARK_BIG, spec.word, 2.0);
-    let total = 14.0 + ws + 8.0 + wb;
+    let total = ws + 8.0 + wb;
     let left = (x - total * anchor).round();
     let right = left + total;
     let bx = (right - wb).round();
@@ -474,10 +473,9 @@ fn logo(ui: &mut Ui, spec: &GenSpec) -> Rect {
         sx,
         (y - lh_s / 2.0).round() + 1.0,
         brand::MAIN,
-        "LEMON",
+        "MANGO",
         2.5,
     );
-    lemon::lemon_mark(ui.c, left + 5.0, y, 4.0, brand::MAIN);
     let r = Rect::span(left - 2.0, right, y - 12.0, y + 12.0);
     ui.hit(r, Target::Logo);
     r

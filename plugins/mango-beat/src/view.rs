@@ -362,7 +362,7 @@ fn knob(ui: &mut Ui, id: &str, cx: f32, cy: f32, r: f32, cap: &str, bipolar: boo
     ui.hit(hr, target);
 }
 
-/// The wordmark on the foot's line: the mango mark and "MANGO" in mango beside a large grey "BEAT"; returns its
+/// The wordmark on the foot's line: "MANGO" in mango beside a large grey "BEAT"; returns its
 /// left edge.
 fn logo(ui: &mut Ui) -> f32 {
     let wb = lemon::spaced_width(ui.c, MARK_BIG, "BEAT", 2.0);
@@ -372,8 +372,7 @@ fn logo(ui: &mut Ui) -> f32 {
     lemon::spaced(ui.c, MARK_BIG, bx, (FOOT - lh_b / 2.0).round(), plug::WORDMARK, "BEAT", 2.0);
     let sx = (bx - 8.0 - ws).round();
     lemon::spaced(ui.c, MARK_SMALL, sx, (FOOT - lh_s / 2.0).round() + 1.0, brand::MAIN, "MANGO", 2.5);
-    let left = sx - 14.0;
-    lemon::lemon_mark(ui.c, left + 5.0, FOOT, 4.0, brand::MAIN);
+    let left = sx;
     ui.hit(Rect::span(left - 2.0, RIGHT, FOOT - 12.0, FOOT + 12.0), Target::Logo);
     left
 }
