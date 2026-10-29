@@ -6,7 +6,7 @@
 
 pub mod dsp;
 // The editor window runs on Linux and macOS (`os_plugkit::gui`); on Windows the synth plays without one for now.
-#[cfg(not(windows))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub mod editor;
 pub mod env;
 pub mod fft;
@@ -78,7 +78,7 @@ impl Plugin for LemonWavetable {
         self.params.clone()
     }
 
-    #[cfg(not(windows))]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
         Some(Box::new(editor::WavetableEditor::new(
             self.params.clone(),

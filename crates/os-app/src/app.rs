@@ -9550,7 +9550,7 @@ pub(crate) fn add_channel(p: &mut Project) -> usize {
 /// broken one.
 pub fn default_project() -> Project {
     #[cfg(target_os = "android")]
-    if let Some(p) = starter_project() {
+    if let Some(p) = mobile_starter_project() {
         return p;
     }
     template_project(&[crate::plugins::LEMON_SAMPLER])
@@ -9566,12 +9566,12 @@ pub fn starter_kit() -> &'static [&'static str] {
     &STARTER_KIT
 }
 
-/// The starter project (`default_project` on Android): the kit's drums and two plucks on channels 1-6 (their
+/// The mobile starter project (`default_project` on Android): the kit's drums and two plucks on channels 1-6 (their
 /// inserts), and pattern 1 with two bars of a beat the plucks play over — music before anything is loaded. `None`
 /// where the kit's files are not there (`mobile::run` did not extract them, or were deleted): the plain default
 /// template then, whose empty sampler plays the built-in tone.
 #[cfg(target_os = "android")]
-fn starter_project() -> Option<Project> {
+fn mobile_starter_project() -> Option<Project> {
     let dir = os_paths::user_dir()?.join("Sounds").join("Mango Kit");
     let kit: Vec<String> = STARTER_KIT.iter().map(|n| dir.join(n).to_string_lossy().into_owned()).collect();
     if !kit.iter().all(|p| std::path::Path::new(p).is_file()) {
