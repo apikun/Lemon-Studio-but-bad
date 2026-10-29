@@ -24,7 +24,7 @@ body:
     id: branch
     attributes:
       label: Branch
-      description: Which branch did you build Mango Studio from? Include the commit hash if you know it (`git rev-parse --short HEAD`).
+      description: Which branch did you build Mango Studio from? Include the commit hash if you know it ```git rev-parse --short HEAD```
       placeholder: main @ a1b2c3d
     validations:
       required: false
