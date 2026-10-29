@@ -214,6 +214,10 @@ pub enum FrameEvent {
     KnobMenu(Knob, i32, i32),
     /// A Misc tab keyboard key: key, velocity, pressed.
     Note(u8, u8, bool),
+    /// Ctrl+Z (`alt`: Ctrl+Alt+Z, `shift`: Ctrl+Shift+Z) was pressed while the plugin's own window had the keyboard: the
+    /// app's undo history moves, as it does from the main window (X11: the frame grabs the keys before the editor).
+    #[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(dead_code))]
+    Undo { alt: bool, shift: bool },
     /// A detached window moved to a monitor with another DPI: the app redraws it at this scale (spec: ui/ui-scaling.md §3).
     #[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
     Dpi(f32),
