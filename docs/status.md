@@ -211,7 +211,10 @@ and Touch controller. Kept with the program's settings, not the project. Which w
 - Lemon Kick (a recreation of FL's Fruit Kick), Lemon Boom (of BassDrum) and Lemon Bass (of BooBass), the small
   generators: a kick drum, a bass drum whose body holds the base note under its sweep, and a Karplus-Strong bass
   guitar of four strings. They share the small generators' plugin, state and editor (`lemon-small-gen`), like the
-  small effects do, and are also VST3 and CLAP plugins
+  small effects do, and are also VST3 and CLAP plugins. The newer small generators join them on the same shared
+  frame: Mango Acid (of Transistor Bass), Mango Monk (a port of MonkSynth), Mango Pluck (Karplus-Strong plucked
+  strings), Mango Mini (a two-oscillator subtractive synth), Mango DX (a small FM synth), Mango Autogun (a
+  seed-grown patch synth), Mango Drums (six synthesized drums) and Mango Keys (an electric piano)
 - Lemon Limiter (Fruity Limiter: limiter, compressor and noise gate), Lemon Reverb (Fruity Reeverb 2) and Lemon
   Delay (Fruity Delay 3), also VST3 and CLAP plugins. A project's Fruity Reeverb 2, Fruity Delay 3 and Fruity Limiter
   slots play through the same sound (the Limiter's compressor, gate, look-ahead and sidechain included)

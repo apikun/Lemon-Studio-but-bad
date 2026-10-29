@@ -1897,6 +1897,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lemon-autogun"
+version = "0.6.1"
+dependencies = [
+ "lemon-small-gen",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
 name = "lemon-balance"
 version = "0.6.1"
 dependencies = [
@@ -1957,6 +1966,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "lemon-drums"
+version = "0.6.1"
+dependencies = [
+ "lemon-small-gen",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
+name = "lemon-dx"
+version = "0.6.1"
+dependencies = [
+ "lemon-small-gen",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
 name = "lemon-fast-distortion"
 version = "0.6.1"
 dependencies = [
@@ -1979,6 +2006,15 @@ name = "lemon-flanger"
 version = "0.6.1"
 dependencies = [
  "lemon-small-fx",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
+name = "lemon-keys"
+version = "0.6.1"
+dependencies = [
+ "lemon-small-gen",
  "nih_plug",
  "os-plugkit",
 ]
@@ -2008,6 +2044,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lemon-mini"
+version = "0.6.1"
+dependencies = [
+ "lemon-small-gen",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
 name = "lemon-parametric-eq-2"
 version = "0.6.1"
 dependencies = [
@@ -2027,6 +2072,15 @@ name = "lemon-phaser"
 version = "0.6.1"
 dependencies = [
  "lemon-small-fx",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
+name = "lemon-pluck"
+version = "0.6.1"
+dependencies = [
+ "lemon-small-gen",
  "nih_plug",
  "os-plugkit",
 ]
@@ -2972,19 +3026,25 @@ dependencies = [
  "jpeg-decoder",
  "lemon-3x-osc",
  "lemon-acid",
+ "lemon-autogun",
  "lemon-balance",
  "lemon-bass",
  "lemon-boom",
  "lemon-chorus",
  "lemon-crusher",
  "lemon-delay",
+ "lemon-drums",
+ "lemon-dx",
  "lemon-fast-distortion",
  "lemon-filter",
  "lemon-flanger",
+ "lemon-keys",
  "lemon-kick",
  "lemon-limiter",
+ "lemon-mini",
  "lemon-parametric-eq-2",
  "lemon-phaser",
+ "lemon-pluck",
  "lemon-reverb",
  "lemon-sampler",
  "lemon-small-fx",
