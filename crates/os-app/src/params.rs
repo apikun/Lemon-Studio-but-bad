@@ -422,6 +422,15 @@ impl App {
         // What the plugins' own editors did becomes undo steps (`editor_edit`).
         for (key, index, e) in gestures {
             editor_edit(&mut self.state, key, index, e);
+            // While recording automation, a knob turned in the plugin's own window goes into a clip for that parameter.
+            if let os_host::ParamEvent::Value(_, v) = e {
+                let hidden = self.state.params.lists.get(&key).and_then(|l| l.params.get(index)).is_some_and(|x| x.hidden);
+                if !hidden {
+                    if let Some((target, _, _)) = automation(&self.state, key, index) {
+                        self.record_automation(target, &clip_name(&self.state, key, index), v);
+                    }
+                }
+            }
         }
         // A knob moved in a plugin's own window is the user's edit (`Plugins::mark_edited`).
         for key in edited {

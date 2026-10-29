@@ -224,6 +224,24 @@ struct Take {
     clip: Option<(u16, u32)>,
 }
 
+/// The automation being recorded in the take: whether its undo step is made, and for each control moved the clip it goes
+/// into and where its last point is (beats from the clip's start).
+#[derive(Debug, Default)]
+struct AutoRec {
+    step: bool,
+    controls: Vec<AutoControl>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AutoControl {
+    target: u32,
+    channel: u16,
+    last: f64,
+}
+
+/// A point closer than this to the last one (beats) replaces it, so a slow UI tick does not fill the clip with points.
+const AUTO_STEP: f64 = 1.0 / 32.0;
+
 /// Record's state (spec §2).
 #[derive(Debug, Default)]
 pub struct Rec {
@@ -245,6 +263,8 @@ pub struct Rec {
     pub log: crate::score_log::Log,
     /// The history's done steps when the playback that is recording started: TOOLS ▸ Cancel recording goes back to it.
     since: Option<usize>,
+    /// Automation recorded into clips (`App::record_automation`), over until the take ends.
+    auto: AutoRec,
 }
 
 impl Rec {
@@ -524,13 +544,92 @@ impl App {
         r.armed && r.count.is_none() && what.on() && self.transport.playing() && !self.transport.paused()
     }
 
+    /// A control moved while recording automation in SONG mode (a plugin's own knob, a mixer fader or knob): its value,
+    /// normalized, becomes a point of the automation clip for `target` under the playback position, a clip made there
+    /// when there is none (named `name`). One undo step for the take, the same step Cancel recording undoes. Moves
+    /// within `AUTO_STEP` of the last point replace it; the points the move passed over are replaced (Blend keeps them).
+    pub(crate) fn record_automation(&mut self, target: u32, name: &str, value: f64) {
+        use os_model::AutoPoint;
+        if !self.rec_live(Opt::Automation) || !self.transport.song() {
+            return;
+        }
+        let tick = self.transport.tick().max(0.0) as u32;
+        let value = value.clamp(0.0, 1.0);
+        let s = &mut self.state;
+        if !s.rec.auto.step {
+            crate::playlist::arr_mut(s);
+            let snap = crate::history::Snap::Playlist(Box::new(crate::playlist::capture(s)));
+            crate::history::record(s, RECORDED, snap);
+            s.rec.auto.step = true;
+        }
+        // The clip of this control under the playback position (the latest started), else a new one from here to the
+        // song's end.
+        let under = crate::playlist::clips(s)
+            .iter()
+            .filter(|c| c.position <= tick && tick < c.end())
+            .filter_map(|c| match c.source {
+                ClipSource::Channel(ch) if s.project.automation(ch).is_some_and(|a| a.targets.first() == Some(&target)) => Some((ch, c.position)),
+                _ => None,
+            })
+            .max_by_key(|&(_, at)| at);
+        let (channel, at) = match under {
+            Some(found) => found,
+            None => {
+                let end = crate::playlist::clips(s).iter().filter(|c| !c.muted).map(|c| c.end()).max().unwrap_or(0);
+                let span = (tick, if end > tick { end } else { tick + s.project.bar_ticks().max(1) * 4 });
+                (crate::playlist::create_automation_in(s, target, name, value, span, false), tick)
+            }
+        };
+        let ppq = f64::from(s.project.ppq.max(1));
+        let beat = f64::from(tick - at) / ppq;
+        let last = s.rec.auto.controls.iter().find(|c| c.target == target && c.channel == channel).map(|c| c.last);
+        let Some(auto) = s.project.automation_mut(channel) else { return };
+        if let Some(last) = last {
+            if !Opt::Blend.on() && last < beat {
+                auto.points.retain(|p| !(p.beat > last + 1e-9 && p.beat < beat - 1e-9));
+            }
+            if (beat - last).abs() < AUTO_STEP {
+                if let Some(p) = auto.points.iter_mut().find(|p| (p.beat - last).abs() < 1e-9) {
+                    p.value = value;
+                    return;
+                }
+            }
+        }
+        // A point already at this beat takes the value, else the new one goes in order.
+        match auto.points.iter().position(|p| (p.beat - beat).abs() < 1e-9) {
+            Some(i) => auto.points[i].value = value,
+            None => {
+                let i = auto.points.partition_point(|p| p.beat < beat);
+                auto.points.insert(i, AutoPoint::new(beat, value));
+            }
+        }
+        match s.rec.auto.controls.iter_mut().find(|c| c.target == target && c.channel == channel) {
+            Some(c) => c.last = beat,
+            None => s.rec.auto.controls.push(AutoControl { target, channel, last: beat }),
+        }
+        s.piano.dirty = true;
+    }
+
+    /// A host control (a fader, a mixer or EQ knob) moved: recorded as automation when it has a target
+    /// (`App::automation_target`).
+    pub(crate) fn record_host_control(&mut self, a: &crate::app::Action) {
+        if !self.rec_live(Opt::Automation) {
+            return;
+        }
+        if let Some((target, name, value)) = self.automation_target(a) {
+            self.record_automation(target, &name, value);
+        }
+    }
+
     /// A channel's volume or pan knob moved: its value goes into the current pattern as a control point at the playback
     /// position while recording automation (spec §2 Taking automation).
     pub(crate) fn record_knob(&mut self, id: KnobId) {
         use os_model::ControlPoint;
-        if matches!(id, KnobId::ChanVol(_) | KnobId::ChanPan(_)) {
-            self.start_on_input(Opt::Automation);
+        // The mixer's knobs (pan, EQ, ...) go into automation clips; a channel's volume and pan stay pattern control points.
+        if !matches!(id, KnobId::ChanVol(_) | KnobId::ChanPan(_)) {
+            return self.record_host_control(&crate::app::Action::Knob(id));
         }
+        self.start_on_input(Opt::Automation);
         if !self.rec_live(Opt::Automation) {
             return;
         }
@@ -710,6 +809,7 @@ impl App {
             self.write_held(h, last);
         }
         self.state.rec.take = None;
+        self.state.rec.auto = AutoRec::default();
     }
 
     /// Each tick: notes the playback position; when playback stops or pauses, or the pattern changes, the take ends;
@@ -756,6 +856,10 @@ impl App {
             }
             self.state.rec.take = None;
         }
+        // Playback went back (a loop, a jump): the automation take ends too; the next move starts a new one.
+        if live && self.state.rec.last.is_some_and(|l| now < l) {
+            self.state.rec.auto = AutoRec::default();
+        }
         if live {
             self.state.rec.last = Some(now);
         }
@@ -788,6 +892,7 @@ impl App {
         let since = r.since;
         self.state.rec.held.clear();
         self.state.rec.take = None;
+        self.state.rec.auto = AutoRec::default();
         self.state.rec.waiting = false;
         self.state.rec.count = None;
         self.act(crate::app::Action::Stop);
@@ -1139,6 +1244,62 @@ mod tests {
         app.record_knob(KnobId::ChanVol(1));
         assert_eq!(vol(&app), [(70, 1000), (200, 2000)]);
         assert_eq!(crate::record::hint(), "Record (notes) (R) - right-click for options");
+    }
+
+    /// A mixer fader moved while recording in SONG mode writes an automation clip for it: one clip, the points at the
+    /// playback beats, the sweep's earlier points replaced, one undo step that takes the clip away; PAT mode and
+    /// Automation off write nothing.
+    #[test]
+    fn records_controls_into_automation_clips() {
+        let mut app = app();
+        let act = Action::Fader(1);
+        let (target, name, _) = app.automation_target(&act).expect("a fader has a target");
+        let clips = |app: &App| {
+            let a: Vec<_> = app.state.project.channels.iter().filter(|c| app.state.project.automation(c.index).is_some_and(|a| a.targets.first() == Some(&target))).map(|c| c.index).collect();
+            a
+        };
+        let was = Opt::Automation.on();
+        if !was {
+            Opt::Automation.toggle();
+        }
+        app.toggle_record();
+        // PAT mode: nothing.
+        app.transport.pretend_at(96.0, false);
+        app.record_tick();
+        app.record_automation(target, &name, 0.5);
+        assert!(clips(&app).is_empty());
+        // SONG mode.
+        app.transport.pretend_at(96.0, true);
+        app.record_tick();
+        app.record_automation(target, &name, 0.25);
+        let ch = clips(&app);
+        assert_eq!(ch.len(), 1, "one clip made");
+        for (t, v) in [(144.0, 0.5), (192.0, 0.75)] {
+            app.transport.pretend_at(t, true);
+            app.record_tick();
+            app.record_automation(target, &name, v);
+        }
+        assert_eq!(clips(&app), ch, "the same clip");
+        let at = crate::playlist::clips(&app.state).iter().find(|c| matches!(c.source, ClipSource::Channel(i) if i == ch[0])).unwrap().position;
+        assert_eq!(at, 96);
+        let ppq = f64::from(app.state.project.ppq);
+        let pts: Vec<(f64, f64)> = app.state.project.automation(ch[0]).unwrap().points.iter().map(|p| (p.beat, p.value)).collect();
+        assert_eq!(pts.first().map(|p| p.1), Some(0.25));
+        assert!(pts.iter().any(|&(b, v)| (b - 48.0 / ppq).abs() < 1e-6 && (v - 0.5).abs() < 1e-9), "{pts:?}");
+        assert!(pts.iter().any(|&(b, v)| (b - 96.0 / ppq).abs() < 1e-6 && (v - 0.75).abs() < 1e-9), "{pts:?}");
+        assert!(pts.windows(2).all(|w| w[0].0 < w[1].0), "in order: {pts:?}");
+        stop(&mut app);
+        crate::history::undo(&mut app.state);
+        assert!(clips(&app).is_empty(), "undo takes the recorded clip away");
+        // Automation off: nothing.
+        Opt::Automation.toggle();
+        app.transport.pretend_at(96.0, true);
+        app.record_tick();
+        app.record_automation(target, &name, 0.9);
+        assert!(clips(&app).is_empty());
+        if was {
+            Opt::Automation.toggle();
+        }
     }
 
     /// "Disarm on stop" disarms at the stop; step edit never takes a recorded note.
