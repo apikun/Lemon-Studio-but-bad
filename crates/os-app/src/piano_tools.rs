@@ -55,8 +55,6 @@ pub enum NCmd {
     ScaleRoot(u8),
     ScaleKind(usize),
     ScaleSnap,
-    /// Opens the Scale highlighting menu (a menu opened from a submenu: menus here go two levels deep).
-    ScaleMenu,
     ScaleNames(crate::piano::ScaleNames),
 }
 
@@ -204,7 +202,7 @@ fn view_menu(s: &State) -> Vec<PItem> {
         PItem::not_yet("Mini piano roll preview"),
         PItem::head("Helpers"),
         PItem::not_yet("Note grid highlights").key("Alt+B"),
-        item("Scale highlighting", NCmd::ScaleMenu).mark(Mark::Check(s.piano.scale_highlight.enabled)),
+        PItem::sub("Scale highlighting", scale_menu(s)),
         PItem::not_yet("Show chord name for selection"),
         PItem::not_yet("Note length in note properties"),
         PItem::sep(),
@@ -600,11 +598,6 @@ pub fn run(app: &mut App, cmd: NCmd) -> Option<String> {
             done(made, &format!("made the selected notes {}", ty.label()))
         }
         NCmd::Press(..) | NCmd::Cut => unreachable!("handled above"),
-        NCmd::ScaleMenu => {
-            let (x, y) = app.mouse;
-            app.state.playlist.popup = Some(Popup { x: x - 6.0, y: y - 6.0, items: scale_menu(&app.state), sub: None, scroll: [0; 2] });
-            return None;
-        }
         NCmd::ScaleToggle => {
             let sh = &mut s.piano.scale_highlight;
             sh.enabled = !sh.enabled;
@@ -885,11 +878,8 @@ mod tests {
         let sh = a.state.piano.scale_highlight;
         assert!(sh.enabled && sh.root == 2 && sh.scale_idx == k);
         assert!(crate::chords::in_scale(2, k, 62) && !crate::chords::in_scale(2, k, 63), "D minor has D and no D#");
-        // The View entry opens the Scale highlighting menu.
         let view = view_menu(&a.state);
-        let Cmd::Piano(open) = view.iter().find(|i| i.label == "Scale highlighting").unwrap().cmd.clone() else { panic!() };
-        run(&mut a, open);
-        let scale = a.state.playlist.popup.take().expect("the scale menu opens").items;
+        let scale = &view.iter().find(|i| i.label == "Scale highlighting").unwrap().children;
         assert!(scale.iter().any(|i| i.cmd == Cmd::Piano(NCmd::ScaleKind(k)) && i.mark == Mark::Radio(true)));
         assert!(scale.iter().any(|i| i.cmd == Cmd::Piano(NCmd::ScaleRoot(2)) && i.mark == Mark::Radio(true)));
         run(&mut a, NCmd::ScaleToggle);
