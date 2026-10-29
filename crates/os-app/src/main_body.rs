@@ -475,6 +475,15 @@ impl Shell {
         if self.app.want_exit {
             el.exit();
         }
+        // Linux: the pointer came into a docked plugin window, which shows the main window's cursor (a tool's brush or
+        // pencil, left over from the playlist or the piano roll): the arrow, until the pointer is back over the main window.
+        #[cfg(target_os = "linux")]
+        if crate::plugin_window::take_pointer_entered() && !self.pointer_locked {
+            if let Some(window) = self.window.clone() {
+                self.cursor = app::Cursor::Default;
+                window.set_cursor(winit::window::Cursor::Icon(CursorIcon::Default));
+            }
+        }
         // macOS: Quit from the menu bar or the Dock asks about unsaved changes as closing the window does; AppKit waits
         // for the answer. A Quit while a dialog is open is turned down (the dialog is answered first).
         #[cfg(target_os = "macos")]

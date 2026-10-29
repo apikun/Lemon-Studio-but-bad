@@ -89,12 +89,21 @@ struct Conn {
 
 thread_local! {
     static CONN: RefCell<Option<Rc<Conn>>> = const { RefCell::new(None) };
+    /// The pointer came into a frame (`take_pointer_entered`).
+    static POINTER_ENTERED: Cell<bool> = const { Cell::new(false) };
     /// The main window has the keyboard focus (`main_focused`), known before the connection opens.
     static MAIN_FOCUSED: Cell<bool> = const { Cell::new(true) };
     /// Dialogs open now (`unpinned`): the frames are not kept above while there is one.
     static MODAL: Cell<u32> = const { Cell::new(0) };
     /// A docked frame moved, shrank or went: part of the main window was uncovered (`take_exposed`).
     static EXPOSED: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Whether the pointer came into a plugin frame since the last call (UI thread). A docked frame shows the main window's
+/// cursor, which stays the last one the app chose (a tool's brush or pencil from the playlist) while the pointer is over
+/// the frame: the app shows the arrow when this is true.
+pub fn take_pointer_entered() -> bool {
+    POINTER_ENTERED.with(|p| p.replace(false))
 }
 
 /// Whether part of the main window was uncovered (a docked frame moved, was clipped or closed, or the X server exposed
@@ -219,7 +228,7 @@ impl FrameWindow {
         let win = c.generate_id().map_err(|e| fail(&e))?;
         let area = c.generate_id().map_err(|e| fail(&e))?;
         let gc = c.generate_id().map_err(|e| fail(&e))?;
-        let events = EventMask::EXPOSURE | EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE | EventMask::POINTER_MOTION | EventMask::STRUCTURE_NOTIFY;
+        let events = EventMask::EXPOSURE | EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE | EventMask::POINTER_MOTION | EventMask::STRUCTURE_NOTIFY | EventMask::ENTER_WINDOW;
         let canvas = Canvas::new(u32::from(px(w, k)), u32::from(px(h, k)), k)?;
         let made = (|| -> Result<(), Box<dyn std::error::Error>> {
             // No background: every expose is painted from the canvas.
@@ -750,6 +759,10 @@ impl Frame {
             Event::Expose(_) => self.dirty.set(true),
             // A click in the plugin's editor (the grab on the area; `pump` lets the editor have it).
             Event::ButtonPress(e) if e.event == self.area => self.clicked(),
+            // The pointer came into the frame: a docked frame has the main window's cursor (a child window without a cursor
+            // of its own shows its parent's), which the main window cannot change while the pointer is here, as it gets
+            // no motion. The app shows the arrow (`take_pointer_entered`).
+            Event::EnterNotify(e) if e.event == self.win => POINTER_ENTERED.with(|p| p.set(true)),
             // An undo key in the plugin window (the key grab on the frame; the editor does not get it).
             Event::KeyPress(e) if e.event == self.win => {
                 if let Some((alt, shift)) = undo_key_of(e.state) {
@@ -1053,6 +1066,7 @@ fn window_of(e: &Event) -> Option<xproto::Window> {
         Event::ButtonRelease(e) => e.event,
         Event::MotionNotify(e) => e.event,
         Event::KeyPress(e) => e.event,
+        Event::EnterNotify(e) => e.event,
         Event::ClientMessage(e) => e.window,
         _ => return None,
     })
