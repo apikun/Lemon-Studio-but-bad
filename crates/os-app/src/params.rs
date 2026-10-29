@@ -399,7 +399,7 @@ impl App {
                         stretch.push((key, x.name.clone(), *v));
                     }
                 }
-                let (os_host::ParamEvent::Begin(id) | os_host::ParamEvent::Value(id, _) | os_host::ParamEvent::End(id)) = e else { continue };
+                let (os_host::ParamEvent::Begin(id) | os_host::ParamEvent::Value(id, _) | os_host::ParamEvent::End(id)) = e;
                 let index = ui.lists.get(&key).and_then(|l| l.params.iter().position(|x| x.id == id));
                 if let Some(index) = index {
                     gestures.push((key, index, e));

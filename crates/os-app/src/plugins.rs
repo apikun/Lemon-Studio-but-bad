@@ -65,10 +65,27 @@ pub struct Hosted {
     /// Where its detached window was when it last closed (screen px): reopened, it goes back there (spec: as above).
     #[cfg(plugin_windows)]
     pub placed: Option<(i32, i32)>,
+    /// A Windows plugin's editor joining its window on a thread of its own (`Plugins::open_window`).
+    #[cfg(plugin_windows)]
+    opening: Option<Opening>,
     /// When its open window opened (`Plugins::opens`): the limit on open editors closes the earliest first.
     #[cfg(plugin_windows)]
     opened: u64,
 }
+
+/// A Windows plugin's editor joining its window on a thread of its own (`os_host::Plugin::begin_editor`): its Wine side
+/// can stop answering there, which then holds up only that thread, not the app. The result comes through `done`.
+#[cfg(plugin_windows)]
+struct Opening {
+    done: std::sync::mpsc::Receiver<(Box<dyn os_host::PendingEditor>, Result<(), String>)>,
+    since: Instant,
+    /// The app was told it does not answer.
+    told: bool,
+}
+
+/// How long a Windows plugin's editor may take to join its window before the app says it is not responding.
+#[cfg(plugin_windows)]
+const HUNG_AFTER: Duration = Duration::from_secs(if cfg!(test) { 1 } else { 8 });
 
 /// When the UI last locked an instance for one of its per-tick jobs: the attention count it acted on, and when.
 #[derive(Debug, Clone, Copy)]
@@ -107,6 +124,8 @@ impl Hosted {
             detached: false,
             #[cfg(plugin_windows)]
             placed: None,
+            #[cfg(plugin_windows)]
+            opening: None,
             #[cfg(plugin_windows)]
             opened: 0,
         }
@@ -183,6 +202,9 @@ pub enum Request {
     KnobMenu(usize, crate::knobs::Control, i32, i32),
     /// A greyed-out control of the window was clicked: the app says it is not available yet.
     NotAvailable(&'static str),
+    /// A message for the hint bar (a plugin's window that does not answer, or could not open).
+    #[cfg_attr(not(plugin_windows), allow(dead_code))]
+    Say(String),
     /// The plugin asked for a menu over its editor (VST 3 context menu): shown at this screen point (spec:
     /// plugins/vst3-hosting.md §9).
     PluginMenu(usize, os_host::Menu, (i32, i32)),
@@ -487,22 +509,14 @@ impl Plugins {
     pub fn create_with(&mut self, row: usize, index: usize, state: Option<&[u8]>) -> Result<String, String> {
         let a = self.available.get(index).ok_or("no such plugin")?.clone();
         self.native_check(&a.desc)?;
-        let plugin = a.lib.clone().create(&a.desc.id)?;
-        let mut p = plugin.lock().map_err(|_| "plugin busy")?;
-        if let Some(st) = state {
-            if !p.load_state(st) {
-                eprintln!("[plugins] {} did not take its starting state", a.desc.name);
-            }
-        }
         if self.rate == 0 {
             self.rate = crate::transport::Transport::device_rate().unwrap_or(48000);
         }
         if std::env::var_os("OS_DEBUG").is_some() {
             eprintln!("[plugins] {} activated at {} Hz", a.desc.name, self.rate);
         }
-        if !p.activate(self.rate) {
-            return Err(format!("{} could not start", a.desc.name));
-        }
+        let plugin = start_plugin(a.lib.clone(), &a.desc, state, self.rate, crate::yabridge::is_bridged(&a.desc.path))?;
+        let mut p = plugin.lock().map_err(|_| "plugin busy")?;
         // Trimmed audio clips start their note further into the sample (spec: plugins/lemon-sampler.md §7).
         p.use_start_param(SAMPLE_START);
         // A note's own pan and mod X / Y reach the built-in Lemon instruments only (spec: audio/voice-levels.md); audio
@@ -533,18 +547,10 @@ impl Plugins {
         let key = fx_key(track, slot);
         self.drop_key(key);
         self.native_check(&a.desc)?;
-        let plugin = a.lib.clone().create(&a.desc.id)?;
-        let mut p = plugin.lock().map_err(|_| "plugin busy")?;
-        if let Some(st) = state {
-            p.load_state(st);
-        }
         if self.rate == 0 {
             self.rate = crate::transport::Transport::device_rate().unwrap_or(48000);
         }
-        if !p.activate(self.rate) {
-            return Err(format!("{} could not start", a.desc.name));
-        }
-        drop(p);
+        let plugin = start_plugin(a.lib.clone(), &a.desc, state, self.rate, crate::yabridge::is_bridged(&a.desc.path))?;
         self.hosted.insert(key, Hosted::new(plugin));
         Ok(a.desc.name)
     }
@@ -953,6 +959,35 @@ impl Plugins {
         }
         // The editor takes the frame's scale.
         let k = w.scale();
+        // A Windows plugin (yabridge): its editor joins the window on a thread of its own, without the instance's lock, so
+        // a Wine side that stops answering holds up that thread only; the window shows meanwhile, and `idle` takes the
+        // editor when it is in (or says it does not answer).
+        if crate::yabridge::is_bridged(&h.plugin.lock().map_err(|_| "plugin busy")?.desc().path) {
+            let begun = h.plugin.lock().map_err(|_| "plugin busy")?.begin_editor(w.area(), k);
+            if let Some(begun) = begun {
+                let mut pending = begun?;
+                let (tx, done) = std::sync::mpsc::channel();
+                std::thread::Builder::new()
+                    .name("editor-attach".into())
+                    .spawn(move || {
+                        let r = pending.attach();
+                        // A window closed meanwhile no longer listens: the editor is let go here (`PendingEditor`).
+                        let _ = tx.send((pending, r));
+                        os_host::wake();
+                    })
+                    .map_err(|e| e.to_string())?;
+                h.opening = Some(Opening { done, since: Instant::now(), told: false });
+                w.raise();
+                h.window = Some(w);
+                self.opens += 1;
+                h.opened = self.opens;
+                let name = self.preset_name(row);
+                if let Some(w) = self.hosted.get(&row).and_then(|h| h.window.as_ref()) {
+                    w.set_preset(name);
+                }
+                return Ok(());
+            }
+        }
         // The instance is locked only while its editor opens: the audio thread skips an instance it cannot lock, so
         // everything done under the lock is silence for that channel. Held through the frame's creation, layout,
         // painting and raise as well, opening a plugin window made a playing song drop out on that channel.
@@ -1026,6 +1061,11 @@ impl Plugins {
                 if h.detached {
                     h.placed = w.position().or(h.placed);
                 }
+            }
+            // An editor still joining its window is let go by its thread (`Opening`); the instance's own is closed.
+            #[cfg(plugin_windows)]
+            {
+                h.opening = None;
             }
             if let Ok(mut p) = h.plugin.lock() {
                 p.close_editor();
@@ -1130,6 +1170,7 @@ impl Plugins {
         #[cfg(target_os = "linux")]
         {
             crate::plugin_window::pump();
+            os_host::runloop::mark_ui_thread();
             os_host::runloop::dispatch();
         }
         let mut out = Vec::new();
@@ -1148,6 +1189,10 @@ impl Plugins {
             }
         }
         for (&row, h) in &mut self.hosted {
+            #[cfg(plugin_windows)]
+            if let Some(say) = editor_joined(row, h, &mut close) {
+                out.push(Request::Say(say));
+            }
             let look = h.due(h.seen);
             let mut menu: Option<(os_host::Menu, (i32, i32))> = None;
             if let Some(mut p) = look.and_then(|_| h.plugin.try_lock().ok()) {
@@ -1287,6 +1332,56 @@ fn stopped_message(name: &str, code: u32, effect: bool) -> String {
     format!("{}: {now}. Save your project and restart Mango Studio to use it again", os_host::guard::stopped_text(name, code))
 }
 
+/// How long a Windows plugin may take to start (create, take its state, activate) before the app gives up on it.
+const START_WITHIN: Duration = Duration::from_secs(if cfg!(test) { 1 } else { 12 });
+
+/// Creates plugin `desc` of `lib`, gives it `state` and activates it at `rate`: the instance, ready to host. A Windows
+/// plugin through yabridge (`bridged`) does this on a thread of its own, since its Wine side can stop answering while it
+/// starts (Ozone 12 under some Wine versions does), which then holds up that thread only: the UI waits `START_WITHIN`
+/// for it and gives up with a message. The thread goes on; an instance that arrives after that is leaked on purpose,
+/// never dropped off the UI thread (its Wine side is the one that stopped). Other plugins start here, as before.
+fn start_plugin(lib: Arc<dyn os_host::Library>, desc: &os_host::Descriptor, state: Option<&[u8]>, rate: u32, bridged: bool) -> Result<SharedPlugin, String> {
+    let name = desc.name.clone();
+    let start = {
+        let (id, state, name) = (desc.id.clone(), state.map(<[u8]>::to_vec), name.clone());
+        move || -> Result<SharedPlugin, String> {
+            let plugin = lib.create(&id)?;
+            {
+                let mut p = plugin.lock().map_err(|_| "plugin busy")?;
+                if let Some(st) = &state {
+                    if !p.load_state(st) {
+                        eprintln!("[plugins] {name} did not take its starting state");
+                    }
+                }
+                if !p.activate(rate) {
+                    return Err(format!("{name} could not start"));
+                }
+            }
+            Ok(plugin)
+        }
+    };
+    if !bridged {
+        return start();
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name(format!("start {name}"))
+        .spawn(move || {
+            let made = start();
+            if let Err(std::sync::mpsc::SendError(Ok(late))) = tx.send(made) {
+                std::mem::forget(late);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    match rx.recv_timeout(START_WITHIN) {
+        Ok(made) => made,
+        Err(_) => Err(format!(
+            "{name} did not start within {} s: its Windows side stopped answering. The plugin was not added; the rest of Mango Studio keeps working",
+            START_WITHIN.as_secs()
+        )),
+    }
+}
+
 /// Lets the user resize window `w` when its freshly opened editor (`size` in device px at `scale`) can be resized by the
 /// host (CLAP `gui.can_resize`, VST 3 `IPlugView::canResize`), and on Linux shrinks an editor whose window would not fit
 /// the monitor's work area to fit it. An editor that cannot be resized is left as it is.
@@ -1308,6 +1403,59 @@ fn fit_resizable(w: &FrameWindow, plugin: &std::sync::Mutex<dyn os_host::Plugin>
     }
     #[cfg(not(target_os = "linux"))]
     let _ = (size, scale);
+}
+
+/// A Windows plugin's editor joining its window (`Opening`): taken in once it is in, the window closed (and said why) when
+/// it refused, and said once when it does not answer for `HUNG_AFTER`. What to tell the user, if anything.
+#[cfg(plugin_windows)]
+fn editor_joined(row: usize, h: &mut Hosted, close: &mut Vec<usize>) -> Option<String> {
+    use std::sync::mpsc::TryRecvError;
+    let o = h.opening.as_mut()?;
+    let got = match o.done.try_recv() {
+        Ok(got) => got,
+        Err(TryRecvError::Empty) => {
+            if o.told || o.since.elapsed() < HUNG_AFTER {
+                return None;
+            }
+            o.told = true;
+            return Some(format!(
+                "{}'s window is not responding: its Windows side stopped answering. Close the window; the rest of Mango Studio keeps working",
+                h.name
+            ));
+        }
+        Err(TryRecvError::Disconnected) => (Box::new(Gone) as Box<dyn os_host::PendingEditor>, Err("its window could not open".into())),
+    };
+    h.opening = None;
+    let (pending, joined) = got;
+    let opened = joined.and_then(|()| h.plugin.lock().map_err(|_| "plugin busy".to_string())?.finish_editor(pending));
+    match (opened, h.window.as_ref()) {
+        (Ok(size), Some(w)) => {
+            let k = w.scale();
+            h.link = fit_editor(w, size, k);
+            if h.link.is_none() {
+                fit_resizable(w, &h.plugin, size, k);
+            }
+            None
+        }
+        (Ok(_), None) => None,
+        (Err(e), _) => {
+            close.push(row);
+            Some(format!("{}: {e}", h.name))
+        }
+    }
+}
+
+/// A stand-in for an editor whose thread ended without a word (it panicked): nothing to attach or let go.
+#[cfg(plugin_windows)]
+struct Gone;
+#[cfg(plugin_windows)]
+impl os_host::PendingEditor for Gone {
+    fn attach(&mut self) -> Result<(), String> {
+        Err("its window could not open".into())
+    }
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any + Send> {
+        self
+    }
 }
 
 /// Sizes window `w` to its freshly opened editor (`size` in device px at `scale`). A Lemon plugin answers the host
@@ -2073,6 +2221,8 @@ pub type ChannelInfoT = ();
 #[cfg(all(test, target_os = "linux"))]
 mod linux_tests {
     use super::*;
+    use std::ffi::c_void;
+    use std::sync::Mutex;
     use x11rb::connection::Connection;
     use x11rb::protocol::xproto::{ConnectionExt as _, CreateWindowAux, WindowClass};
 
@@ -2138,6 +2288,162 @@ mod linux_tests {
         plugins.clear();
         sweep_retired();
         connection.destroy_window(parent).unwrap().check().unwrap();
+    }
+
+    /// An editor that joins its window when `go` lets it: until then its thread waits, as a Wine side that stopped
+    /// answering does. `joins`: it then takes the window or refuses it.
+    struct SlowView {
+        go: std::sync::mpsc::Receiver<()>,
+        joins: bool,
+    }
+    impl os_host::PendingEditor for SlowView {
+        fn attach(&mut self) -> Result<(), String> {
+            let _ = self.go.recv();
+            if self.joins { Ok(()) } else { Err("the plug-in refused the editor window".into()) }
+        }
+        fn into_any(self: Box<Self>) -> Box<dyn std::any::Any + Send> {
+            self
+        }
+    }
+
+    /// A plugin whose editor opens in two halves and counts the editors it took in.
+    struct TwoHalves(os_host::Descriptor, Arc<std::sync::atomic::AtomicUsize>);
+    impl os_engine::Instrument for TwoHalves {
+        fn note_on(&mut self, _: u32, _: u8, _: f32) {}
+        fn note_off(&mut self, _: u32, _: u8) {}
+        fn process(&mut self, _: u32, _: &mut [f32], _: &mut [f32]) {}
+    }
+    impl os_engine::HostedEffect for TwoHalves {
+        fn process_fx(&mut self, _: u32, _: &mut [f32], _: &mut [f32]) {}
+    }
+    impl os_host::Plugin for TwoHalves {
+        fn desc(&self) -> &os_host::Descriptor {
+            &self.0
+        }
+        fn activate(&mut self, _: u32) -> bool {
+            true
+        }
+        fn idle(&mut self) {}
+        fn has_editor(&self) -> bool {
+            true
+        }
+        fn editor_open(&self) -> bool {
+            false
+        }
+        fn open_editor(&mut self, _: *mut c_void, _: f32) -> Result<(u32, u32), String> {
+            Err(String::new())
+        }
+        fn editor_size(&self) -> Option<(u32, u32)> {
+            None
+        }
+        fn close_editor(&mut self) {}
+        fn finish_editor(&mut self, pending: Box<dyn os_host::PendingEditor>) -> Result<(u32, u32), String> {
+            pending.into_any().downcast::<SlowView>().map_err(|_| "not mine".to_string())?;
+            self.1.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok((400, 300))
+        }
+        fn save_state(&self) -> Option<Vec<u8>> {
+            None
+        }
+        fn load_state(&mut self, _: &[u8]) -> bool {
+            false
+        }
+    }
+
+    /// A plugin library whose `create` answers at once, or never (`stuck`), as a yabridge host whose Wine side stopped
+    /// answering while the plugin starts.
+    struct Slow {
+        desc: os_host::Descriptor,
+        stuck: bool,
+    }
+    impl os_host::Library for Slow {
+        fn path(&self) -> &std::path::Path {
+            &self.desc.path
+        }
+        fn plugins(&self) -> &[os_host::Descriptor] {
+            std::slice::from_ref(&self.desc)
+        }
+        fn create(self: Arc<Self>, _: &str) -> Result<SharedPlugin, String> {
+            if self.stuck {
+                let (_keep, never) = std::sync::mpsc::channel::<()>();
+                let _ = never.recv();
+            }
+            Ok(Arc::new(Mutex::new(TwoHalves(self.desc.clone(), Default::default()))))
+        }
+    }
+
+    /// A Windows plugin that never finishes starting holds up its own thread only: the UI waits `START_WITHIN`, gives up
+    /// with a message, and goes on. One that starts is hosted as before, and a plugin that is not bridged starts on the
+    /// UI thread as always.
+    #[test]
+    fn a_windows_plugin_that_hangs_while_starting_is_given_up_on() {
+        let desc = builtin()[0].desc.clone();
+        let stuck: Arc<dyn os_host::Library> = Arc::new(Slow { desc: desc.clone(), stuck: true });
+        let t0 = Instant::now();
+        let r = start_plugin(stuck, &desc, None, 48000, true);
+        let took = t0.elapsed();
+        let e = r.err().expect("given up on");
+        assert!(e.contains("did not start within") && e.contains("keeps working"), "{e}");
+        assert!(took >= START_WITHIN && took < START_WITHIN + Duration::from_secs(2), "waited {took:?}");
+        let quick: Arc<dyn os_host::Library> = Arc::new(Slow { desc: desc.clone(), stuck: false });
+        assert!(start_plugin(quick.clone(), &desc, Some(&[1, 2]), 48000, true).is_ok(), "a plugin that starts is hosted");
+        assert!(start_plugin(quick, &desc, None, 48000, false).is_ok(), "not bridged: started as before");
+    }
+
+    /// A Windows plugin's editor joining its window on its own thread: while it does not answer the app goes on (the
+    /// instance is not locked, so the UI and the audio thread still get it) and says so once after `HUNG_AFTER`; once it
+    /// joins, its editor is taken in; one that refuses has its window closed, and says why.
+    #[test]
+    fn a_hung_editor_holds_up_its_own_thread_only() {
+        let taken = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let desc = builtin()[0].desc.clone();
+        let plugin: SharedPlugin = Arc::new(Mutex::new(TwoHalves(desc, taken.clone())));
+        let mut h = Hosted::new(plugin.clone());
+        let start = |h: &mut Hosted, joins: bool| {
+            let (go_tx, go) = std::sync::mpsc::channel();
+            let (tx, done) = std::sync::mpsc::channel();
+            let mut pending: Box<dyn os_host::PendingEditor> = Box::new(SlowView { go, joins });
+            std::thread::spawn(move || {
+                let r = pending.attach();
+                let _ = tx.send((pending, r));
+            });
+            h.opening = Some(Opening { done, since: Instant::now(), told: false });
+            go_tx
+        };
+        let mut close = Vec::new();
+
+        // Stuck: nothing to say yet, and the instance is free for everyone else.
+        let go = start(&mut h, true);
+        assert_eq!(editor_joined(3, &mut h, &mut close), None);
+        assert!(plugin.try_lock().is_ok(), "the instance is not locked while its editor joins");
+        std::thread::sleep(HUNG_AFTER + Duration::from_millis(50));
+        let said = editor_joined(3, &mut h, &mut close).expect("it says the window does not answer");
+        assert!(said.contains("not responding"), "{said}");
+        assert_eq!(editor_joined(3, &mut h, &mut close), None, "said once");
+        // It answers after all: its editor is taken in.
+        go.send(()).unwrap();
+        let t0 = Instant::now();
+        while h.opening.is_some() {
+            assert!(t0.elapsed() < Duration::from_secs(5));
+            let _ = editor_joined(3, &mut h, &mut close);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(taken.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert!(close.is_empty());
+
+        // One that refuses: its window closes, and it says why.
+        let go = start(&mut h, false);
+        go.send(()).unwrap();
+        let t0 = Instant::now();
+        let mut said = None;
+        while said.is_none() {
+            assert!(t0.elapsed() < Duration::from_secs(5));
+            said = editor_joined(3, &mut h, &mut close);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(said.unwrap().contains("refused"));
+        assert_eq!(close, [3]);
+        assert_eq!(taken.load(std::sync::atomic::Ordering::Relaxed), 1, "a refused editor is not taken in");
     }
 }
 

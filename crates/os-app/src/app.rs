@@ -2793,6 +2793,11 @@ impl App {
                         self.invalidate();
                         continue;
                     }
+                    Request::Say(text) => {
+                        self.state.message = Some(text);
+                        self.invalidate();
+                        continue;
+                    }
                 }
                 self.state.piano.dirty = true;
                 self.invalidate();

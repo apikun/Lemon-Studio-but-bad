@@ -461,6 +461,50 @@ const NOTE_EXPRESSION_VALUE_EVENT: u16 = 4;
 const TUNING_TYPE_ID: u32 = 2;
 
 /// A running VST 3 instance.
+/// An editor joining its window on a thread of its own (`os_host::PendingEditor`): made on the UI thread
+/// ([`Plugin::begin_editor`]), attached here, taken back by [`Plugin::finish_editor`]. Dropped unfinished, it is taken out
+/// of its window again.
+pub struct PendingView {
+    view: Option<VstPtr<dyn IPlugView>>,
+    /// The parent window, as an address.
+    parent: usize,
+    attached: bool,
+}
+
+// SAFETY: one thread at a time uses the view: the thread attaching it, then the UI thread taking it back (or dropping it).
+unsafe impl Send for PendingView {}
+
+impl os_host::PendingEditor for PendingView {
+    fn attach(&mut self) -> Result<(), String> {
+        let v = self.view.as_ref().ok_or("no editor")?;
+        unsafe {
+            if v.attached(self.parent as *mut c_void, PLATFORM_TYPE.as_ptr()) != kResultOk {
+                v.set_frame(std::ptr::null_mut());
+                return Err("the plug-in refused the editor window".into());
+            }
+        }
+        self.attached = true;
+        Ok(())
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any + Send> {
+        self
+    }
+}
+
+impl Drop for PendingView {
+    fn drop(&mut self) {
+        if let Some(v) = self.view.take() {
+            unsafe {
+                if self.attached {
+                    v.removed();
+                }
+                v.set_frame(std::ptr::null_mut());
+            }
+        }
+    }
+}
+
 pub struct Plugin {
     // Interface pointers first: they are released (in this order) before the module.
     view: Option<VstPtr<dyn IPlugView>>,
@@ -992,6 +1036,31 @@ impl Plugin {
     /// ui/ui-scaling.md §3). On macOS editors measure in points and follow their window's backing scale themselves (no
     /// content scaling there), so their sizes are turned into pixels at `scale` here.
     pub fn open_editor(&mut self, parent: *mut c_void, scale: f32) -> Result<(u32, u32), String> {
+        let view = self.prepare_view(scale)?;
+        unsafe {
+            if view.attached(parent, PLATFORM_TYPE.as_ptr()) != kResultOk {
+                view.set_frame(std::ptr::null_mut());
+                return Err("the plug-in refused the editor window".into());
+            }
+        }
+        Ok(self.take_view(view))
+    }
+
+    /// [`Plugin::open_editor`] in two halves (`os_host::Plugin::begin_editor`): the editor made and given its frame and
+    /// scale here; joining its window, the part that may hang, is the returned [`PendingView`]'s, on another thread.
+    pub fn begin_editor(&mut self, parent: *mut c_void, scale: f32) -> Result<PendingView, String> {
+        let view = self.prepare_view(scale)?;
+        Ok(PendingView { view: Some(view), parent: parent as usize, attached: false })
+    }
+
+    /// The editor of `pending` joined its window: it is the open editor now; its size in pixels.
+    pub fn finish_editor(&mut self, mut pending: PendingView) -> Result<(u32, u32), String> {
+        let view = pending.view.take().filter(|_| pending.attached).ok_or("the plug-in refused the editor window")?;
+        Ok(self.take_view(view))
+    }
+
+    /// A new editor for the window, its frame and content scale set, not yet in a window (the open one closes first).
+    fn prepare_view(&mut self, scale: f32) -> Result<VstPtr<dyn IPlugView>, String> {
         if !self.can_edit {
             return Err(format!("{} has no editor", self.desc.name));
         }
@@ -1010,19 +1079,20 @@ impl Plugin {
                     s.set_scale_factor(scale);
                 }
             }
-            if view.attached(parent, PLATFORM_TYPE.as_ptr()) != kResultOk {
-                view.set_frame(std::ptr::null_mut());
-                return Err("the plug-in refused the editor window".into());
-            }
-            let mut r = ViewRect::default();
-            view.get_size(&mut r);
-            self.view = Some(view);
-            self.editor = true;
-            if let Ok(mut s) = self.shared.size.lock() {
-                *s = None;
-            }
-            Ok(self.to_px(r.right - r.left, r.bottom - r.top))
+            Ok(view)
         }
+    }
+
+    /// An editor that joined its window becomes the open one; its size in pixels.
+    fn take_view(&mut self, view: VstPtr<dyn IPlugView>) -> (u32, u32) {
+        let mut r = ViewRect::default();
+        unsafe { view.get_size(&mut r) };
+        self.view = Some(view);
+        self.editor = true;
+        if let Ok(mut s) = self.shared.size.lock() {
+            *s = None;
+        }
+        self.to_px(r.right - r.left, r.bottom - r.top)
     }
 
     /// The editor's size in pixels (when open): what it asked for last, else what it reports.
@@ -1350,6 +1420,15 @@ impl os_host::Plugin for Plugin {
 
     fn open_editor(&mut self, parent: *mut c_void, scale: f32) -> Result<(u32, u32), String> {
         Plugin::open_editor(self, parent, scale)
+    }
+
+    fn begin_editor(&mut self, parent: *mut c_void, scale: f32) -> Option<Result<Box<dyn os_host::PendingEditor>, String>> {
+        Some(Plugin::begin_editor(self, parent, scale).map(|p| Box::new(p) as Box<dyn os_host::PendingEditor>))
+    }
+
+    fn finish_editor(&mut self, pending: Box<dyn os_host::PendingEditor>) -> Result<(u32, u32), String> {
+        let pending = pending.into_any().downcast::<PendingView>().map_err(|_| "not this plugin's editor".to_string())?;
+        Plugin::finish_editor(self, *pending)
     }
 
     fn editor_size(&self) -> Option<(u32, u32)> {
