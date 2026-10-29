@@ -556,7 +556,6 @@ fn toolbar(ui: &mut Ui, l: &Look, lay: &Layout) {
     let nx = lay.w - 45.0 - name_w;
     let wr = Rect::new(nx - 16.0, 3.0, name_w + 18.0, 19.0);
     ui.hit(wr, Target::Wordmark);
-    lemon::lemon_mark(ui.c, nx - 9.0, 12.5, 4.5, brand::MAIN);
     lemon::spaced(ui.c, MARK, nx, 3.0, plug::WORDMARK, "TESLA", 3.0);
     let lv = lay.meter;
     lemon::plug_well(ui.c, lv, 3.0);

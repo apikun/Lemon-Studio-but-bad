@@ -6229,6 +6229,16 @@ impl App {
         if self.drag.is_none() && self.over_clip_icon && self.hover == Some(Action::PlaylistArea) {
             return Cursor::Pointer;
         }
+        // An audio clip's fade, tension, gain and crossfade handles (§9a) and automation tension handles are grabbed:
+        // the hand over them and while one is dragged, not the tool's icon.
+        use crate::playlist::PlDrag;
+        let handle_drag = matches!(
+            self.drag,
+            Some(Drag::Pl(PlDrag::Fade { .. } | PlDrag::FadeTension { .. } | PlDrag::Gain { .. } | PlDrag::Crossfade { .. } | PlDrag::Tension { .. }))
+        );
+        if handle_drag || (self.drag.is_none() && self.hover == Some(Action::PlaylistArea) && self.state.playlist.hover_handle.is_some()) {
+            return Cursor::Pointer;
+        }
         match edges {
             0 if self.resize_cursor => Cursor::EwResize,
             0 if matches!(self.drag, Some(Drag::Fader { .. })) => Cursor::Pointer,
@@ -18122,6 +18132,36 @@ mod tests {
         assert_eq!(app.state.playlist.pos, 4 * bar);
         assert!(!app.transport.playing(), "and does not start playback");
         assert_eq!(app.state.tempo, 140.0, "the initial tempo");
+    }
+
+    /// An audio clip's gain handle shows the hand, over it and while it is dragged (not the Draw tool's brush); the clip
+    /// beside it keeps the move cursor.
+    #[test]
+    fn clip_handles_show_the_hand() {
+        use crate::playlist as pl;
+        let Ok(mut c) = Canvas::new(1920, 1080, 1.0) else { return };
+        let (mut app, _, _, _) = ruler_app(&mut c);
+        app.state.playlist_bar_w = 200.0;
+        let wav = std::env::temp_dir().join(format!("os-app-handle-{}.wav", std::process::id()));
+        os_engine::wav::write_f32_stereo(&mut std::fs::File::create(&wav).unwrap(), 48000, &[0.5; 96000]).unwrap();
+        pl::add_audio_clip(&mut app.state, &wav.to_string_lossy(), 0, 0).expect("audio clip added");
+        app.state.playlist.tool = pl::PlTool::Draw;
+        frame(&mut app, &mut c, None);
+        let g = pl::PGeom::new(&app.state, app.pl_grid().unwrap());
+        let ci = pl::clips(&app.state).len() - 1;
+        let body = g.body(&pl::clips(&app.state)[ci]);
+        let (gx, gy) = (body.cx(), body.bottom() - 2.0);
+        app.mouse_move(gx, gy);
+        assert_eq!(app.state.playlist.hover_handle, Some(pl::Handle::Gain));
+        assert_eq!(app.cursor(), Cursor::Pointer, "over the gain handle");
+        app.mouse_down();
+        app.mouse_move(gx, gy - 20.0);
+        assert!(matches!(app.drag, Some(Drag::Pl(pl::PlDrag::Gain { .. }))));
+        assert_eq!(app.cursor(), Cursor::Pointer, "while it is dragged");
+        app.mouse_up();
+        app.mouse_move(body.x + body.w * 0.3, body.cy());
+        assert_eq!(app.cursor(), Cursor::Move, "the clip itself");
+        let _ = std::fs::remove_file(&wav);
     }
 
     /// Stretch mode (spec: ui/playlist.md §9b): Shift+M on, then dragging an audio clip's end to twice its length
