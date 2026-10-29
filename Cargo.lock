@@ -1935,6 +1935,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lemon-crusher"
+version = "0.2.1"
+dependencies = [
+ "lemon-small-fx",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
 name = "lemon-delay"
 version = "0.2.1"
 dependencies = [
@@ -2950,6 +2959,7 @@ dependencies = [
  "lemon-bass",
  "lemon-boom",
  "lemon-chorus",
+ "lemon-crusher",
  "lemon-delay",
  "lemon-fast-distortion",
  "lemon-filter",
