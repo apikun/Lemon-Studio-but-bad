@@ -251,6 +251,7 @@ pub fn builtin() -> Vec<Available> {
     static BOOM: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static BASS: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static ACID: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static WAVETABLE: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     let mut v = linked(&LIB, &lemon_sampler::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, LEMON_SAMPLER);
     v.extend(linked(&OSC3, &lemon_3x_osc::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, crate::osc3::LEMON_TRIO));
     v.extend(linked(&CITRUS, &citrus::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, crate::citrus::CITRUS));
@@ -259,6 +260,8 @@ pub fn builtin() -> Vec<Available> {
     v.extend(linked(&BOOM, &lemon_boom::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Boom"));
     v.extend(linked(&BASS, &lemon_bass::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Bass"));
     v.extend(linked(&ACID, &lemon_acid::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Acid"));
+    // Mango Wavetable, from battlemountain2's fork (spec: docs/lemon-wavetable.md).
+    v.extend(linked(&WAVETABLE, &lemon_wavetable::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_WAVETABLE));
     v
 }
 
@@ -283,8 +286,11 @@ pub fn builtin_effects() -> Vec<Available> {
         &lemon_transient_processor::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
         &lemon_chorus::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
         &lemon_stereo_shaper::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
+        &lemon_filter::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
         &tesla::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
         &mango_beat::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
+        &lemon_flanger::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
+        &lemon_phaser::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void,
     ];
     let names = FILE_MAPPED.into_iter().chain(LINKED_EFFECTS);
     LIBS.iter().zip(entries).zip(names).flat_map(|((lib, entry), name)| linked(lib, entry, name)).collect()
@@ -750,6 +756,12 @@ impl Plugins {
         self.set_sampler(row, None, &stretch_params(sound))
     }
 
+    /// Row `row`'s Lemon Sampler takes the fx/reverse settings `sound` holds (`clip`: the row is an audio clip's).
+    pub fn set_sampler_fx(&mut self, row: usize, sound: &os_model::ChannelSound, clip: bool) -> bool {
+        let params = sample_params(sound, clip);
+        self.set_sampler(row, None, &params)
+    }
+
     /// Loads sample `path` into row `row`'s Lemon Sampler: its current state with a new `sample-path`, so every other
     /// setting stays. False when the row hosts nothing or the plugin refused the state.
     pub fn load_sample(&mut self, row: usize, path: &str) -> bool {
@@ -919,7 +931,7 @@ impl Plugins {
         if row >= FX_KEY {
             w.set_strip(false);
         }
-        // The editor takes the frame's scale (on Linux the X server's, not the main window's).
+        // The editor takes the frame's scale.
         let k = w.scale();
         // The instance is locked only while its editor opens: the audio thread skips an instance it cannot lock, so
         // everything done under the lock is silence for that channel. Held through the frame's creation, layout,
@@ -942,14 +954,13 @@ impl Plugins {
         Ok(())
     }
 
-    /// The main window's DPI scale changed: docked windows follow it (detached ones follow their own monitor,
-    /// `FrameEvent::Dpi`). Spec: ui/ui-scaling.md §3.
+    /// The main window's DPI scale changed: docked windows follow it. Spec: ui/ui-scaling.md §3.
     pub fn set_scale(&mut self, scale: f32) {
-        if scale <= 0.0 || scale == self.scale {
+        if !scale.is_finite() || scale <= 0.0 || scale == self.scale {
             return;
         }
         self.scale = scale;
-        #[cfg(any(windows, target_os = "macos"))]
+        #[cfg(plugin_windows)]
         for row in self.docked() {
             self.rescale_window(row, scale);
         }
@@ -957,7 +968,7 @@ impl Plugins {
 
     /// Redraws row `row`'s window at `scale`: the frame resizes and the editor is reopened, since plugins take their
     /// scale when the editor opens (on macOS its sizes are measured at it). The plugin's page is kept.
-    #[cfg(any(windows, target_os = "macos"))]
+    #[cfg(plugin_windows)]
     fn rescale_window(&mut self, row: usize, scale: f32) {
         let Some(Hosted { plugin, window: Some(w), link, .. }) = self.hosted.get_mut(&row) else { return };
         if w.scale() == scale {
@@ -1015,6 +1026,11 @@ impl Plugins {
             if let Some(w) = &h.window {
                 w.set_detached(owner, on);
             }
+        }
+        // Docked again on Linux, the frame takes the main window's scale (it may have changed while detached).
+        #[cfg(target_os = "linux")]
+        if !on && self.owner != 0 {
+            self.rescale_window(row, self.scale);
         }
     }
 
@@ -1298,12 +1314,14 @@ pub fn retired_count() -> usize {
 
 /// Name of Lemon Studio's sampler plugin: it plays and edits every sampler channel (spec: plugins/lemon-sampler.md §7).
 pub const LEMON_SAMPLER: &str = "Mango Sampler";
+/// Name of Mango Studio's wavetable synth, from battlemountain2's fork.
+pub const MANGO_WAVETABLE: &str = "Mango Wavetable";
 /// Name of Lemon Studio's parametric EQ plugin.
 pub const LEMON_EQ: &str = "Mango Parametric EQ";
 /// Lemon Studio's effects compiled in besides the EQ (`builtin_effects`, in this order). They have no file plugin of
 /// their own to be stored as, so a project stores them wrapped, as it stored their plugin files
 /// (`project_plugins::is_wrapped`).
-pub const LINKED_EFFECTS: [&str; 12] = [
+pub const LINKED_EFFECTS: [&str; 15] = [
     "Mango Limiter",
     "Mango Reverb",
     "Mango Delay",
@@ -1314,8 +1332,11 @@ pub const LINKED_EFFECTS: [&str; 12] = [
     "Mango Transient Processor",
     "Mango Chorus",
     "Mango Stereo Shaper",
+    "Mango Filter",
     TESLA,
     "Mango Beat",
+    "Mango Flanger",
+    "Mango Phaser",
 ];
 /// Lemon Studio's effects compiled in that a project stores under the FL plugin they recreate, with that plugin's
 /// state (`new_slot`, `store_builtin_states`), so they are never saved wrapped.
@@ -1379,7 +1400,7 @@ pub fn current_name(name: &str) -> &str {
 /// (`App::sync_effects`, `App::store_builtin_states`; spec: plugins/lemon-small-effects.md "Opened projects' slots").
 /// Not Lemon Stereo Shaper: the difference output is the mixer slot's alone (spec: plugins/lemon-stereo-shaper.md §5),
 /// so the engine's own Stereo Shaper keeps playing those slots.
-pub const FL_RECREATIONS: [(&str, &str); 9] = [
+pub const FL_RECREATIONS: [(&str, &str); 12] = [
     ("Fruity Limiter", "Mango Limiter"),
     ("Fruity Reeverb 2", "Mango Reverb"),
     ("Fruity Delay 3", "Mango Delay"),
@@ -1389,6 +1410,9 @@ pub const FL_RECREATIONS: [(&str, &str); 9] = [
     ("Fruity Stereo Enhancer", "Mango Stereo Enhancer"),
     ("Transient Processor", "Mango Transient Processor"),
     ("Fruity Chorus", "Mango Chorus"),
+    ("Fruity Filter", "Mango Filter"),
+    ("Fruity Flanger", "Mango Flanger"),
+    ("Fruity Phaser", "Mango Phaser"),
 ];
 
 /// The Lemon effect of `FL_RECREATIONS` that plays slots stored as `file` (any case: files may spell the id
@@ -1410,6 +1434,9 @@ pub fn recreation_state_from_fl(lemon: &str, fl: &[u8]) -> Option<Vec<u8>> {
         "Mango Stereo Enhancer" => small(lemon_small_fx::stereo_enhancer::SPEC, fl),
         "Mango Transient Processor" => small(lemon_small_fx::transient_processor::SPEC, fl),
         "Mango Chorus" => small(lemon_small_fx::chorus::SPEC, fl),
+        "Mango Filter" => small(lemon_small_fx::filter::SPEC, fl),
+        "Mango Flanger" => small(lemon_small_fx::flanger::SPEC, fl),
+        "Mango Phaser" => small(lemon_small_fx::phaser::SPEC, fl),
         _ => return None,
     })
 }
@@ -1428,6 +1455,9 @@ pub fn fl_from_recreation_state(lemon: &str, blob: &[u8]) -> Option<Vec<u8>> {
         "Mango Stereo Enhancer" => small(lemon_small_fx::stereo_enhancer::SPEC, blob),
         "Mango Transient Processor" => small(lemon_small_fx::transient_processor::SPEC, blob),
         "Mango Chorus" => small(lemon_small_fx::chorus::SPEC, blob),
+        "Mango Filter" => small(lemon_small_fx::filter::SPEC, blob),
+        "Mango Flanger" => small(lemon_small_fx::flanger::SPEC, blob),
+        "Mango Phaser" => small(lemon_small_fx::phaser::SPEC, blob),
         _ => None,
     }
 }
@@ -1981,6 +2011,77 @@ pub type ChannelInfoT = ();
 
 /// Opens the bundled Lemon Sampler in a real plugin window, clicks through the strip and captures the window
 /// (`OS_SHOT_DIR=<dir> OS_CLAP=<Lemon Sampler.clap> cargo test -p os-app plugin_window_shots -- --ignored`).
+#[cfg(all(test, target_os = "linux"))]
+mod linux_tests {
+    use super::*;
+    use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::{ConnectionExt as _, CreateWindowAux, WindowClass};
+
+    #[test]
+    fn invalid_host_scales_are_ignored() {
+        let mut plugins = Plugins { scale: 1.25, ..Plugins::default() };
+        for scale in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            plugins.set_scale(scale);
+            assert_eq!(plugins.scale, 1.25);
+        }
+    }
+
+    #[test]
+    #[ignore = "requires an X11 display; also runs on Hyprland's XWayland"]
+    fn docked_editor_follows_xwayland_parent_scale() {
+        let (connection, screen) = x11rb::connect(None).expect("X11 test display");
+        let parent = connection.generate_id().unwrap();
+        connection.create_window(
+            x11rb::COPY_DEPTH_FROM_PARENT, parent, connection.setup().roots[screen].root, 0, 0, 1920, 1080, 0,
+            WindowClass::INPUT_OUTPUT, x11rb::COPY_FROM_PARENT, &CreateWindowAux::new(),
+        ).unwrap().check().unwrap();
+        let mut plugins = Plugins { available: builtin(), owner: parent as isize, scale: 1.5, rate: 48000, ..Plugins::default() };
+        let index = plugins.index_of(LEMON_SAMPLER).expect("built-in Lemon Sampler");
+        plugins.create_with(0, index, None).unwrap();
+        let info = ChannelInfo { name: LEMON_SAMPLER.into(), target: "Insert 1".into(), enabled: true, volume: 0.78, pan: 0.0, pitch_cents: 0, range: 2, track: 1, max_track: 125, misc: None };
+        plugins.open_window(0, info).unwrap();
+        let pump = |plugins: &mut Plugins| {
+            let until = std::time::Instant::now() + std::time::Duration::from_millis(100);
+            while std::time::Instant::now() < until {
+                plugins.idle(|_| None);
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        };
+        pump(&mut plugins);
+        assert_eq!(plugins.hosted[&0].window.as_ref().unwrap().scale(), 1.5);
+        plugins.hosted.get_mut(&0).unwrap().link.as_mut().expect("sampler host link").set_page(1);
+        for scale in [1.5, 1.0, 1.25, 2.0] {
+            plugins.set_scale(scale);
+            pump(&mut plugins);
+            let frame = plugins.hosted[&0].window.as_ref().unwrap();
+            assert_eq!(frame.scale(), scale);
+            assert!(!frame.detached());
+            assert_eq!(connection.query_tree(frame.hwnd() as u32).unwrap().reply().unwrap().parent, parent);
+            let area = frame.area() as usize as u32;
+            let children = connection.query_tree(area).unwrap().reply().unwrap().children;
+            assert_eq!(children.len(), 1);
+            let area_size = connection.get_geometry(area).unwrap().reply().unwrap();
+            let editor_size = connection.get_geometry(children[0]).unwrap().reply().unwrap();
+            let expected = ((560.0 * scale).round() as u16, (390.0 * scale).round() as u16);
+            assert_eq!((area_size.width, area_size.height), expected, "editor area at {scale}");
+            assert_eq!((editor_size.width, editor_size.height), expected, "editor at {scale}");
+            assert_eq!(plugins.hosted[&0].link.as_ref().unwrap().page_now(), 1);
+        }
+        plugins.rescale_window(0, 1.0);
+        assert_eq!(plugins.scale, 2.0);
+        plugins.set_detached(0, false);
+        pump(&mut plugins);
+        assert_eq!(plugins.hosted[&0].window.as_ref().unwrap().scale(), 2.0, "docking reconciles a stale editor scale");
+        let area = plugins.hosted[&0].window.as_ref().unwrap().area() as usize as u32;
+        let area_size = connection.get_geometry(area).unwrap().reply().unwrap();
+        assert_eq!((area_size.width, area_size.height), (1120, 780));
+        assert_eq!(plugins.hosted[&0].link.as_ref().unwrap().page_now(), 1);
+        plugins.clear();
+        sweep_retired();
+        connection.destroy_window(parent).unwrap().check().unwrap();
+    }
+}
+
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;

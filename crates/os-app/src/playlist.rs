@@ -1,5 +1,6 @@
 // Copyright (C) 2026 ItsAlphaNeon
 // Copyright (C) 2026 thacer13
+// Copyright (C) 2026 battlemountain2
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -203,6 +204,47 @@ pub enum Mark {
     Radio(bool),
 }
 
+/// The grids Chop ▸ cuts clips on (battlemountain2's drum chopper, `crate::drum_chop`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChopGrid {
+    Bar,
+    HalfBar,
+    Beat,
+    HalfBeat,
+    Step,
+    ThirtySecond,
+    TripletSixth,
+}
+
+impl ChopGrid {
+    pub const ALL: [ChopGrid; 7] = [ChopGrid::Bar, ChopGrid::HalfBar, ChopGrid::Beat, ChopGrid::HalfBeat, ChopGrid::Step, ChopGrid::ThirtySecond, ChopGrid::TripletSixth];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ChopGrid::Bar => "Bar",
+            ChopGrid::HalfBar => "Half bar",
+            ChopGrid::Beat => "Beat",
+            ChopGrid::HalfBeat => "Half beat",
+            ChopGrid::Step => "Step",
+            ChopGrid::ThirtySecond => "32nd",
+            ChopGrid::TripletSixth => "Triplet",
+        }
+    }
+
+    pub fn ticks(self, ppq: u16) -> u32 {
+        let p = u32::from(ppq.max(1));
+        match self {
+            ChopGrid::Bar => p * 4,
+            ChopGrid::HalfBar => p * 2,
+            ChopGrid::Beat => p,
+            ChopGrid::HalfBeat => (p / 2).max(1),
+            ChopGrid::Step => (p / 4).max(1),
+            ChopGrid::ThirtySecond => (p / 8).max(1),
+            ChopGrid::TripletSixth => (p * 4 / 6).max(1),
+        }
+    }
+}
+
 /// Commands of the playlist's popup menus (§10).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
@@ -238,6 +280,8 @@ pub enum Cmd {
     /// Shift+Tab: the next common snap setting (§4).
     CycleSnap,
     Consolidate,
+    /// Shift+R: toggle sample reverse on selected audio clips.
+    ToggleReverse,
     SelectAll,
     Deselect,
     InvertSelection,
@@ -274,6 +318,19 @@ pub enum Cmd {
     ClipMute(usize),
     ClipDelete(usize),
     ClipUnique(usize),
+    /// Rename and color... / Change color... (the palette shown) of a pattern clip's pattern.
+    ClipPatternBox(usize, bool),
+    /// Select source pattern ▸: the clip plays that pattern instead.
+    ClipSetSource(usize, u16),
+    /// Use current time signature from ▸: the clip's pattern takes this signature.
+    ClipTimeSig(usize, u16, u16),
+    /// Select region ▸: the clip plays the pattern from one marker to the next (start, end in pattern ticks).
+    ClipRegion(usize, u32, u32),
+    /// Chop ▸ (battlemountain2's drum chopper): the clip, with the other selected clips when it is one of them, cut at
+    /// its drum hits (audio clips), on a grid, or into a stutter of that many repeats of its first piece.
+    ChopTransients(usize),
+    ChopGrid(usize, ChopGrid),
+    ChopStutter(usize, usize),
     ClipEditSource(usize),
     ClipSelectSimilar(usize),
     ClipRename(usize),
@@ -607,6 +664,10 @@ pub struct PlaylistState {
     pub last_clip: Option<(usize, std::time::Instant)>,
     /// Last left click in the ruler: a second one soon after clears the time selection.
     pub last_ruler: Option<std::time::Instant>,
+    /// Last click on a clip handle (clip, handle, time): double-click resets it (gain to 0 dB, tension to 0.0).
+    pub last_handle_click: Option<(usize, Handle, std::time::Instant)>,
+    /// Last left click on a picker item (source, time): double-click opens it (e.g. pattern in piano roll).
+    pub last_pick: Option<(ClipSource, std::time::Instant)>,
     /// Waveform cache by sample path (`None` = could not be loaded).
     pub waves: RefCell<HashMap<String, Option<Rc<Wave>>>>,
     /// Tones of the same samples for colourful waveforms, analysed when first needed (`tones`).
@@ -645,6 +706,8 @@ impl Default for PlaylistState {
             last_header: None,
             last_clip: None,
             last_ruler: None,
+            last_handle_click: None,
+            last_pick: None,
             waves: RefCell::new(HashMap::new()),
             tones: RefCell::new(HashMap::new()),
             wave_wait: false,
@@ -721,12 +784,16 @@ impl PlaylistState {
 
 /// Height of a member row of a collapsed group: a thin strip showing its clips as bars (§6a).
 pub const STRIP_H: f32 = 6.0;
+/// The lowest a track's own height goes (its "..." handle; a click shrinks it to this).
+pub const TRACK_MIN: f32 = 20.0;
 
 /// Vertical layout of the tracks (§6a): every track's top in content pixels. Rows are `row_h` tall (`ROW_H` unless
 /// zoomed); members of a collapsed group are `STRIP_H` strips.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rows {
     top: Vec<f32>,
+    /// Members of a collapsed group, drawn as strips.
+    strips: Vec<bool>,
     pub row_h: f32,
 }
 
@@ -736,6 +803,7 @@ impl Rows {
         // On the drawing grid, so tops and heights add up exactly (`PGeom::xs64`).
         let row_h = snap(f64::from(s.playlist.row_h.clamp(ROW_MIN, ROW_MAX)));
         let mut top = Vec::with_capacity(usize::from(TRACKS) + 1);
+        let mut strips = Vec::with_capacity(usize::from(TRACKS));
         let (mut y, mut collapsed) = (0.0, false);
         for t in 0..usize::from(TRACKS) {
             top.push(y);
@@ -744,15 +812,19 @@ impl Rows {
             if !grouped {
                 collapsed = tr.is_some_and(|x| x.collapsed);
             }
-            y += if grouped && collapsed { STRIP_H } else { row_h };
+            let strip = grouped && collapsed;
+            strips.push(strip);
+            // A track's own height (its "..." handle): a share of the row height, never under `TRACK_MIN`.
+            let own = tr.map_or(1.0, |x| x.height);
+            y += if strip { STRIP_H } else if own == 1.0 { row_h } else { snap(f64::from((row_h * own).max(TRACK_MIN))) };
         }
         top.push(y);
-        Rows { top, row_h }
+        Rows { top, strips, row_h }
     }
 
-    /// A clip's height: its row less the 3 px gap.
-    pub fn clip_h(&self) -> f32 {
-        self.row_h - 3.0
+    /// A clip's height on track `t`: its row less the 3 px gap.
+    pub fn clip_h(&self, t: u16) -> f32 {
+        self.height(t) - 3.0
     }
 
     pub fn top(&self, t: u16) -> f32 {
@@ -766,7 +838,7 @@ impl Rows {
 
     /// A collapsed group's member: drawn as a strip.
     pub fn strip(&self, t: u16) -> bool {
-        self.height(t) < self.row_h - 0.5
+        self.strips[usize::from(t.min(TRACKS - 1))]
     }
 
     /// The track at content height `y`.
@@ -850,7 +922,7 @@ impl PGeom {
         if self.rows.strip(c.track) {
             return Rect::new(x, self.y_of(c.track) + 1.0, w, STRIP_H - 2.0);
         }
-        Rect::new(x, self.y_of(c.track), w, self.rows.clip_h())
+        Rect::new(x, self.y_of(c.track), w, self.rows.clip_h(c.track))
     }
 
     /// `clip_rect` for drawing: an edge further than 2048 px outside the grid is pulled in to that distance, so every
@@ -868,7 +940,7 @@ impl PGeom {
     /// The body of a clip below its title strip (automation curves, notes, waveforms).
     pub fn body(&self, c: &Clip) -> Rect {
         let r = self.clip_rect(c);
-        Rect::new(r.x, r.y + TITLE_H, r.w, (self.rows.clip_h() - TITLE_H - 1.0).max(1.0))
+        Rect::new(r.x, r.y + TITLE_H, r.w, (r.h - TITLE_H - 1.0).max(1.0))
     }
 }
 
@@ -1910,6 +1982,29 @@ fn end_solo(s: &mut State) {
     }
 }
 
+/// Pattern `n`'s time signature: a signature marker at its start, num / den (any signature marker there replaced).
+fn set_pattern_signature(s: &mut State, n: u16, num: u16, den: u16) {
+    if s.project.pattern(n).is_none() {
+        s.project.patterns.push(os_model::Pattern { number: n, ..Default::default() });
+    }
+    let Some(p) = s.project.patterns.iter_mut().find(|p| p.number == n) else { return };
+    p.markers.retain(|m| !(m.kind == os_model::TimeMarker::SIGNATURE && m.position == 0));
+    p.markers.push(os_model::TimeMarker {
+        position: 0,
+        kind: os_model::TimeMarker::SIGNATURE,
+        name: format!("{num}/{den}"),
+        numerator: num as u8,
+        denominator: den as u8,
+        scale: 0,
+    });
+    p.markers.sort_by_key(|m| m.position);
+}
+
+/// Whether (`x`, `y`) is on the menu icon of the clip drawn at `r`: the title strip's left end (§10).
+pub fn on_menu_icon(r: &Rect, x: f32, y: f32) -> bool {
+    r.w > 20.0 && x >= r.x && x < r.x + 14.0 && y >= r.y && y < r.y + TITLE_H
+}
+
 /// Make unique: a pattern clip gets its own copy of the pattern (§5).
 pub fn make_unique(s: &mut State, i: usize) -> Option<u16> {
     let c = *clips(s).get(i)?;
@@ -1969,8 +2064,10 @@ pub fn create_automation(s: &mut State, tgt: u32, name: &str, value: f64) -> u16
         // Spec: ui/settings-choices.md "Light mode and clip note colours (2026-10-16)" (`clip_colors`).
         color: Some(s.clip_colors.new_channel(index)),
         enabled: true,
+        // The clip's range 0..1: stored pan 0 (minimum), volume 12800 (maximum), as FL stores a new clip's
+        // (spec: audio/automation.md "Range").
         volume: 1.0,
-        pan: 0.0,
+        pan: -1.0,
         pitch_cents: 0,
         mixer_track: 0,
         sample_path: None,
@@ -2032,7 +2129,8 @@ pub fn add_clip_channel(s: &mut State, kind: ChannelKind) -> usize {
         color: (!audio).then(|| Rgb::new(0x5a, 0x74, 0x4c)),
         enabled: true,
         volume: if audio { 0.78125 } else { 1.0 },
-        pan: 0.0,
+        // An automation clip's range 0..1: its pan knob is the minimum (spec: audio/automation.md "Range").
+        pan: if audio { 0.0 } else { -1.0 },
         pitch_cents: 0,
         mixer_track: 0,
         sample_path: None,
@@ -2445,6 +2543,9 @@ pub fn clip_menu(s: &State, i: usize, x: f32, y: f32) -> Popup {
         PickKind::Audio => "Audio clip",
         PickKind::Automation => "Automation clip",
     };
+    if let ClipSource::Pattern(n) = c.source {
+        return pattern_clip_menu(s, i, n, x, y);
+    }
     let mut items = vec![
         PItem::head(head),
         PItem::new("Preview", Cmd::ClipPreview(i)),
@@ -2455,19 +2556,88 @@ pub fn clip_menu(s: &State, i: usize, x: f32, y: f32) -> Popup {
         PItem::new("Random color", Cmd::ClipRandomColor(i)),
         PItem::sep(),
     ];
-    if let ClipSource::Pattern(_) = c.source {
-        items.push(PItem::new("Edit pattern", Cmd::ClipEditSource(i)));
-        items.push(PItem::new("Make unique", Cmd::ClipUnique(i)));
-    }
     // The automation clip's LFO over its window (issue #29).
     if let ClipSource::Channel(ch) = c.source {
         if s.project.automation(ch).is_some() {
             items.push(PItem::sub("LFO", crate::lfo::Shape::ALL.iter().map(|sh| PItem::new(sh.name(), Cmd::ClipLfo(i, *sh))).collect()));
         }
+        if s.project.channel(ch).is_some_and(|chan| chan.kind.is_sampler()) {
+            let is_rev = s.project.channel(ch).is_some_and(|chan| chan.sound.fx.flags & os_model::SampleFx::REVERSE != 0);
+            items.push(PItem::new("Reverse (Shift+R)", Cmd::ToggleReverse).mark(Mark::Check(is_rev)));
+        }
     }
     items.push(PItem::new("Select all similar clips", Cmd::ClipSelectSimilar(i)));
     items.push(PItem::new("Delete", Cmd::ClipDelete(i)));
+    items.extend([PItem::sep(), PItem::head("Region"), PItem::sub("Chop", chop_items(i, source_kind(s, c.source) == PickKind::Audio))]);
     Popup { x, y, items, sub: None, scroll: [0; 2] }
+}
+
+/// A pattern clip's menu, as FL's: name and colour, the source, the pattern's time signature, and the region and chop
+/// entries.
+fn pattern_clip_menu(s: &State, i: usize, n: u16, x: f32, y: f32) -> Popup {
+    let c = clips(s)[i];
+    let sources = s.project.patterns.iter().map(|p| {
+        PItem::new(crate::patterns::name_of(s, p.number), Cmd::ClipSetSource(i, p.number)).mark(Mark::Radio(p.number == n))
+    });
+    // The signatures the clip's place can take: the playlist's there, and the project's.
+    let arr_sig = s.project.arrangement().map(|a| s.project.marker_bars(&a.markers)).and_then(|r| r.iter().rev().find(|r| r.0 <= c.position).map(|r| r.2));
+    let proj_sig = s.project.signature().unwrap_or((s.project.bar().0, 4));
+    let sig_item = |label: &str, (num, den): (u16, u16)| PItem::new(format!("{label} ({num}/{den})"), Cmd::ClipTimeSig(i, num, den));
+    let mut sigs = Vec::new();
+    if let Some(sig) = arr_sig {
+        sigs.push(sig_item("Playlist", sig));
+    }
+    sigs.push(sig_item("Project", proj_sig));
+    // Regions: from each marker of the pattern to the next (or the pattern's end).
+    let mut marks: Vec<&os_model::TimeMarker> = s.project.pattern(n).map(|p| p.markers.iter().filter(|m| m.kind != os_model::TimeMarker::SIGNATURE).collect()).unwrap_or_default();
+    marks.sort_by_key(|m| m.position);
+    let end = s.project.pattern_length(n);
+    let mut regions: Vec<PItem> = marks
+        .iter()
+        .enumerate()
+        .filter_map(|(k, m)| {
+            let to = marks.get(k + 1).map_or(end, |m| m.position);
+            let name = if m.name.is_empty() { format!("Region {}", k + 1) } else { m.name.clone() };
+            (to > m.position).then(|| PItem::new(name, Cmd::ClipRegion(i, m.position, to)))
+        })
+        .collect();
+    if regions.is_empty() {
+        regions.push(PItem::new("(no regions: add markers in the piano roll)", Cmd::Nothing).off());
+    }
+    let chops = chop_items(i, false);
+    let items = vec![
+        PItem::head("Pattern clip"),
+        PItem::new("Preview", Cmd::ClipPreview(i)),
+        PItem::sep(),
+        PItem::new("Muted", Cmd::ClipMute(i)).mark(Mark::Check(c.muted)),
+        PItem::sep(),
+        PItem::new("Rename and color...", Cmd::ClipPatternBox(i, false)),
+        PItem::new("Change color...", Cmd::ClipPatternBox(i, true)),
+        PItem::new("Random color", Cmd::ClipRandomColor(i)),
+        PItem::sep(),
+        PItem::sub("Select source pattern", sources.collect()),
+        PItem::new("Edit pattern", Cmd::ClipEditSource(i)),
+        PItem::new("Make unique", Cmd::ClipUnique(i)),
+        PItem::new("Select all similar clips", Cmd::ClipSelectSimilar(i)),
+        PItem::new("Delete", Cmd::ClipDelete(i)),
+        PItem::sep(),
+        PItem::sub("Use current time signature from", sigs),
+        PItem::head("Region"),
+        PItem::sub("Select region", regions),
+        PItem::sub("Chop", chops),
+    ];
+    Popup { x, y, items, sub: None, scroll: [0; 2] }
+}
+
+/// Chop ▸ of clip `i`'s menu: at the drum hits (`audio` clips), on a grid, or as a stutter.
+fn chop_items(i: usize, audio: bool) -> Vec<PItem> {
+    let mut v = Vec::new();
+    if audio {
+        v.extend([PItem::new("At transients", Cmd::ChopTransients(i)), PItem::sep()]);
+    }
+    v.extend(ChopGrid::ALL.iter().map(|&g| PItem::new(g.label(), Cmd::ChopGrid(i, g))));
+    v.extend([PItem::sep(), PItem::new("Stutter 4x", Cmd::ChopStutter(i, 4)), PItem::new("Stutter 8x", Cmd::ChopStutter(i, 8))]);
+    v
 }
 
 /// The commands of a picker item's menu (§10a).
@@ -2738,6 +2908,9 @@ pub enum PlDrag {
     Gain { clip: usize, y0: f32, db0: f32 },
     /// A crossfade's handle (§9a): later clip `b`, earlier clip `a`, `b`'s gain at the middle when the drag started.
     Crossfade { a: usize, b: usize, y0: f32, m0: f64 },
+    /// Track `row`'s "..." handle: its height `h0` (px) when the press came at `y0`; `moved` once it was dragged (else
+    /// the release shrinks the track or brings it back).
+    TrackSize { row: u16, y0: f32, h0: f32, moved: bool },
 }
 
 /// The handles an audio clip shows while the mouse is over it (§9a).
@@ -2852,23 +3025,23 @@ pub fn handle_at(s: &State, g: &PGeom, i: usize, x: f32, y: f32) -> Option<Handl
     }
     if let Some((_, t)) = c.stored_fade_in().filter(|_| !managed(s, c, false)) {
         let (mx, my) = fade_mid(body, body.x, fx_in, t, false);
-        if fx_in - body.x > 10.0 && near(mx, my, 5.0) {
+        if fx_in - body.x > 10.0 && near(mx, my, 6.0) {
             return Some(Handle::TensionIn);
         }
     }
     if let Some((_, t)) = c.stored_fade_out().filter(|_| !managed(s, c, true)) {
         let (mx, my) = fade_mid(body, fx_out, body.right(), t, true);
-        if body.right() - fx_out > 10.0 && near(mx, my, 5.0) {
+        if body.right() - fx_out > 10.0 && near(mx, my, 6.0) {
             return Some(Handle::TensionOut);
         }
     }
-    if near(fx_in + 3.0, body.y + 3.0, 5.0) {
+    if near(fx_in + 3.0, body.y + 3.0, 7.0) {
         return Some(Handle::FadeIn);
     }
-    if near(fx_out - 3.0, body.y + 3.0, 5.0) {
+    if near(fx_out - 3.0, body.y + 3.0, 7.0) {
         return Some(Handle::FadeOut);
     }
-    if near(body.cx(), body.bottom() - 2.0, 6.0) {
+    if (x - body.cx()).abs() <= 14.0 && (y - (body.bottom() - 2.0)).abs() <= 8.0 {
         return Some(Handle::Gain);
     }
     None
@@ -2915,6 +3088,51 @@ pub fn press_grid(app: &mut App, grid: Rect, right: bool) {
         if let Some(h) = handle_at(s, &g, ci, x, y) {
             snapshot(s);
             let c = clips(s)[ci];
+            let now = std::time::Instant::now();
+            let double = s.playlist.last_handle_click.is_some_and(|(i, lh, t)| i == ci && lh == h && now.duration_since(t).as_millis() < 400);
+            s.playlist.last_handle_click = (!double).then_some((ci, h, now));
+            if double {
+                match h {
+                    Handle::Gain => {
+                        let c_mut = &mut arr_mut(s).clips[ci];
+                        c_mut.set_gain(1.0);
+                        app.hint = Cow::Owned("Clip gain: +0.0 dB (Reset)".into());
+                        app.state.piano.dirty = true;
+                        app.invalidate();
+                        return;
+                    }
+                    Handle::TensionIn => {
+                        let c_mut = &mut arr_mut(s).clips[ci];
+                        c_mut.set_fade_in_tension(0.0);
+                        app.hint = Cow::Owned("Fade in tension: +0.00 (Reset)".into());
+                        app.state.piano.dirty = true;
+                        app.invalidate();
+                        return;
+                    }
+                    Handle::TensionOut => {
+                        let c_mut = &mut arr_mut(s).clips[ci];
+                        c_mut.set_fade_out_tension(0.0);
+                        app.hint = Cow::Owned("Fade out tension: +0.00 (Reset)".into());
+                        app.state.piano.dirty = true;
+                        app.invalidate();
+                        return;
+                    }
+                    Handle::Crossfade => {
+                        if let Some(xf) = crossfade(s, &g, ci) {
+                            let arr = arr_mut(s);
+                            if xf.a < arr.clips.len() && xf.b < arr.clips.len() {
+                                arr.clips[xf.b].set_fade_in_tension(0.0);
+                                arr.clips[xf.a].set_fade_out_tension(0.0);
+                            }
+                        }
+                        app.hint = Cow::Owned("Crossfade tension: +0.00 (Reset)".into());
+                        app.state.piano.dirty = true;
+                        app.invalidate();
+                        return;
+                    }
+                    _ => {}
+                }
+            }
             app.drag = Some(Drag::Pl(match h {
                 Handle::FadeIn => PlDrag::Fade { clip: ci, out: false },
                 Handle::FadeOut => PlDrag::Fade { clip: ci, out: true },
@@ -2999,7 +3217,7 @@ pub fn press_grid(app: &mut App, grid: Rect, right: bool) {
         }
         // The title strip's icon opens the clip menu (§10).
         let r = g.clip_rect(&c);
-        if !right && x < r.x + 14.0 && y < r.y + TITLE_H && r.w > 20.0 {
+        if !right && on_menu_icon(&r, x, y) {
             s.playlist.popup = Some(clip_menu(s, ci, r.x, r.y + TITLE_H));
             return;
         }
@@ -3245,6 +3463,15 @@ pub fn drag_move(app: &mut App, d: PlDrag, grid: Rect) {
     let s = &mut app.state;
     let g = PGeom::new(s, grid);
     match d {
+        PlDrag::TrackSize { row, y0, h0, moved } => {
+            if !moved && (y - y0).abs() < 3.0 {
+                return;
+            }
+            set_track_px(s, row, h0 + (y - y0));
+            app.drag = Some(crate::app::Drag::Pl(PlDrag::TrackSize { row, y0, h0, moved: true }));
+            app.invalidate();
+            return;
+        }
         PlDrag::Move { x0, y0, orig, .. } => {
             let mut dt = snap_delta(s, &g, (x - x0) / g.ppt, alt);
             let min_pos = orig.iter().map(|(_, c)| i64::from(c.position)).min().unwrap_or(0);
@@ -3467,6 +3694,18 @@ pub fn drag_end(app: &mut App, d: PlDrag, grid: Rect) {
     {
         s.playlist.lock_len = Some((c.source, c.length));
     }
+    if let PlDrag::TrackSize { row, moved: false, .. } = d {
+        // A click: a track taller than the smallest shrinks to it, the smallest comes back to the others' height.
+        let small = Rows::new(s).height(row) <= TRACK_MIN + 0.5;
+        if small {
+            if let Some(tr) = arr_mut(s).tracks.get_mut(usize::from(row)) {
+                tr.height = 1.0;
+            }
+        } else {
+            set_track_px(s, row, TRACK_MIN);
+        }
+        return;
+    }
     match d {
         PlDrag::Slice { .. } => {
             if let Some(Overlay::Slice { tick, t0, t1 }) = overlay {
@@ -3624,6 +3863,23 @@ pub fn arrangement_menu(s: &State, x: f32, y: f32) -> Popup {
 
 /// Collapses or expands the group led by track `t` or by `t`'s group track (§6a); no-op for an ungrouped track
 /// without members.
+/// Track `t`'s own height in px (kept as a share of the row height, between `TRACK_MIN` and `ROW_MAX`).
+pub fn set_track_px(s: &mut State, t: u16, px: f32) {
+    let row_h = s.playlist.row_h.clamp(ROW_MIN, ROW_MAX);
+    let px = px.clamp(TRACK_MIN, ROW_MAX);
+    if let Some(tr) = arr_mut(s).tracks.get_mut(usize::from(t)) {
+        tr.height = if (px - row_h).abs() < 1.0 { 1.0 } else { px / row_h };
+    }
+}
+
+/// The press on track `t`'s "..." handle (left button): an undo step, then a drag that sizes the track, or a click.
+pub fn press_track_size(app: &mut App, t: u16) {
+    let s = &mut app.state;
+    snapshot(s);
+    let h0 = Rows::new(s).height(t);
+    app.drag = Some(crate::app::Drag::Pl(PlDrag::TrackSize { row: t, y0: app.mouse.1, h0, moved: false }));
+}
+
 pub fn toggle_collapse(s: &mut State, t: u16) {
     let Some(g) = group_track(s, t).or_else(|| is_group_track(s, t).then_some(t)) else { return };
     snapshot(s);
@@ -4073,13 +4329,51 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
             app.invalidate();
             return m;
         }
+        Cmd::ToggleReverse => {
+            let s = &mut app.state;
+            let targets: Vec<usize> = if !s.playlist.sel.is_empty() {
+                s.playlist.sel.iter().copied().filter(|&i| {
+                    i < clips(s).len() && matches!(clips(s)[i].source, ClipSource::Channel(ch) if s.project.channel(ch).is_some_and(|chan| chan.kind.is_sampler()))
+                }).collect()
+            } else if let Some(ci) = s.playlist.hover_clip {
+                if ci < clips(s).len() && matches!(clips(s)[ci].source, ClipSource::Channel(ch) if s.project.channel(ch).is_some_and(|chan| chan.kind.is_sampler())) {
+                    vec![ci]
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+            if targets.is_empty() {
+                return Some("Reverse: select or hover an audio clip first".into());
+            }
+            snapshot(s);
+            let mut toggled_channels = std::collections::HashSet::new();
+            for &ci in &targets {
+                let c = clips(s)[ci];
+                if let ClipSource::Channel(ch) = c.source {
+                    toggled_channels.insert(usize::from(ch));
+                }
+            }
+            for &ch_idx in &toggled_channels {
+                if let Some(ch) = app.state.project.channels.get_mut(ch_idx) {
+                    ch.sound.fx.flags ^= os_model::SampleFx::REVERSE;
+                }
+                let ch = &app.state.project.channels[ch_idx];
+                app.plugins.set_sampler_fx(ch_idx, &ch.sound, ch.kind == os_model::ChannelKind::AudioClip);
+            }
+            app.state.piano.dirty = true;
+            app.invalidate();
+            let n = targets.len();
+            return Some(format!("Toggled reverse on {n} audio clip{}", if n == 1 { "" } else { "s" }));
+        }
         _ => {}
     }
     let s = &mut app.state;
     let grid_w = grid.map_or(1400.0, |g| g.w);
     let grid_wh = grid.map_or((1400.0, 800.0), |g| (g.w, g.h));
     let msg = match cmd {
-        Cmd::Nothing | Cmd::Pick(..) | Cmd::Browser(_) | Cmd::Plugin(_) | Cmd::Project(_) | Cmd::Rack(_) | Cmd::Mixer(_) | Cmd::Param(_) | Cmd::Preset(_) | Cmd::Misc(..) | Cmd::PluginMenu(..) | Cmd::PluginDetach(..) | Cmd::Piano(_) | Cmd::Audio(_) | Cmd::Cpu(_) | Cmd::MetronomeSound(_) | Cmd::MetronomeVolume(_) | Cmd::Record(_) | Cmd::RecPrecountBars(_) | Cmd::OneClick(..) | Cmd::OneClickEditor | Cmd::Rec(_) | Cmd::ContinuousScrolling | Cmd::Pattern(_) | Cmd::ClockMode(_) | Cmd::ClockBeat(_) | Cmd::Toolbar(_) | Cmd::ToolbarPreset(_) | Cmd::ToolbarSave | Cmd::ToolbarDelete | Cmd::TimeSig(..) | Cmd::AddSignature | Cmd::MarkerSigAt(_) | Cmd::MarkerEveryMenu | Cmd::Bar(..) | Cmd::PanningLaw(_) | Cmd::TimeMode(_) | Cmd::Timebase(_) => None,
+        Cmd::Nothing | Cmd::ToggleReverse | Cmd::Pick(..) | Cmd::Browser(_) | Cmd::Plugin(_) | Cmd::Project(_) | Cmd::Rack(_) | Cmd::Mixer(_) | Cmd::Param(_) | Cmd::Preset(_) | Cmd::Misc(..) | Cmd::PluginMenu(..) | Cmd::PluginDetach(..) | Cmd::Piano(_) | Cmd::Audio(_) | Cmd::Cpu(_) | Cmd::MetronomeSound(_) | Cmd::MetronomeVolume(_) | Cmd::Record(_) | Cmd::RecPrecountBars(_) | Cmd::OneClick(..) | Cmd::OneClickEditor | Cmd::Rec(_) | Cmd::ContinuousScrolling | Cmd::Pattern(_) | Cmd::ClockMode(_) | Cmd::ClockBeat(_) | Cmd::Toolbar(_) | Cmd::ToolbarPreset(_) | Cmd::ToolbarSave | Cmd::ToolbarDelete | Cmd::TimeSig(..) | Cmd::AddSignature | Cmd::MarkerSigAt(_) | Cmd::MarkerEveryMenu | Cmd::Bar(..) | Cmd::PanningLaw(_) | Cmd::TimeMode(_) | Cmd::Timebase(_) => None,
         Cmd::NotYet(name) => Some(format!("{name}: not available yet")),
         Cmd::Tool(t) => {
             s.playlist.tool = t;
@@ -4336,6 +4630,63 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
         Cmd::ClipUnique(i) => {
             snapshot(s);
             make_unique(s, i).map(|n| format!("Made unique: pattern {n}"))
+        }
+        Cmd::ClipPatternBox(i, palette) => {
+            let Some(ClipSource::Pattern(n)) = clips(s).get(i).map(|c| c.source) else { return None };
+            let at = grid.zip(clips(s).get(i)).map_or((600.0, 200.0), |(g, c)| {
+                let r = PGeom::new(s, g).clip_rect(c);
+                (r.x, r.y)
+            });
+            crate::patterns::open_name_box(s, crate::patterns::BoxTarget::Name(n), at);
+            if palette {
+                if let Some(b) = s.pat_ui.name_box.as_mut() {
+                    b.palette = true;
+                }
+            }
+            None
+        }
+        Cmd::ClipSetSource(i, n) => {
+            if clips(s).get(i).map(|c| c.source) == Some(ClipSource::Pattern(n)) {
+                return None;
+            }
+            snapshot(s);
+            // The new source whole, from where the clip starts (FL; Shift keeping the length is not done yet).
+            let len = source_len(s, ClipSource::Pattern(n));
+            if let Some(c) = arr_mut(s).clips.get_mut(i) {
+                c.source = ClipSource::Pattern(n);
+                c.length = len;
+                c.window = None;
+            }
+            s.piano.dirty = true;
+            Some(format!("Clip plays {}", crate::patterns::name_of(s, n)))
+        }
+        Cmd::ClipTimeSig(i, num, den) => {
+            let Some(ClipSource::Pattern(n)) = clips(s).get(i).map(|c| c.source) else { return None };
+            snapshot(s);
+            set_pattern_signature(s, n, num, den);
+            s.piano.dirty = true;
+            Some(format!("{}: time signature {num}/{den}", crate::patterns::name_of(s, n)))
+        }
+        Cmd::ClipRegion(i, a, b) => {
+            snapshot(s);
+            if let Some(c) = arr_mut(s).clips.get_mut(i) {
+                c.window = Some((f64::from(a), f64::from(b)));
+                c.length = b - a;
+            }
+            s.piano.dirty = true;
+            None
+        }
+        Cmd::ChopTransients(i) => {
+            let n = crate::drum_chop::chop_selected_or_target(s, i, crate::drum_chop::chop_clip_transients);
+            Some(if n > 1 { format!("Chopped into {n} slices at the drum hits") } else { "No drum hits found to chop at".into() })
+        }
+        Cmd::ChopGrid(i, grid) => {
+            let n = crate::drum_chop::chop_selected_or_target(s, i, |s, k| crate::drum_chop::chop_clip_grid(s, k, grid));
+            Some(format!("Chopped into {n} slices ({})", grid.label().to_lowercase()))
+        }
+        Cmd::ChopStutter(i, repeats) => {
+            let n = crate::drum_chop::chop_selected_or_target(s, i, |s, k| crate::drum_chop::chop_clip_stutter(s, k, repeats));
+            Some(format!("Stutter: {n} slices"))
         }
         Cmd::ClipEditSource(i) => {
             if let Some(ClipSource::Pattern(n)) = clips(s).get(i).map(|c| c.source) {
@@ -4800,6 +5151,7 @@ pub fn key(app: &mut App, key: &winit::keyboard::Key, ctrl: bool, alt: bool) -> 
         Key::Character(c) if alt && !ctrl && c.eq_ignore_ascii_case("t") => Cmd::AddMarker,
         Key::Character(c) if shift && !ctrl && !alt && c.eq_ignore_ascii_case("t") => Cmd::PlaceLoop,
         Key::Character(c) if shift && !ctrl && !alt && c.eq_ignore_ascii_case("z") => Cmd::ZoomSelection,
+        Key::Character(c) if shift && !ctrl && !alt && c.eq_ignore_ascii_case("r") => Cmd::ToggleReverse,
         Key::Character(c) if shift && !ctrl && !alt && c.eq_ignore_ascii_case("m") => Cmd::StretchMode,
         Key::Character(c) if shift && !ctrl && !alt && c.eq_ignore_ascii_case("i") => Cmd::InvertSelection,
         Key::Character(c) if shift && !ctrl && !alt && (c == "4" || c == "$") => Cmd::ZoomAll,

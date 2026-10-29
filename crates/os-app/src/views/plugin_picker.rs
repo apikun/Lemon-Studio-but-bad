@@ -65,6 +65,9 @@ fn panel(ui: &mut Ui, r: Rect) {
     ui.hit(r, Action::Picker(PickAct::Body), "");
 }
 
+/// The tag of a Windows plugin's row.
+const WINDOWS_TAG: &str = "Windows";
+
 /// Text `f` top for a row at `y` of height `h`.
 fn text_y(ui: &mut Ui, f: Font, y: f32, h: f32) -> f32 {
     (y + h / 2.0 - ui.c.line_height(f) / 2.0).round()
@@ -110,7 +113,8 @@ fn rows(ui: &mut Ui, rows: &[Row], v: Rect, scroll: f32, acts: Acts, open_cat: O
             Row::Plugin(f) => {
                 at[i] = Some(r);
                 let what = if f.effect { "effect" } else { "instrument" };
-                let hov = ui.hit(r, Action::Picker((acts.row)(i)), format!("{}: click to add this {what}", f.name));
+                let from = if f.windows() { " (a Windows plugin, run through yabridge)" } else { "" };
+                let hov = ui.hit(r, Action::Picker((acts.row)(i)), format!("{}{from}: click to add this {what}", f.name));
                 let more = f.variants.len() > 1;
                 let mr = Rect::new(r.right() - 34.0, y, 34.0, ROW_H);
                 let mhov = more && ui.hit(mr, Action::Picker((acts.more)(i)), format!("{}: its {} variants", f.name, f.variants.len()));
@@ -119,8 +123,19 @@ fn rows(ui: &mut Ui, rows: &[Row], v: Rect, scroll: f32, acts: Acts, open_cat: O
                     ui.c.fill_rrect(r, 4.0, if on || mhov { gold.with_alpha(70) } else { t.menu_pop_hi });
                 }
                 let ty = text_y(ui, fname, y, ROW_H);
-                let right = if more { mr.x } else { r.right() - 8.0 };
-                ui.c.text_clip(fname, r.x + 10.0, ty, right - r.x - 14.0, t.menu_pop_text, &f.name);
+                let mut right = if more { mr.x } else { r.right() - 8.0 };
+                // A Windows plugin (bridged by yabridge) says so in a small tag at the row's right.
+                if f.windows() {
+                    let ft = Font::new(12);
+                    let tw = ui.c.text_width(ft, WINDOWS_TAG) + 10.0;
+                    let tag = Rect::new(right - tw, r.cy() - 8.0, tw, 16.0);
+                    ui.c.stroke_rrect(tag.inset(0.5), 4.0, 1.0, gold.with_alpha(170));
+                    ui.c.text_center(ft, tag, gold, WINDOWS_TAG);
+                    right = tag.x - 4.0;
+                }
+                // The tag says it: the name without its "(Windows)".
+                let name = f.name.replace(" (Windows)", "").replace(", Windows)", ")");
+                ui.c.text_clip(fname, r.x + 10.0, ty, right - r.x - 14.0, t.menu_pop_text, &name);
                 if more {
                     arrow(ui, mr.cx(), r.cy(), if mhov || on { t.menu_pop_text } else { t.menu_pop_dim });
                 }

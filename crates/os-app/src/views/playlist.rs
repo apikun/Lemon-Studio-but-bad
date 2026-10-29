@@ -1,5 +1,6 @@
 // Copyright (C) 2026 ItsAlphaNeon
 // Copyright (C) 2026 Artig3nce
+// Copyright (C) 2026 battlemountain2
 // SPDX-License-Identifier: GPL-3.0-or-later
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
@@ -60,7 +61,7 @@ fn cc(t: &os_theme::Palette, v: u32) -> Color {
 }
 /// Tool button centres in the title bar, relative to the window's left edge (§1: 275..442 at x 209).
 const TOOL_X: [f32; 9] = [66.0, 86.0, 108.0, 129.0, 150.0, 171.0, 192.0, 213.0, 233.0];
-const TOOL_ICONS: [Icon; 9] =
+pub(crate) const TOOL_ICONS: [Icon; 9] =
     [Icon::Pencil, Icon::Brush, Icon::Delete, Icon::Mute, Icon::Slip, Icon::Slice, Icon::Select, Icon::Zoom, Icon::Speaker];
 /// Picker item pitch (§1): the measured 30 px rows; taller items show a title strip of this height over their
 /// preview.
@@ -971,7 +972,18 @@ fn clip_paint(ui: &mut Ui, s: &State, g: &PGeom, i: usize, c: &Clip) {
         }
     }
     if r.w > 16.0 {
-        ui.c.text_clip(Font::new(12), inner.x + 14.0, inner.y - 1.0, inner.w - 16.0, ic, &pl::source_name(s, c.source));
+        let mut name = pl::source_name(s, c.source);
+        if let ClipSource::Channel(ch) = c.source {
+            if s.project.channel(ch).is_some_and(|chan| chan.sound.fx.flags & os_model::SampleFx::REVERSE != 0) {
+                name.push_str(" [REV]");
+            }
+            let g_val = c.gain();
+            if (g_val - 1.0).abs() > 0.005 {
+                let db = 20.0 * g_val.log10();
+                name.push_str(&format!(" ({:+.1} dB)", db));
+            }
+        }
+        ui.c.text_clip(Font::new(12), inner.x + 14.0, inner.y - 1.0, inner.w - 16.0, ic, &name);
     }
     // Content.
     let content = if c.muted { dim(text).with_alpha(90) } else { dim(cc(t, NOTE)) };
@@ -1089,19 +1101,35 @@ fn waveform(ui: &mut Ui, s: &State, g: &PGeom, c: &Clip, ch: u16, body: Body, co
         }
         k
     };
+    let reversed = s.project.channel(ch).is_some_and(|chan| chan.sound.fx.flags & os_model::SampleFx::REVERSE != 0);
+    let total_peaks = w.peaks.len();
     // Peaks from `da` to `db` px into the body.
     let range = |da: f64, db: f64| -> Option<(f32, f32)> {
         let ms_a = w0 + da / ppt * ms_per_tick;
         let ms_b = w0 + db / ppt * ms_per_tick;
         let fa = (ms_a * frames_per_ms).max(0.0) as usize / w.per;
         let fb = ((ms_b * frames_per_ms).max(0.0) as usize / w.per).max(fa + 1);
-        if fa >= w.peaks.len() {
-            return None;
+        if reversed {
+            if fa >= total_peaks {
+                return None;
+            }
+            let fb = fb.min(total_peaks);
+            let r_start = total_peaks.saturating_sub(fb);
+            let r_end = total_peaks.saturating_sub(fa);
+            if r_start >= total_peaks || r_start >= r_end {
+                return None;
+            }
+            let stride = ((r_end - r_start) / 32).max(1);
+            Some(w.peaks[r_start..r_end].iter().step_by(stride).fold((f32::MAX, f32::MIN), |(lo, hi), &(a, b)| (lo.min(a), hi.max(b))))
+        } else {
+            if fa >= total_peaks {
+                return None;
+            }
+            let fb = fb.min(total_peaks);
+            // Cap the work per column when zoomed far out.
+            let stride = ((fb - fa) / 32).max(1);
+            Some(w.peaks[fa..fb].iter().step_by(stride).fold((f32::MAX, f32::MIN), |(lo, hi), &(a, b)| (lo.min(a), hi.max(b))))
         }
-        let fb = fb.min(w.peaks.len());
-        // Cap the work per column when zoomed far out.
-        let stride = ((fb - fa) / 32).max(1);
-        Some(w.peaks[fa..fb].iter().step_by(stride).fold((f32::MAX, f32::MIN), |(lo, hi), &(a, b)| (lo.min(a), hi.max(b))))
     };
     let n = ((x1 - body.x) / px - j0).ceil().max(0.0) as usize;
     let mut top: Vec<(f32, f32)> = Vec::with_capacity(n + 2);
@@ -1140,10 +1168,19 @@ fn waveform(ui: &mut Ui, s: &State, g: &PGeom, c: &Clip, ch: u16, body: Body, co
     let tones = colours.filter(|(w, _)| w.on()).and_then(|_| s.playlist.tones(&path));
     match (colours, tones) {
         (Some((waves, dim)), Some(tones)) => {
-            let frames = |d: f64| (w0 + d / ppt * ms_per_tick) * frames_per_ms;
+            let total_f = w.frames as f64;
+            let frames = |d: f64| {
+                let f = (w0 + d / ppt * ms_per_tick) * frames_per_ms;
+                if reversed { (total_f - f).max(0.0) } else { f }
+            };
             ui.c.fill_polygon_columns(&outline, &mut |x| {
                 let d = ((f64::from(x) - body.x) / px).floor() * px;
-                let t = tones.span(frames(d), frames(d + px));
+                let (fa, fb) = if reversed {
+                    (frames(d + px), frames(d))
+                } else {
+                    (frames(d), frames(d + px))
+                };
+                let t = tones.span(fa, fb);
                 waves.colour(t.centroid(), t.band_powers()).map_or(col, dim)
             });
         }
@@ -1196,6 +1233,12 @@ fn fades(ui: &mut Ui, s: &State, g: &PGeom, i: usize, c: &Clip, edges: Body, wav
         curve(ui, edges.x, f64::from(xf.x1), xf.t_in, false);
         curve(ui, edges.x, f64::from(xf.x1), xf.t_out, true);
     }
+    // Subtle gain line when clip gain was adjusted, even when not hovered.
+    let g_val = c.gain();
+    let has_gain = (g_val - 1.0).abs() > 0.005;
+    if has_gain && !hovered {
+        ui.c.line(body.x + 2.0, body.bottom() - 1.5, body.right() - 2.0, body.bottom() - 1.5, 1.0, white.with_alpha(70));
+    }
     // Handles only while the mouse is over the clip (as FL): white, brighter on the one under the mouse.
     if !hovered {
         return;
@@ -1205,14 +1248,35 @@ fn fades(ui: &mut Ui, s: &State, g: &PGeom, i: usize, c: &Clip, edges: Body, wav
     let k = 6.0;
     ui.c.fill_polygon(&[(fx_in, body.y), (fx_in + k, body.y), (fx_in, body.y + k)], col(pl::Handle::FadeIn));
     ui.c.fill_polygon(&[(fx_out, body.y), (fx_out - k, body.y), (fx_out, body.y + k)], col(pl::Handle::FadeOut));
+
+    // Horizontal gain line across the clip bottom
+    let gain_line_alpha = if lit(pl::Handle::Gain) { 220 } else { 120 };
+    ui.c.line(body.x + 2.0, body.bottom() - 1.5, body.right() - 2.0, body.bottom() - 1.5, 1.2, white.with_alpha(gain_line_alpha));
+
     // The gain handle: a half disc on the body's bottom edge (a shape, not a clipped circle: clips are costly).
     let (gx, gy) = (body.cx(), body.bottom());
-    let r = if lit(pl::Handle::Gain) { 5.0 } else { 4.0 };
+    let r = if lit(pl::Handle::Gain) { 5.5 } else { 4.0 };
     let half: Vec<(f32, f32)> = (0..=8).map(|k| {
         let a = std::f32::consts::PI * k as f32 / 8.0;
         (gx - r * a.cos(), gy - r * a.sin())
     }).collect();
     ui.c.fill_polygon(&half, col(pl::Handle::Gain));
+
+    // Floating badge for lit gain handle:
+    if lit(pl::Handle::Gain) {
+        let db = 20.0 * g_val.log10();
+        let text = format!("{:+.1} dB", db);
+        let font = Font::new(10);
+        let tw = ui.c.text_width(font, &text);
+        let bw = tw + 8.0;
+        let bx = (gx - bw / 2.0).clamp(body.x + 2.0, body.right() - bw - 2.0);
+        let by = (gy - 20.0).clamp(body.y + 2.0, body.bottom() - 16.0);
+        let br = Rect::new(bx, by, bw, 14.0);
+        ui.c.fill_rrect(br, 3.0, ui.t.s(0x181e22).with_alpha(230));
+        ui.c.stroke_rrect(br, 3.0, 1.0, white.with_alpha(160));
+        ui.c.text(font, bx + 4.0, by + 1.0, white, &text);
+    }
+
     if hovered {
         // The crossfade's handle: a big filled circle at the later clip's gain in the middle, a small ring at the
         // earlier clip's (§9a); where they meet the ring shows inside the circle.
@@ -1347,7 +1411,7 @@ fn header(ui: &mut Ui, s: &State, g: &PGeom, row: u16, x: f32, w: f32) {
     }
     // The LED and "…" keep their distance from the row's bottom when the track height changes (Alt+wheel); short
     // rows drop the "…" and keep the name clear of the LED.
-    let short = g.rows.row_h < pl::ROW_H - 8.0;
+    let short = h < pl::ROW_H - 8.0;
     let led = Rect::new(hr.right() - 19.0, (h - gap - 15.0).max(1.0) + hr.y, 14.0, 14.0);
     ui.hit(led, Action::PlLed(row), "Mute track (right-click / Ctrl+click: solo)");
     let text = if colored.is_some() { ui.t.tx(0xdce8f0) } else { t.text_faint };
@@ -1357,8 +1421,13 @@ fn header(ui: &mut Ui, s: &State, g: &PGeom, row: u16, x: f32, w: f32) {
         let name_w = if short { hr.w - 26.0 } else { hr.w - 4.0 };
         ui.c.text_clip(Font::new(16), hr.x + 2.0, hr.y + 1.0, name_w, text, &pl::track_name(s, row));
     }
+    // The "..." handle (FL's): drag to size this track, click to shrink it or bring it back. A short track keeps it
+    // as its bottom edge.
+    let grip = if short { Rect::new(hr.x, hr.bottom() - 5.0, (hr.w - 24.0).max(8.0), 5.0) } else { Rect::new(hr.x, led.y - 2.0, 26.0, 16.0) };
+    let hov = ui.hit(grip, Action::PlTrackSize(row), "Track height: drag to size this track, click to shrink it or bring it back");
     if !short {
-        ui.c.text(Font::new(14), hr.x + 14.0, led.y - 6.0, text.shade(-0.2), "...");
+        // Under the start of the name.
+        ui.c.text(Font::new(14), hr.x + 2.0, led.y - 6.0, if hov { text } else { text.shade(-0.2) }, "...");
     }
     let info = pl::track_info(s, row);
     if lead {
@@ -1584,9 +1653,11 @@ fn popup_list(ui: &mut Ui, items: &[pl::PItem], x: f32, y: f32, screen: (f32, f3
             ui.c.text_right(font.italic(), right, rr.y + 3.0 + dy, sc, it.key);
         }
         if !it.children.is_empty() {
+            // As bright as the label, so it shows on the dark menus; dim when the entry is.
             let ax = rr.right() - 11.0;
-            ui.c.line(ax, my - 3.5, ax + 3.5, my, 1.2, t.menu_pop_dim);
-            ui.c.line(ax + 3.5, my, ax, my + 3.5, 1.2, t.menu_pop_dim);
+            let ink = if live { t.menu_pop_text } else { t.menu_pop_dim };
+            ui.c.line(ax, my - 3.5, ax + 3.5, my, 1.5, ink);
+            ui.c.line(ax + 3.5, my, ax, my + 3.5, 1.5, ink);
         }
     }
     if bar_h > 0.0 {

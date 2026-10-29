@@ -880,9 +880,10 @@ fn row_text(ui: &mut Ui, rr: Rect, label: &str, key: &str, sub: bool, ok: bool) 
         ui.c.text_right(font.italic(), right, rr.y + 3.0 + dy, sc, key);
     }
     if sub {
+        // As bright as the label, so it shows on the dark menus; dim with it.
         let ax = rr.right() - 11.0;
-        ui.c.line(ax, my - 3.5, ax + 3.5, my, 1.2, t.menu_pop_dim);
-        ui.c.line(ax + 3.5, my, ax, my + 3.5, 1.2, t.menu_pop_dim);
+        ui.c.line(ax, my - 3.5, ax + 3.5, my, 1.5, color);
+        ui.c.line(ax + 3.5, my, ax, my + 3.5, 1.5, color);
     }
 }
 

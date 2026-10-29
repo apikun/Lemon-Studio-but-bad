@@ -29,6 +29,7 @@ lemon-parametric-eq-2 = { path = "../../plugins/lemon-parametric-eq-2", features
 lemon-3x-osc = { path = "../../plugins/lemon-3x-osc", features = ["linked"] }
 citrus = { path = "../../plugins/citrus", features = ["linked"] }
 lemon-kick = { path = "../../plugins/lemon-kick", features = ["linked"] }
+lemon-wavetable = { path = "../../plugins/lemon-wavetable", features = ["linked"] }
 lemon-boom = { path = "../../plugins/lemon-boom", features = ["linked"] }
 lemon-bass = { path = "../../plugins/lemon-bass", features = ["linked"] }
 lemon-acid = { path = "../../plugins/lemon-acid", features = ["linked"] }
@@ -44,9 +45,12 @@ lemon-transient-processor = { path = "../../plugins/lemon-transient-processor", 
 lemon-chorus = { path = "../../plugins/lemon-chorus", features = ["linked"] }
 lemon-small-fx = { path = "../../plugins/lemon-small-fx" }
 lemon-stereo-shaper = { path = "../../plugins/lemon-stereo-shaper", features = ["linked"] }
+lemon-filter = { path = "../../plugins/lemon-filter", features = ["linked"] }
 tesla = { path = "../../plugins/tesla", features = ["linked"] }
 pulp-filter = { path = "../../plugins/pulp-filter", features = ["linked"] }
 press = { path = "../../plugins/press", features = ["linked"] }
+lemon-flanger = { path = "../../plugins/lemon-flanger", features = ["linked"] }
+lemon-phaser = { path = "../../plugins/lemon-phaser", features = ["linked"] }
 winit = "0.30"
 softbuffer = "0.4"
 cpal = "0.18"

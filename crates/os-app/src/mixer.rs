@@ -45,6 +45,8 @@ pub enum MHit {
     EqGraph,
     /// The current track's input combo: the device's inputs to hear.
     Input,
+    /// Clear pattern mixer focus badge.
+    ClearPatternFilter,
 }
 
 /// Menu commands (`Cmd::Mixer`).
@@ -156,6 +158,31 @@ pub fn max_insert_of(mixer: &[MixerTrack]) -> u16 {
 /// Inserts shown: stored tracks minus the master and the last (hidden) one (§1).
 pub fn inserts(s: &State) -> u16 {
     s.project.mixer.len().saturating_sub(2) as u16
+}
+
+/// Tracks shown in the inserts area, either all inserts or filtered by pattern focus.
+pub fn visible_tracks(s: &State) -> Vec<u16> {
+    let ins = inserts(s);
+    match s.pattern_mixer_filter {
+        Some(pat) => {
+            let mut tracks = std::collections::BTreeSet::new();
+            if let Some(p) = s.project.patterns.iter().find(|p| p.number == pat) {
+                for note in &p.notes {
+                    if let Some(ch) = s.project.channels.iter().find(|c| c.index == note.channel) {
+                        if ch.mixer_track > 0 && ch.mixer_track <= ins {
+                            tracks.insert(ch.mixer_track);
+                        }
+                    }
+                }
+            }
+            if tracks.is_empty() {
+                (1..=ins).collect()
+            } else {
+                tracks.into_iter().collect()
+            }
+        }
+        None => (1..=ins).collect(),
+    }
 }
 
 pub fn track(s: &State, n: u16) -> Option<&MixerTrack> {
@@ -383,6 +410,11 @@ pub fn hit(app: &mut App, h: MHit) -> Option<String> {
             changed(s);
             None
         }
+        MHit::ClearPatternFilter => {
+            s.pattern_mixer_filter = None;
+            s.message = Some("Mixer focus cleared (showing all tracks)".into());
+            None
+        }
         MHit::Input => {
             s.playlist.popup = Some(input_menu(s, at.0, at.1 + 10.0));
             None
@@ -501,13 +533,21 @@ pub fn right(app: &mut App, h: MHit) -> bool {
 
 /// Middle click: rename a filled slot (§7).
 pub fn middle(app: &mut App, h: MHit) -> bool {
-    if let MHit::SlotName(i) = h {
-        let t = app.state.selected_mixer;
-        if slot_name(&app.state, t, i).is_some() {
-            let at = app.mouse;
-            crate::playlist::start_edit(&mut app.state, EditTarget::SlotName(t, i), at);
+    let at = app.mouse;
+    match h {
+        MHit::SlotName(i) => {
+            let t = app.state.selected_mixer;
+            if slot_name(&app.state, t, i).is_some() {
+                crate::playlist::start_edit(&mut app.state, EditTarget::SlotName(t, i), at);
+                return true;
+            }
+        }
+        // A strip: rename its track (from battlemountain2's fork).
+        MHit::Strip(n) => {
+            crate::playlist::start_edit(&mut app.state, EditTarget::MixerName(n), at);
             return true;
         }
+        _ => {}
     }
     false
 }
@@ -2130,5 +2170,31 @@ mod tests {
         let i = (0..200).find(|&i| item_at(TOOLS_MENU, i).is_some_and(|it| it.label == REMOVE_TESLAS_LABEL)).expect("in TOOLS");
         a.menu_item(TOOLS_MENU, i);
         assert_eq!(a.state.message.as_deref(), Some("No audio editors in the mixer"));
+    }
+
+    #[test]
+    fn pattern_mixer_filter_and_visible_tracks() {
+        let mut a = app();
+        assert!(a.state.pattern_mixer_filter.is_none());
+        let all = visible_tracks(&a.state);
+        assert_eq!(all, (1..=inserts(&a.state)).collect::<Vec<_>>());
+
+        a.state.project.channels[0].mixer_track = 2;
+        a.state.project.channels[1].mixer_track = 5;
+
+        let p1 = &mut a.state.project.patterns[0];
+        p1.number = 1;
+        p1.notes = vec![
+            os_model::Note::step(a.state.project.channels[0].index, 0),
+            os_model::Note::step(a.state.project.channels[1].index, 24),
+        ];
+
+        a.state.pattern_mixer_filter = Some(1);
+        let filtered = visible_tracks(&a.state);
+        assert_eq!(filtered, vec![2, 5]);
+
+        assert!(hit(&mut a, MHit::ClearPatternFilter).is_none());
+        assert!(a.state.pattern_mixer_filter.is_none());
+        assert_eq!(visible_tracks(&a.state), all);
     }
 }

@@ -244,6 +244,11 @@ pub const NATIVE_HOST_CHECK: &str = "Experimental: host installed native plugins
 pub const NATIVE_FIRST_CHECK: &str = "Experimental: real native plugins instead of Lemon recreations";
 /// Plugin manager checks (spec: ui/plugin-manager.md §2).
 pub const STARTUP_CHECK: &str = "Find new plugins at startup";
+/// Plugins ▸ Windows plugins (Linux, `crate::yabridge`): get yabridge, run a Windows plugin's installer in Wine, add a
+/// folder of Windows plugins.
+pub const INSTALL_YABRIDGE: &str = "Install yabridge";
+pub const RUN_INSTALLER: &str = "Run Windows installer...";
+pub const ADD_WINDOWS_FOLDER: &str = "Add Windows folder...";
 pub const ERRORS_CHECK: &str = "Rescan plugins with errors";
 pub const COMBINE_CHECK: &str = "Combine formats of the same plugin";
 
@@ -285,6 +290,9 @@ pub const LIVE: &[&str] = &[
     "Manage messages",
     REFRESH_MIDI,
     "Add folder...",
+    INSTALL_YABRIDGE,
+    RUN_INSTALLER,
+    ADD_WINDOWS_FOLDER,
     "Find new plugins",
     "Rescan all",
     "Load theme...",
@@ -856,11 +864,24 @@ pub fn page(tab: usize, s: &State) -> Vec<Group> {
             }
             scanning.push(Buttons(vec![("Find new plugins", 130.0), ("Rescan all", 100.0)]));
             scanning.push(Text(d.status_line(), true));
-            vec![
-                g("Search folders", vec![Folders(folders), Buttons(vec![("Add folder...", 110.0)])]),
-                g("Scanning", scanning),
-                g("Plugins", vec![Table]),
-            ]
+            let mut groups = vec![g("Search folders", vec![Folders(folders), Buttons(vec![("Add folder...", 110.0)])])];
+            // Windows plugins through yabridge, on Linux: what is ready, the bridged folders and the buttons.
+            if cfg!(target_os = "linux") {
+                let w = &d.windows;
+                let mut rows = vec![Text(d.win_busy.clone().unwrap_or_else(|| w.status()), true)];
+                rows.extend(w.dirs.iter().map(|p| Text(format!("    {}", p.display()), true)));
+                let buttons = match (&w.ctl, &w.wine) {
+                    (None, Some(_)) => vec![(INSTALL_YABRIDGE, 130.0)],
+                    (Some(_), Some(_)) => vec![(RUN_INSTALLER, 170.0), (ADD_WINDOWS_FOLDER, 170.0)],
+                    (_, None) => vec![],
+                };
+                if d.win_busy.is_none() && !buttons.is_empty() {
+                    rows.push(Buttons(buttons));
+                }
+                groups.push(g("Windows plugins", rows));
+            }
+            groups.extend([g("Scanning", scanning), g("Plugins", vec![Table])]);
+            groups
         }
         THEME => {
             // Skins (shapes and base colours) and themes (`.flstheme` colours for either skin), spec:
