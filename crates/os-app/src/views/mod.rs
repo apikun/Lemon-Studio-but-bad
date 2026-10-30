@@ -19,6 +19,7 @@ pub mod midi_form;
 pub mod midi_page;
 pub mod mondebug;
 pub mod palette;
+pub mod rolling;
 pub mod settings;
 pub mod mixer;
 pub mod piano;
@@ -93,9 +94,11 @@ pub fn popup_scale(main: f32) -> f32 {
 pub const WORK_Y: f32 = 83.0;
 
 /// Top of the workspace and the browser now: the window's top while the toolbar is hidden (spec: ui/toolbar-menu.md
-/// §5), else the top band's bottom (`band_h`).
+/// §5), else the top band's bottom (`band_h`) — plus the rolling sampler's strip when it shows (issue #82): the
+/// strip is docked between the toolbar and the playlist, and everything below moves with it.
 pub fn work_y(s: &State) -> f32 {
-    if s.toolbar.hidden { 0.0 } else { band_h(s) }
+    let band = if s.toolbar.hidden { 0.0 } else { band_h(s) };
+    band + rolling::strip_h(s)
 }
 
 /// Display scale of the main window's top band (the toolbar rows, `WORK_Y` tall in its own px for two rows) for a
@@ -266,6 +269,14 @@ pub fn paint(ui: &mut Ui, s: &State, f: &FrameInfo) -> usize {
         // panel, the scale lowers instead (`toolbar_scale_fit`), so none is left out.
         let scale = toolbar_scale_fit(ui.c.scale, w, &s.bar.layout, s.bar.editing);
         ui.part(Seg::Toolbar, Rect::new(0.0, 0.0, w, band_h(s)), |ui| ui.scaled(scale, |ui, k| toolbar::paint(ui, s, f, w / k)));
+    }
+    // The rolling sampler's strip between the toolbar and the workspace (issue #82): the browser and the windows
+    // begin under it (`work_y`).
+    {
+        let strip = Rect::new(0.0, work_y(s) - rolling::strip_h(s), w, rolling::strip_h(s));
+        if strip.h > 0.0 {
+            ui.part(Seg::RollStrip, strip, |ui| rolling::paint(ui, s, f));
+        }
     }
     // The floating hint bar, over every window (spec: ui/toolbar-menu.md §4).
     if s.toolbar.hint_bar {

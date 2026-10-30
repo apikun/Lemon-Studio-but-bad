@@ -510,6 +510,26 @@ pub const OMNI_CHANNEL: Number = Number { key: "midi_omni_channel", label: "Omni
 pub const MARKER_CHANNEL: Number = Number { key: "midi_marker_channel", label: "Song marker jump MIDI channel", min: 0, max: 16, default: 0 };
 pub const MUTING_CHANNEL: Number = Number { key: "midi_muting_channel", label: "Generator muting MIDI channel", min: 0, max: 16, default: 0 };
 
+/// Audio ▸ Rolling sampler: keeps the newest master output in a rolling buffer in memory, shown in the strip between
+/// the toolbar and the playlist (issue #82); a selection on the strip drops onto the playlist as an audio clip. Off
+/// by default: nothing is captured, the strip is gone, nothing is allocated until it is on.
+pub const ROLLING_SAMPLER: Check = Check { key: "rolling_sampler", label: "Rolling sampler", default: false };
+
+/// Audio ▸ Rolling sampler: how much of the past the buffer keeps (a change empties it).
+pub const ROLLING_BUFFER: Combo =
+    Combo { key: "rolling_buffer", label: "Rolling buffer", choices: &["30 s", "1 min", "2 min", "5 min", "10 min"], default: 2 };
+
+/// The rolling buffer's seconds the `ROLLING_BUFFER` combo asks for.
+pub fn rolling_secs() -> f32 {
+    match index(&ROLLING_BUFFER) {
+        0 => 30.0,
+        1 => 60.0,
+        3 => 300.0,
+        4 => 600.0,
+        _ => 120.0,
+    }
+}
+
 /// The declared checks.
 pub const CHECKS: &[&Check] = &[
     &RESTORE_AFTER_SOLO,
@@ -560,9 +580,10 @@ pub const CHECKS: &[&Check] = &[
     &AUTO_ACCEPT,
     &FOOT_PEDAL,
     &TOGGLE_ON_RELEASE,
+    &ROLLING_SAMPLER,
 ];
 /// The declared combos.
-pub const COMBOS: &[&Combo] = &[&MAIN_GUI_SCALING, &POPUPS_SCALING, &NOTE_NAMES, &BLACK_NOTES, &AUTOSAVE, &BACKUP_LOCATION, &STARTUP_PROJECT, &COLORFUL_WAVEFORMS, &ANIMATION_REFRESH_RATE, &TRANSPARENT_WINDOWS, &CURSORS_SCALING, &LEGACY_SCALING, &OPTIMIZE_FOR, &RESAMPLING_QUALITY, &PROJECT_DATA_SIZE_WARNING, &TOOLBARS_SCALING, &ASK_DATA_FOLDER, &VELOCITY_LINK, &RELEASE_LINK, &CONTROLLER_TYPE, &SYNC_TYPE];
+pub const COMBOS: &[&Combo] = &[&MAIN_GUI_SCALING, &POPUPS_SCALING, &NOTE_NAMES, &BLACK_NOTES, &AUTOSAVE, &BACKUP_LOCATION, &STARTUP_PROJECT, &COLORFUL_WAVEFORMS, &ANIMATION_REFRESH_RATE, &TRANSPARENT_WINDOWS, &CURSORS_SCALING, &LEGACY_SCALING, &OPTIMIZE_FOR, &RESAMPLING_QUALITY, &PROJECT_DATA_SIZE_WARNING, &TOOLBARS_SCALING, &ASK_DATA_FOLDER, &VELOCITY_LINK, &RELEASE_LINK, &CONTROLLER_TYPE, &SYNC_TYPE, &ROLLING_BUFFER];
 /// The declared combos no settings page shows (a window of their own does): General ▸ Input ▸ Manage shortcuts' rows
 /// (`crate::shortcuts`). Read by the declaration tests.
 #[cfg_attr(not(test), allow(dead_code))]
@@ -738,6 +759,10 @@ impl App {
         let Some(c) = find_check(label) else { return };
         let on = toggle(c);
         self.state.message = Some(format!("{}: {}", c.label, if on { "on" } else { "off" }));
+        // The rolling sampler's strip appears or goes with the setting (and the tape with it).
+        if c.key == ROLLING_SAMPLER.key {
+            self.rolling_sync();
+        }
         self.invalidate();
     }
 
@@ -766,6 +791,10 @@ impl App {
         if c.key == TOOLBARS_SCALING.key && !self.state.toolbar.hidden {
             let dy = crate::views::band_h(&self.state) - band;
             crate::app::lift_windows(&mut self.state, dy);
+        }
+        // The rolling sampler's tape: a new length empties it (`App::rolling_sync`).
+        if c.key == ROLLING_BUFFER.key {
+            self.rolling_sync();
         }
         self.invalidate();
         Some(format!("{}: {}", c.label, choice(c)))

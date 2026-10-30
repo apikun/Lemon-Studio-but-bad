@@ -697,6 +697,11 @@ pub fn page(tab: usize, s: &State) -> Vec<Group> {
                     Check("Play truncated notes on transport", true),
                     Check("Reset plugins on transport", false),
                 ]),
+                g("Rolling sampler", vec![
+                    Check("Rolling sampler", crate::prefs::check(&crate::prefs::ROLLING_SAMPLER)),
+                    combo(crate::prefs::choice(&crate::prefs::ROLLING_BUFFER), 96.0, "Rolling buffer"),
+                    Text("Keeps the newest master output in memory; a selection on the strip between the toolbar and the playlist drops onto a track as audio.".into(), true),
+                ]),
             ]
         }
         // The Record button's options (spec: ui/recording.md §2-§3), the same program settings its right-click menu and
