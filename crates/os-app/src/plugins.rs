@@ -304,7 +304,7 @@ pub fn builtin() -> Vec<Available> {
     v.extend(linked(&WAVETABLE, &lemon_wavetable::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_WAVETABLE));
     v.extend(linked(&SOUNDFONT, &mango_soundfont::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_SOUNDFONT));
     // The chanting monk (a port of MonkSynth, MIT; the third-party notices carry its notice).
-    v.extend(linked(&MONK, &mango_monk::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Monk"));
+    v.extend(linked(&MONK, &mango_monk::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_MONK));
     v
 }
 
@@ -1525,6 +1525,8 @@ pub const LEMON_SAMPLER: &str = "Mango Sampler";
 /// Name of Mango Studio's wavetable synth, from battlemountain2's fork.
 pub const MANGO_WAVETABLE: &str = "Mango Wavetable";
 pub const MANGO_SOUNDFONT: &str = "Mango Font";
+/// Name of the chanting monk (a port of MonkSynth), which a MIDI file imported with the monk as its channel type plays.
+pub const MANGO_MONK: &str = "Mango Monk";
 /// Name of Lemon Studio's parametric EQ plugin.
 pub const LEMON_EQ: &str = "Mango Parametric EQ";
 /// Lemon Studio's effects compiled in besides the EQ (`builtin_effects`, in this order). They have no file plugin of
