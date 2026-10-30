@@ -132,6 +132,7 @@ mod record;
 mod recent;
 mod theme_adjust;
 mod theme_library;
+mod sample_pack;
 mod sound_kit;
 mod templates;
 mod timesig;
