@@ -70,6 +70,7 @@ pub fn from_slot(name: &str, state: &[u8], sample_rate: u32) -> Option<Box<dyn E
         "Fruity Chorus" => chorus::Chorus::from_state(state, sample_rate).map(|e| Box::new(e) as Box<dyn Effect>),
         "Fruity Flanger" => flanger::Flanger::from_state(state, sample_rate).map(|e| Box::new(e) as Box<dyn Effect>),
         "Fruity Phaser" => phaser::Phaser::from_state(state, sample_rate).map(|e| Box::new(e) as Box<dyn Effect>),
+        "Vocodex" => vocoder::VocoderFx::from_state(state, sample_rate).map(|e| Box::new(e) as Box<dyn Effect>),
         "Fruity Stereo Shaper" => stereo_shaper::StereoShaper::from_state(state, sample_rate).map(|e| Box::new(e) as Box<dyn Effect>),
         "Fruity Love Philter" => love_philter::LovePhilter::from_state(state, sample_rate).map(|e| Box::new(e) as Box<dyn Effect>),
         "Maximus" => maximus::Maximus::from_state(state, sample_rate).map(|e| Box::new(e) as Box<dyn Effect>),

@@ -3079,6 +3079,7 @@ dependencies = [
  "lemon-stereo-enhancer",
  "lemon-stereo-shaper",
  "lemon-transient-processor",
+ "lemon-vocoder",
  "lemon-wavetable",
  "libc",
  "mango-beat",
