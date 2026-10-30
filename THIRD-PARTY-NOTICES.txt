@@ -897,7 +897,22 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 -------------------------------------------------------------------------------
-13. The Rust crates in Cargo.lock
+13. Virtuosity Drums samples (Creative Commons Zero 1.0)
+-------------------------------------------------------------------------------
+
+The Mango Pack (crates/os-app/assets/samples/mango-pack), the thirty one-shots
+the Browser lists as "Sounds/Mango Pack", is curated from Virtuosity Drums by
+Versilian Studios (with Karoryfer Samples), a contemporary jazz drum kit and
+percussion library recorded at Virtuosity Musical Instruments in Boston, MA.
+It was published at https://github.com/studiorack/virtuosity-drums and
+https://vis.versilstudios.com/virtuosity-drums.html under the Creative Commons
+Zero 1.0 Universal dedication: the samples carry no conditions at all, and the
+dedication's full text is the source repository's LICENSE file. Which of the
+library's files each pack sample was made from, and how, says
+crates/os-app/assets/samples/mango-pack/PROVENANCE.md.
+
+-------------------------------------------------------------------------------
+14. The Rust crates in Cargo.lock
 -------------------------------------------------------------------------------
 
 This section is generated: `cargo run -p notices` writes it with cargo-about

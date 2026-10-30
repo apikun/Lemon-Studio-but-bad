@@ -57,8 +57,37 @@ fn factory_presets() {
     std::fs::write(PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("factory_presets.rs"), out).unwrap();
 }
 
+/// The Mango Pack's one-shots in `assets/samples/mango-pack/*.wav`, as a Rust slice expression of (file name; bytes)
+/// for `sample_pack.rs` to include. Their provenance is that folder's PROVENANCE.md.
+fn sample_pack() {
+    let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+        .join("assets")
+        .join("samples")
+        .join("mango-pack");
+    println!("cargo:rerun-if-changed={}", dir.display());
+    let name = |p: &std::path::Path| p.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    let wav = |p: &std::path::Path| p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("wav"));
+    let mut found: Vec<(String, PathBuf)> = std::fs::read_dir(&dir)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.path())
+                .filter(|p| wav(p))
+                .map(|p| (name(&p), p))
+                .collect()
+        })
+        .unwrap_or_default();
+    found.sort();
+    let mut out = String::from("&[\n");
+    for (name, path) in &found {
+        out.push_str(&format!("    ({name:?}, include_bytes!({:?}) as &[u8]),\n", path.display().to_string()));
+    }
+    out.push(']');
+    std::fs::write(PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("sample_pack.rs"), out).unwrap();
+}
+
 fn main() {
     factory_presets();
+    sample_pack();
     // `plugin_windows`: plugin editors open in Lemon Studio's frame windows (Win32 on Windows, X11 on Linux, AppKit on
     // macOS).
     println!("cargo::rustc-check-cfg=cfg(plugin_windows)");

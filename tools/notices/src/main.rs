@@ -17,7 +17,7 @@ use std::process::Command;
 const FILE: &str = "THIRD-PARTY-NOTICES.txt";
 
 /// The heading of the generated section (`about.hbs` writes it under a rule line).
-const HEADING: &str = "13. The Rust crates in Cargo.lock";
+const HEADING: &str = "14. The Rust crates in Cargo.lock";
 
 /// The width the notices are wrapped to.
 const WIDTH: usize = 79;
