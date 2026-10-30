@@ -505,8 +505,12 @@ pub const CLIPS_SEL_LABEL: &str = "Switch selected audio clip channels to";
 /// out. The dropdown opens it to the right of the row (`App::open_menu_sub`).
 pub fn submenu(menu: usize, label: &str) -> Option<fn(&State) -> Vec<crate::playlist::PItem>> {
     match (menu, label) {
-        // spec: ui/midi-files.md §1: FL's Import holds only MIDI file...
-        (0, "Import") => Some(|_| vec![crate::playlist::PItem::new("MIDI file...", crate::playlist::Cmd::MidiImport(false))]),
+        // spec: ui/midi-files.md §1: FL's Import holds only MIDI file...; the audio file import is ours, the same files
+        // a drop on the playlist takes (Load sample's filter).
+        (0, "Import") => Some(|_| vec![
+            crate::playlist::PItem::new("MIDI file...", crate::playlist::Cmd::MidiImport(false)),
+            crate::playlist::PItem::new("Audio file...", crate::playlist::Cmd::AudioImport),
+        ]),
         // spec: ui/project-templates.md
         (0, "New from template") => Some(crate::project_files::template_items),
         // spec: ui/plugin-menu.md §1: the effects, a pick into the selected mixer track's first empty slot as from F8.
@@ -1007,6 +1011,7 @@ mod tests {
         }
         assert_eq!(built, ["New from template", "Import", "Effect", "Toolbars", ONE_CLICK_LABEL, DUMP_LOG_LABEL, CLIPS_ALL_LABEL, CLIPS_SEL_LABEL, EDITORS_LABEL, DECLICK_LABEL]);
         let labels = |menu, label| submenu(menu, label).unwrap()(&app.state).iter().map(|p| p.label.to_string()).collect::<Vec<_>>();
+        assert_eq!(labels(0, "Import"), ["MIDI file...", "Audio file..."], "the audio file import sits beside the MIDI one");
         let modes = ["Out only (no bleeding)", "Transient (no bleeding)", "Transient (bleeding)", "Generic (bleeding)", "Smooth (bleeding)", "Crossfade (bleeding)"];
         assert_eq!(labels(TOOLS_MENU, DECLICK_LABEL), modes, "the six declick modes in order (spec: audio/declick.md)");
         assert_eq!(labels(TOOLS_MENU, EDITORS_LABEL), ["Attached", "Detached"]);

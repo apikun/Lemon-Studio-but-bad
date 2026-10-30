@@ -417,6 +417,8 @@ pub enum Cmd {
     /// file... (spec: ui/midi-files.md §1).
     MidiImport(bool),
     MidiExport(bool),
+    /// FILE ▸ Import ▸ Audio file...: the file becomes an audio clip at the playhead, as a drop on the playlist does.
+    AudioImport,
     /// The Arpeggiate dialog's menus (spec: ui/piano-arpeggiate.md §1).
     Arp(crate::arpeggiate::ACmd),
     /// FILE ▸ Recent projects ▸ More: open recent project `n` (spec: ui/recent-projects.md §2).
@@ -2289,7 +2291,11 @@ pub fn add_audio_clip(s: &mut State, path: &str, track: u16, tick: u32) -> Optio
 /// `add_audio_clip` as the undo step `name` (One-click audio recording's "Recorded items").
 pub fn add_audio_clip_as(s: &mut State, path: &str, track: u16, tick: u32, name: &'static str) -> Option<usize> {
     s.playlist.wave(path)?;
-    snapshot_as(s, name);
+    // The step holds the rack side too, so the audio clip channel comes and goes with the clip, as Add audio clip's
+    // does (`add_clip_channel`): the playlist snapshot alone would leave the channel behind on an undo.
+    let row = s.project.channels.len();
+    let before = crate::history::Snap::Rack(Box::new(crate::history::RackSide::now(s, row)));
+    snapshot_with(s, name, before);
     let index = s.project.channels.iter().map(|c| c.index + 1).max().unwrap_or(0);
     let name = std::path::Path::new(path).file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Audio".into());
     let mixer_track = (s.project.channels.iter().map(|c| c.mixer_track).max().unwrap_or(0) + 1).min(crate::mixer::max_insert(&s.project));
@@ -4326,6 +4332,10 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
             app.open_recent(n);
             return None;
         }
+        Cmd::AudioImport => {
+            app.import_audio_dialog();
+            return None;
+        }
         Cmd::MidiImport(piano) => {
             app.import_midi_dialog(piano);
             return None;
@@ -5062,7 +5072,7 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
         Cmd::Genre(_) => None,
         Cmd::Theme(_) => None,
         Cmd::Template(_) | Cmd::NewTemplate(_) => None,
-        Cmd::Arp(_) | Cmd::MidiImport(_) | Cmd::MidiExport(_) | Cmd::OpenRecent(_) => None,
+        Cmd::Arp(_) | Cmd::MidiImport(_) | Cmd::MidiExport(_) | Cmd::AudioImport | Cmd::OpenRecent(_) => None,
         Cmd::FlamPreset(_) => None,
         Cmd::Limit(_) => None,
         Cmd::Claw(_) => None,
