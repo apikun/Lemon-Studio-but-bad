@@ -46,6 +46,8 @@ use os_ui::{kit, Color, Rect};
 use crate::app::{Action, Bar, Scroll, Seg, State, Ui, Win};
 use crate::icons::{self, Icon};
 
+pub(super) const MANGO_MIXER_RIM: Color = Color::rgb(0x2e2e2e);
+
 /// Per-frame values that don't live in `State`.
 pub struct FrameInfo {
     pub title: String,

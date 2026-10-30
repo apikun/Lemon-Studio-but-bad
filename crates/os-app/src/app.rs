@@ -19833,6 +19833,7 @@ mod tests {
         app.state.playlist.reset();
         app.state.z = vec![Win::Playlist];
         app.state.project.patterns[0].notes = (0..16).map(|i| Note { length: 24, key: 60 + (i % 5) as u16 * 2, ..Note::step(0, i * 48) }).collect();
+        app.state.project.patterns[0].notes.extend([60, 64, 67].map(|key| Note { length: 192, key, ..Note::step(0, 0) }));
         let bar = 4 * u32::from(app.state.project.ppq);
         {
             let a = pl::arr_mut(&mut app.state);
@@ -19872,8 +19873,14 @@ mod tests {
         app.add_clip_channel(ChannelKind::AudioClip);
         let audio = app.state.project.channels.iter_mut().rfind(|c| c.kind == ChannelKind::AudioClip).unwrap();
         audio.sample_path = Some("shot.wav".into());
-        let peaks = (0..400).map(|i| (i as f32 / 9.0).sin().abs() * (1.0 - i as f32 / 400.0)).map(|a| (-a, a)).collect();
-        let wave = pl::Wave { rate: 44100, frames: 400 * 64, per: 64, peaks };
+        let peaks = (0..5000)
+            .map(|i| {
+                let envelope = 0.15 + 0.85 * (0.5 + 0.5 * (i as f32 / 125.0).sin());
+                let amplitude = if i % 700 < 8 { 1.0 } else { (i as f32 / 9.0).sin().abs() * envelope };
+                (-amplitude, amplitude)
+            })
+            .collect();
+        let wave = pl::Wave::new(44100, 5000 * 64, 64, peaks);
         app.state.playlist.waves.borrow_mut().insert("shot.wav".into(), Some(std::rc::Rc::new(wave)));
         for design in [Design::Citrus, Design::Lemon] {
             app.set_design(design, false);
@@ -19884,6 +19891,26 @@ mod tests {
                 c.pixmap.save_png(dir.join(format!("pl_pick_{list}_{}.png", format!("{design:?}").to_lowercase()))).unwrap();
             }
         }
+
+        app.set_design(Design::Lemon, false);
+        app.state.playlist.picker = pl::PickKind::Pattern;
+        app.state.playlist.row_h = pl::ROW_H;
+        app.state.playlist_bar_w = 24.0;
+        app.state.playlist_scroll = (0.0, 0.0);
+        let audio_ch = app.state.project.channels.iter().find(|c| c.kind == ChannelKind::AudioClip).unwrap().index;
+        {
+            let a = pl::arr_mut(&mut app.state);
+            a.clips.clear();
+            a.clips.extend((0..4).map(|i| {
+                os_model::Clip::new(i * 2 * bar, 2 * bar, 0, os_model::ClipSource::Pattern(1))
+            }));
+            for i in [0, 8, 16] {
+                a.clips.push(os_model::Clip::new(i * bar, 8 * bar, 1, os_model::ClipSource::Channel(audio_ch)));
+            }
+            a.clips.push(os_model::Clip::new(0, 8 * bar, 2, os_model::ClipSource::Channel(ch)));
+        }
+        frame(&mut app, &mut c, None);
+        c.pixmap.save_png(dir.join("pl_arrangement_previews.png")).unwrap();
     }
 
     /// Look check for the piano roll's vertical zoom, time markers, Tools menu and snap menus (spec: ui/piano-roll.md

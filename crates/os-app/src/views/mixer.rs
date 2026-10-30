@@ -426,9 +426,9 @@ fn strip(ui: &mut Ui, s: &State, n: u16, left: f32, bottom: f32, f: &FrameInfo, 
         ui.c.fill_rect(card, Color::rgb(0x000000));
         let face = Rect::new(card.x + 2.0, card.y + 1.0, card.w - 4.0, card.h - 4.0);
         let (top, low, rim) = if selected {
-            (Color::rgb(0x2a2a2a), Color::rgb(0x1a1a1a), t.accent.mix(Color::rgb(0x2e2e2e), 0.55))
+            (Color::rgb(0x2a2a2a), Color::rgb(0x1a1a1a), t.accent.mix(super::MANGO_MIXER_RIM, 0.55))
         } else {
-            (Color::rgb(0x202020), Color::rgb(0x121212), Color::rgb(0x2e2e2e))
+            (Color::rgb(0x202020), Color::rgb(0x121212), super::MANGO_MIXER_RIM)
         };
         ui.c.fill_rrect(face.outset(1.0), lk::r_panel(t) + 1.0, rim);
         ui.c.fill_rect_gradient(face, top, low, lk::r_panel(t));

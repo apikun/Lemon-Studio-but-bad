@@ -152,7 +152,7 @@ pub fn paint(ui: &mut Ui, s: &State, r: Rect, f: &FrameInfo) {
     let head_w = 98.0;
     let grid = grid_rect(s, r, client);
     debug_assert_eq!(grid, cover);
-    let (grid_x, grid_y, grid_w) = (grid.x, grid.y, grid.w);
+    let (grid_x, grid_w) = (grid.x, grid.w);
     let has_markers = !pl::markers(s).is_empty();
     let lane_y = client.y + 42.0;
     let g = PGeom::new(s, grid);
@@ -609,12 +609,12 @@ fn preview(ui: &mut Ui, s: &State, src: ClipSource, r: Rect, tall: bool, face: C
             let per = w.peaks.len() as f32 / n as f32;
             let (mut top, mut bottom) = (Vec::with_capacity(n), Vec::with_capacity(n));
             for i in 0..n {
-                let a = (i as f32 * per) as usize;
+                let a = ((i as f32 * per) as usize).min(w.peaks.len() - 1);
                 let b = (((i + 1) as f32 * per) as usize).clamp(a + 1, w.peaks.len());
-                let (lo, hi) = w.peaks[a.min(w.peaks.len() - 1)..b].iter().fold((f32::MAX, f32::MIN), |(lo, hi), &(x, y)| (lo.min(x), hi.max(y)));
+                let Some((lo, hi)) = w.peak_range(a, b) else { continue };
                 let x = r.x + i as f32 + 0.5;
-                top.push((x, mid - hi.clamp(-1.0, 1.0) * amp - 0.35));
-                bottom.push((x, mid - lo.clamp(-1.0, 1.0) * amp + 0.35));
+                top.push((x, mid - (hi * 1.5).clamp(-1.0, 1.0) * amp - 0.6));
+                bottom.push((x, mid - (lo * 1.5).clamp(-1.0, 1.0) * amp + 0.6));
             }
             top.extend(bottom.into_iter().rev());
             ui.c.fill_polygon(&top, wave);
@@ -1028,10 +1028,13 @@ fn pattern_notes(ui: &mut Ui, s: &State, g: &PGeom, c: &Clip, n: u16, body: Body
     }
     let br = body.r;
     let (w0, wl) = pl::window(s, c);
-    let (lo, hi) = p.notes.iter().fold((u16::MAX, 0u16), |(lo, hi), n| (lo.min(n.key), hi.max(n.key)));
-    let span = f32::from(hi - lo + 1);
-    let h = ((br.h - 4.0) / span).clamp(1.0, 3.0);
-    let usable = br.h - 4.0 - h;
+    let mut pitches: Vec<u16> = p.notes.iter().map(|note| note.key).collect();
+    pitches.sort_unstable();
+    pitches.dedup();
+    let pitch_count = pitches.len() as f32;
+    let h = (((br.h - 4.0).max(1.0) / pitch_count * 0.45).clamp(1.5, 2.5)).min(br.h.max(1.0));
+    let usable = (br.h - 4.0 - h).max(0.0);
+    let pad = (br.h - h - usable) / 2.0;
     let step = (g.ppq / 4).max(1);
     // Only the notes reaching the painted part of the body.
     let Some(area) = ui.c.paint_bounds() else { return };
@@ -1050,10 +1053,14 @@ fn pattern_notes(ui: &mut Ui, s: &State, g: &PGeom, c: &Clip, n: u16, body: Body
         if x1 < x_min || x0 > x_max {
             continue;
         }
-        let k = if span <= 1.0 { 0.5 } else { f32::from(note.key - lo) / (span - 1.0) };
-        let y = pl::snap(f64::from(br.y) + 2.0 + f64::from(usable * (1.0 - k)));
+        let k = if pitch_count <= 1.0 {
+            0.5
+        } else {
+            pitches.binary_search(&note.key).expect("note pitch is in the preview") as f32 / (pitch_count - 1.0)
+        };
+        let y = pl::snap(f64::from(br.y + pad + usable * (1.0 - k)));
         let y1 = pl::snap(f64::from(y) + f64::from(h));
-        ui.c.fill_rect(Rect::new(x0, y, (x1 - x0 - 1.0).max(1.0), y1 - y), col);
+        ui.c.fill_rect(Rect::new(x0, y, (x1 - x0).max(2.0), y1 - y), col);
     }
 }
 
@@ -1119,16 +1126,13 @@ fn waveform(ui: &mut Ui, s: &State, g: &PGeom, c: &Clip, ch: u16, body: Body, co
             if r_start >= total_peaks || r_start >= r_end {
                 return None;
             }
-            let stride = ((r_end - r_start) / 32).max(1);
-            Some(w.peaks[r_start..r_end].iter().step_by(stride).fold((f32::MAX, f32::MIN), |(lo, hi), &(a, b)| (lo.min(a), hi.max(b))))
+            w.peak_range(r_start, r_end)
         } else {
             if fa >= total_peaks {
                 return None;
             }
             let fb = fb.min(total_peaks);
-            // Cap the work per column when zoomed far out.
-            let stride = ((fb - fa) / 32).max(1);
-            Some(w.peaks[fa..fb].iter().step_by(stride).fold((f32::MAX, f32::MIN), |(lo, hi), &(a, b)| (lo.min(a), hi.max(b))))
+            w.peak_range(fa, fb)
         }
     };
     let n = ((x1 - body.x) / px - j0).ceil().max(0.0) as usize;
@@ -1140,11 +1144,11 @@ fn waveform(ui: &mut Ui, s: &State, g: &PGeom, c: &Clip, ch: u16, body: Body, co
         let d = j * px;
         let Some((lo, hi)) = range(d, d + px) else { break };
         let k = shape(d + px * 0.5) * amp;
-        let (mut yt, mut yb) = (mid - f64::from(hi.clamp(-1.0, 1.0)) * k, mid - f64::from(lo.clamp(-1.0, 1.0)) * k);
-        // Keep a hairline where the column is flat (a DC sample, silence).
-        if yb - yt < 0.7 {
+        let (mut yt, mut yb) = (mid - f64::from((hi * 1.7).clamp(-1.0, 1.0)) * k, mid - f64::from((lo * 1.7).clamp(-1.0, 1.0)) * k);
+        // Keep a visible hairline where the column is flat (a DC sample, silence).
+        if yb - yt < 1.4 {
             let m = (yt + yb) / 2.0;
-            (yt, yb) = (m - 0.35, m + 0.35);
+            (yt, yb) = (m - 0.7, m + 0.7);
         }
         let (yt, yb) = (pl::snap(yt), pl::snap(yb));
         let xm = pl::snap((x + px * 0.5).min(x1));
@@ -1343,7 +1347,7 @@ fn curve(ui: &mut Ui, s: &State, g: &PGeom, i: usize, c: &Clip, ch: u16, edges: 
     area.push((x1, body.bottom()));
     area.push((x0, body.bottom()));
     ui.c.fill_polygon(&area, bg.shade(0.07));
-    ui.c.polyline(&pts, 1.5, col);
+    ui.c.polyline(&pts, 2.25, col);
     // Points and tension handles while the mouse is over the clip (§8).
     if s.playlist.hover_clip == Some(i) {
         for (k, p) in a.points.iter().enumerate() {
