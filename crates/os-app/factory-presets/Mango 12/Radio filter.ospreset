@@ -4,8 +4,8 @@ plugin=Mango 12	id=clap:org.openstudio.mango-12	format=clap	body=params
 Tune = 0
 Fine = 0
 Range = 0
-Gain In = 0
-Gain Out = 0
+Gain In = 120
+Gain Out = 120
 Link = 0
 Filter = 55
 Route = 0
