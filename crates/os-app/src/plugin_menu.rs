@@ -5,8 +5,9 @@
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
 //! Plugin menus: F8, the toolbar's plugin button, the channel rack's "+" and an empty mixer slot open the plugin
-//! picker (`crate::plugin_picker`); Add one ▸ / Insert ▸ / Replace ▸ and ADD ▸ Effect list the installed plugins as
-//! submenus. A pick adds the plugin where that menu says. Each plugin family is listed once (`plugin_db::families`).
+//! picker (`crate::plugin_picker`); an empty mixer slot opens the larger effect menu there. Add one ▸ / Insert ▸ /
+//! Replace ▸ and ADD ▸ Effect list the installed plugins as submenus. A pick adds the plugin where that menu says.
+//! Each plugin family is listed once (`plugin_db::families`).
 // spec: ui/plugin-menu.md
 
 use std::collections::BTreeMap;
