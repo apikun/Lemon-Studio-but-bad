@@ -113,6 +113,8 @@ pub enum Then {
     DataFolder(crate::data_folder::DThen),
     /// The MIDI file to import (`crate::midi_file`); true: from the piano roll.
     MidiImport(bool),
+    /// FILE ▸ Import ▸ Audio file...: the audio file to place on the playlist.
+    AudioImport,
     /// Where to export a MIDI file; true: the piano roll's channel.
     MidiExport(bool),
     /// File ▸ FL Studio factory content folder: the folder picked (`App::set_factory_folder`).

@@ -2235,6 +2235,11 @@ impl App {
                     self.midi_export_chosen(p, piano);
                 }
             }
+            Then::AudioImport => {
+                if let Some(p) = file {
+                    self.audio_file_chosen(p);
+                }
+            }
         }
         self.invalidate();
     }
@@ -4591,6 +4596,31 @@ impl App {
         let name = path.to_string_lossy().into_owned();
         s.message = Some(match crate::playlist::add_audio_clip(s, &name, track, tick) {
             Some(_) => format!("Added audio clip {}", path.display()),
+            None => format!("Could not read {} as audio", path.display()),
+        });
+        self.invalidate();
+    }
+
+    /// FILE ▸ Import ▸ Audio file...: the open dialog with the rack's Load sample filter — every kind of audio the
+    /// samplers and the playlist decode (WAV, MP3, FLAC, Ogg, AIFF, M4A / AAC).
+    pub(crate) fn import_audio_dialog(&mut self) {
+        use crate::filedlg::{FileDlg, Mode};
+        let dlg = FileDlg::new(Mode::Open, "Import audio file", "audio", Then::AudioImport)
+            .filter("Audio", &["wav", "mp3", "flac", "ogg", "aif", "aiff", "m4a", "aac"]);
+        self.file_dialog(dlg);
+    }
+
+    /// An audio file chosen in FILE ▸ Import ▸ Audio file...: the audio clip channel and clip at the playhead
+    /// (`playlist.pos`) on the first track free over it, from the selected track down — a drop on the playlist is aimed
+    /// by the mouse, this one by the transport. One history step, "Playlist edit".
+    pub(crate) fn audio_file_chosen(&mut self, path: PathBuf) {
+        let text = path.to_string_lossy().into_owned();
+        let s = &mut self.state;
+        let tick = s.playlist.pos;
+        let len = crate::playlist::sample_len(s, &text).max(1);
+        let track = crate::playlist::free_track(s, s.playlist.track, tick, tick + len);
+        s.message = Some(match crate::playlist::add_audio_clip(s, &text, track, tick) {
+            Some(_) => format!("Imported audio {}", path.display()),
             None => format!("Could not read {} as audio", path.display()),
         });
         self.invalidate();
@@ -14801,6 +14831,53 @@ mod tests {
         assert!(crate::views::playlist::drop_ghost(&app.state, grid, x3, y3).is_none(), "no ghost for a file that will not decode");
         app.mouse_up();
         assert_eq!(crate::playlist::clips(&app.state).len(), n0 + 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FILE ▸ Import ▸ Audio file...: the file chosen in the dialog becomes an audio clip channel and clip at the
+    /// playhead on the selected track (the first free one over the clip's span), one undo step takes it back, and a file
+    /// that does not decode is only a message.
+    #[test]
+    fn import_audio_file_places_it_at_the_playhead() {
+        let dir = std::env::temp_dir().join(format!("os_audio_import_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // One second of silence at 44100: 208 ticks at the test project's tempo (130) and ppq 96.
+        let path = dir.join("Imported 01.wav");
+        os_engine::wav::write_f32_stereo(&mut std::fs::File::create(&path).unwrap(), 44100, &vec![0.0; 44100]).unwrap();
+        let mut app = App::new(None);
+        app.state.project = test_project();
+        app.state.file = None;
+        app.state.path = None;
+        app.state.playlist.reset();
+        app.state.tempo = 130.0;
+        app.state.playlist.pos = 192;
+        app.state.playlist.track = 1;
+        crate::playlist::arr_mut(&mut app.state);
+        let n0 = crate::playlist::clips(&app.state).len();
+        crate::dialog::fake::answer(Some(path.clone()));
+        crate::playlist::run(&mut app, crate::playlist::Cmd::AudioImport);
+        let clips = crate::playlist::clips(&app.state);
+        assert_eq!(clips.len(), n0 + 1, "the file landed");
+        let clip = clips.last().unwrap();
+        assert_eq!((clip.track, clip.position), (1, 192), "at the playhead on the selected track");
+        let ch = app.state.project.channels.last().unwrap();
+        assert!(matches!(ch.kind, os_model::ChannelKind::AudioClip), "an audio clip channel");
+        assert_eq!(ch.sample_path.as_deref(), Some(path.to_string_lossy().as_ref()));
+        assert!(app.state.message.as_deref().is_some_and(|m| m.contains("Imported audio")));
+        let before = app.state.project.clone();
+        assert_eq!(crate::history::undo(&mut app.state), Some("Playlist edit"));
+        assert_eq!(crate::playlist::clips(&app.state).len(), n0);
+        assert!(!app.state.project.channels.iter().any(|c| matches!(c.kind, os_model::ChannelKind::AudioClip)), "the channel went too");
+        crate::history::redo(&mut app.state);
+        assert_eq!(app.state.project.channels, before.channels);
+        // A file that does not decode: the message only.
+        let bad = dir.join("Nope.wav");
+        std::fs::write(&bad, b"x").unwrap();
+        crate::dialog::fake::answer(Some(bad));
+        crate::playlist::run(&mut app, crate::playlist::Cmd::AudioImport);
+        assert!(app.state.message.as_deref().is_some_and(|m| m.contains("Could not read")));
+        assert_eq!(crate::playlist::clips(&app.state).len(), n0 + 1, "nothing placed for the bad file");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

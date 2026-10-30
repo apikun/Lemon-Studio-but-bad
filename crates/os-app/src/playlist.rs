@@ -417,6 +417,8 @@ pub enum Cmd {
     /// file... (spec: ui/midi-files.md §1).
     MidiImport(bool),
     MidiExport(bool),
+    /// FILE ▸ Import ▸ Audio file...: the file becomes an audio clip at the playhead, as a drop on the playlist does.
+    AudioImport,
     /// The Arpeggiate dialog's menus (spec: ui/piano-arpeggiate.md §1).
     Arp(crate::arpeggiate::ACmd),
     /// FILE ▸ Recent projects ▸ More: open recent project `n` (spec: ui/recent-projects.md §2).
@@ -4326,6 +4328,10 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
             app.open_recent(n);
             return None;
         }
+        Cmd::AudioImport => {
+            app.import_audio_dialog();
+            return None;
+        }
         Cmd::MidiImport(piano) => {
             app.import_midi_dialog(piano);
             return None;
@@ -5062,7 +5068,7 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
         Cmd::Genre(_) => None,
         Cmd::Theme(_) => None,
         Cmd::Template(_) | Cmd::NewTemplate(_) => None,
-        Cmd::Arp(_) | Cmd::MidiImport(_) | Cmd::MidiExport(_) | Cmd::OpenRecent(_) => None,
+        Cmd::Arp(_) | Cmd::MidiImport(_) | Cmd::MidiExport(_) | Cmd::AudioImport | Cmd::OpenRecent(_) => None,
         Cmd::FlamPreset(_) => None,
         Cmd::Limit(_) => None,
         Cmd::Claw(_) => None,
