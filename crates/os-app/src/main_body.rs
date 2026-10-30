@@ -1949,6 +1949,11 @@ pub(crate) fn run_from(mut builder: winit::event_loop::EventLoopBuilder<()>, pat
         if let Some(Err(e)) = os_paths::user_dir().map(|r| crate::sound_kit::offer(&mut app.state, &r)) {
             eprintln!("[sound kit] the Mango Kit was not made: {e}");
         }
+        // The Mango Pack: Virtuosity Drums' one-shots (CC0; assets/samples/mango-pack/PROVENANCE.md), written once and
+        // listed in the Browser.
+        if let Some(Err(e)) = os_paths::user_dir().map(|r| crate::sample_pack::offer(&mut app.state, &r)) {
+            eprintln!("[sample pack] the Mango Pack was not made: {e}");
+        }
         app.startup_project();
         // Ask for data folder "On startup": the New project form over it (spec: ui/data-folder.md §7).
         app.startup_form();
