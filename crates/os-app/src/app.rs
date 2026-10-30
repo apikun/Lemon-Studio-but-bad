@@ -4604,6 +4604,7 @@ impl App {
     /// FILE ▸ Import ▸ Audio file...: the open dialog with the rack's Load sample filter — every kind of audio the
     /// samplers and the playlist decode (WAV, MP3, FLAC, Ogg, AIFF, M4A / AAC).
     pub(crate) fn import_audio_dialog(&mut self) {
+        use crate::dialog::Then;
         use crate::filedlg::{FileDlg, Mode};
         let dlg = FileDlg::new(Mode::Open, "Import audio file", "audio", Then::AudioImport)
             .filter("Audio", &["wav", "mp3", "flac", "ogg", "aif", "aiff", "m4a", "aac"]);
