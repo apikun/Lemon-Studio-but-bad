@@ -201,7 +201,7 @@ impl Logic {
     }
 
     fn hint_for(&self, t: Option<&Target>) -> String {
-        t.map(|t| view::hint(self.spec, t, &self.vals)).unwrap_or_default()
+        t.map(|t| view::hint(self.spec, t, &view::Shown { spec: self.spec, vals: &self.vals })).unwrap_or_default()
     }
 
     fn range(&self, id: &str) -> (i32, i32) {
@@ -210,6 +210,27 @@ impl Logic {
 
     fn edit(&mut self, id: &str, norm: f32) {
         self.vals.edit(id, norm);
+    }
+
+    /// Sets a setting to a normalized value in its shown space, inside a gesture: the stored value written is the
+    /// shown one plus the spec's offset, in its range (the out knob drags the effective gain while linked).
+    fn set_shown(&mut self, id: &str, norm: f32) {
+        match self.spec.index(id).and_then(|k| view::offset(self.spec, &self.vals, k)) {
+            None => self.vals.set(id, norm),
+            Some(off) => {
+                let (lo, hi) = self.range(id);
+                let shown = lo as f32 + norm.clamp(0.0, 1.0) * (hi - lo) as f32;
+                let stored = (shown + off as f32).clamp(lo as f32, hi as f32);
+                self.vals.set(id, self.vals.plain_to_norm(id, stored));
+            }
+        }
+    }
+
+    /// One complete edit in a setting's shown space (a paste, a reset): the knob lands where it is put.
+    fn edit_shown(&mut self, id: &str, norm: f32) {
+        self.vals.begin(id);
+        self.set_shown(id, norm);
+        self.vals.end(id);
     }
 
     /// A drag position `v` (normalised) moved onto its magnet, if it has one (spec §4).
@@ -225,12 +246,12 @@ impl Logic {
 
     fn reset(&mut self, id: &str) {
         let d = self.vals.default_norm(id);
-        self.edit(id, d);
+        self.edit_shown(id, d);
     }
 
     fn begin_drag(&mut self, id: &str, px: f32, t: Target) -> Vec<Act> {
         self.vals.begin(id);
-        self.drag = Some(Drag { id: id.into(), v: self.vals.norm(id), px });
+        self.drag = Some(Drag { id: id.into(), v: view::shown_norm(self.spec, &self.vals, id), px });
         self.view.pressed = Some(t);
         vec![Act::Repaint, Act::Lock]
     }
@@ -264,7 +285,7 @@ impl Logic {
         let v = (v - dy * f / px).clamp(0.0, 1.0);
         // The drag keeps its own position; the setting lands on a magnet (Shift drags freely).
         let shown = if m.shift { v } else { self.snapped(&id, v) };
-        self.vals.set(&id, shown);
+        self.set_shown(&id, shown);
         self.drag = Some(Drag { id, v, px });
         let t = self.view.pressed.clone();
         self.hint = self.hint_for(t.as_ref());
@@ -300,12 +321,12 @@ impl Logic {
         let (lo, hi) = self.range(&id);
         let steps = (hi - lo) as f32;
         let step = if steps > WHEEL_STEPS { (steps / WHEEL_STEPS).round() } else { 1.0 };
-        let cur = self.vals.plain(&id);
+        let cur = view::shown_plain(self.spec, &self.vals, &id);
         let mut plain = (cur + notches.signum() * step).clamp(lo as f32, hi as f32);
         if let (Some(k), false) = (self.spec.index(&id), m.shift) {
             plain = params::snap_step(self.spec, k, cur.round() as i32, plain.round() as i32) as f32;
         }
-        self.vals.edit_plain(&id, plain);
+        self.vals.edit_plain(&id, view::stored_plain(self.spec, &self.vals, &id, plain));
         self.hint = self.hint_for(Some(&t));
         vec![Act::Repaint]
     }
@@ -341,10 +362,10 @@ impl Logic {
         match cmd {
             Cmd::None => {}
             Cmd::Reset(id) => self.reset(&id),
-            Cmd::CopyValue(id) => self.copied = Some(self.vals.norm(&id)),
+            Cmd::CopyValue(id) => self.copied = Some(view::shown_norm(self.spec, &self.vals, &id)),
             Cmd::PasteValue(id) => {
                 if let Some(v) = self.copied {
-                    self.edit(&id, v);
+                    self.edit_shown(&id, v);
                 }
             }
             Cmd::TypeIn(id) => return vec![Act::TypeIn(id, x, y)],
@@ -354,22 +375,28 @@ impl Logic {
         vec![Act::Repaint]
     }
 
-    /// The value text a type-in box starts with.
+    /// The value text a type-in box starts with (the shown value, what the knob reads).
     pub fn value_text(&self, id: &str) -> String {
-        self.vals.text(id)
+        view::shown_text(self.spec, &self.vals, id)
     }
 
-    /// Applies a typed value.
+    /// Applies a typed value: the typed value is what the knob shows (the stored one gains the spec's offset).
     pub fn typed(&mut self, id: &str, text: &str) {
-        if let Some(n) = self.vals.parse(id, text) {
-            self.edit(id, n);
-        }
+        let Some(k) = self.spec.index(id) else { return };
+        let Some(v) = (self.spec.parse)(k, text) else { return };
+        let (lo, hi) = self.range(id);
+        let plain = match view::offset(self.spec, &self.vals, k) {
+            Some(off) => (v + off).clamp(lo, hi),
+            None => v.clamp(lo, hi),
+        };
+        self.vals.edit_plain(id, plain as f32);
     }
 
     /// Paints the editor; `hint` is drawn when the host does not show it.
     pub fn paint(&mut self, c: &mut os_ui::Canvas, palette: &os_theme::Palette) {
         let hint = if self.hosted { String::new() } else { self.hint.clone() };
-        self.hits = view::paint(self.spec, c, palette, &self.vals, &self.view, &hint);
+        let shown = view::Shown { spec: self.spec, vals: &self.vals };
+        self.hits = view::paint(self.spec, c, palette, &shown, &self.view, &hint);
     }
 }
 
@@ -895,7 +922,7 @@ mod gui {
 mod tests {
     use super::*;
     use crate::tests::SPECS;
-    use crate::{balance, chorus, fast_distortion, filter, flanger, phaser, soft_clipper, stereo_enhancer, stereo_shaper, transient_processor, vocoder, Control};
+    use crate::{balance, chorus, fast_distortion, filter, flanger, phaser, soft_clipper, stereo_enhancer, stereo_shaper, twelve, transient_processor, vocoder, Control};
 
     fn logic(spec: &'static Spec) -> Logic {
         let mut l = Logic::new(spec, Arc::new(FxParams::new(spec)), Arc::new(Shared::default()), None);
@@ -990,6 +1017,46 @@ mod tests {
         assert_eq!(l.vals.plain("balance"), 0.0);
         let acts = l.down(x, y, Btn::Right, Mods::default(), false);
         assert!(matches!(acts.last(), Some(Act::Menu(MenuReq::Param(id), _, _)) if id == "balance"));
+    }
+
+    /// Mango 12's linked gains: the out knob shows the effective output gain and follows the in knob, and editing it
+    /// (a drag, a typed value, a reset) sets the effective gain while the stored total moves by the same amount.
+    #[test]
+    fn the_linked_out_knob_shows_and_edits_the_effective_gain() {
+        let mut l = logic(twelve::SPEC);
+        l.typed("link", "link");
+        l.typed("in", "6dB");
+        assert_eq!(l.params.v(twelve::LINK), 1);
+        assert_eq!(l.params.v(twelve::IN), 60);
+        // The out knob reads -6 dB while the stored total stays at 0.
+        assert_eq!(l.vals.plain("out"), 0.0);
+        assert_eq!(view::shown_plain(l.spec, &l.vals, "out"), -60.0);
+        assert_eq!(l.value_text("out"), "-6.0dB");
+        let (x, y) = centre(&l, &Target::Knob("out".into()));
+        l.moved(x, y, Mods::default());
+        assert_eq!(l.hint, "Gain Out: -6.0dB");
+        // Pushing the in gain on: the out knob follows, the total holds.
+        l.typed("in", "9dB");
+        assert_eq!(view::shown_plain(l.spec, &l.vals, "out"), -90.0);
+        l.typed("in", "6dB");
+        // Dragging the out knob up 50 px puts the effective gain at unity (the magnet holds it there): the total
+        // follows to the in gain (+6).
+        l.down(x, y, Btn::Left, Mods::default(), false);
+        for _ in 0..50 {
+            l.delta(0.0, -1.0, Mods::default());
+        }
+        l.up(Btn::Left);
+        assert_eq!(l.params.v(twelve::OUT), 60);
+        assert_eq!(view::shown_plain(l.spec, &l.vals, "out"), 0.0);
+        // Typing -3 dB sets the effective gain: the total lands at +3.
+        l.typed("out", "-3dB");
+        assert_eq!(l.params.v(twelve::OUT), 30);
+        assert_eq!(view::shown_plain(l.spec, &l.vals, "out"), -30.0);
+        // Alt click resets the knob to unity: the total follows to the in gain.
+        l.down(x, y, Btn::Left, Mods { alt: true, ..Mods::default() }, false);
+        assert_eq!(l.params.v(twelve::OUT), 60);
+        assert_eq!(view::shown_plain(l.spec, &l.vals, "out"), 0.0);
+        assert_eq!(l.hint, "Gain Out: 0.0dB");
     }
 
     #[test]

@@ -169,6 +169,13 @@ pub struct Spec {
     pub text: fn(usize, i32) -> String,
     /// A typed value for a setting.
     pub parse: fn(usize, &str) -> Option<i32>,
+    /// A setting shown other than it is stored, when its knob means something the parameters do not hold: the
+    /// values (the spec's settings, in order) and the setting's place give `Some(offset)` to show `stored - offset`
+    /// and to edit by the shown value (the stored one written is the shown plus the offset). Mango 12's gains: while
+    /// Link is on the out knob shows the effective output gain (the stored out less the in, what the output stage
+    /// runs at), so it follows the in knob and editing it moves the total by the same amount. `None`: every setting
+    /// shows its stored value.
+    pub shown: Option<fn(&[i32], usize) -> Option<i32>>,
     pub sound: fn(u32, &[i32]) -> Box<dyn Sound>,
     /// The sound rings on after the input stops (a delay line).
     pub rings: bool,

@@ -50,6 +50,66 @@ impl Model for os_plugkit::vals::Vals {
     }
 }
 
+/// The values the editor shows: the parameters, with the spec's shown values over them (Mango 12's out knob shows
+/// the effective output gain while the gains are linked).
+pub struct Shown<'a> {
+    pub spec: &'static Spec,
+    pub vals: &'a os_plugkit::vals::Vals,
+}
+
+impl Model for Shown<'_> {
+    fn norm(&self, id: &str) -> f32 {
+        shown_norm(self.spec, self.vals, id)
+    }
+    fn plain(&self, id: &str) -> f32 {
+        shown_plain(self.spec, self.vals, id)
+    }
+    fn text(&self, id: &str) -> String {
+        shown_text(self.spec, self.vals, id)
+    }
+}
+
+/// A setting's shown offset right now (`None` = it shows its stored value): the spec's mapping over the stored
+/// values.
+pub fn offset(spec: &Spec, vals: &os_plugkit::vals::Vals, k: usize) -> Option<i32> {
+    let f = spec.shown?;
+    let v = values(spec, vals);
+    f(&v[..spec.settings.len()], k)
+}
+
+/// A setting's shown plain value: its stored one less the spec's offset, in its range.
+pub fn shown_plain(spec: &Spec, vals: &os_plugkit::vals::Vals, id: &str) -> f32 {
+    let stored = vals.plain(id);
+    let Some(k) = spec.index(id) else { return stored };
+    let Some(off) = offset(spec, vals, k) else { return stored };
+    let (lo, hi) = spec.settings[k].range;
+    (stored - off as f32).clamp(lo as f32, hi as f32)
+}
+
+/// A setting's shown normalized value.
+pub fn shown_norm(spec: &Spec, vals: &os_plugkit::vals::Vals, id: &str) -> f32 {
+    match spec.index(id).and_then(|k| offset(spec, vals, k)) {
+        None => vals.norm(id),
+        Some(_) => vals.plain_to_norm(id, shown_plain(spec, vals, id)),
+    }
+}
+
+/// The stored plain that shows as `shown`: the shown value plus the spec's offset, in the range.
+pub fn stored_plain(spec: &Spec, vals: &os_plugkit::vals::Vals, id: &str, shown: f32) -> f32 {
+    let Some(k) = spec.index(id) else { return shown };
+    let Some(off) = offset(spec, vals, k) else { return shown };
+    let (lo, hi) = spec.settings[k].range;
+    (shown + off as f32).clamp(lo as f32, hi as f32)
+}
+
+/// A setting's shown value text.
+pub fn shown_text(spec: &Spec, vals: &os_plugkit::vals::Vals, id: &str) -> String {
+    match spec.index(id) {
+        Some(k) if offset(spec, vals, k).is_some() => (spec.text)(k, shown_plain(spec, vals, id).round() as i32),
+        _ => vals.text(id),
+    }
+}
+
 /// What a region of the editor does when clicked or dragged.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Target {

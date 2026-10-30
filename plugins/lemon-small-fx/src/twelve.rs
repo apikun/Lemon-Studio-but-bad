@@ -11,7 +11,8 @@
 //! steps it in tenths of a semitone where `1 ST` steps whole ones, and `Ext.` reaches twice as deep, to -30 ST. The
 //! route picks what the converter hears (the stereo pair, a mono sum, one channel, the mid or the side — what it
 //! does not hear passes as it is), the gains set how hard it is hit and how loud it leaves (`Link` holds their
-//! total at the gain out), then the mix. Not a recreation of an FL plugin: its state is its own (modelled on the
+//! total at the gain out, and while it is on the out knob shows the effective output gain, so it follows the in
+//! knob), then the mix. Not a recreation of an FL plugin: its state is its own (modelled on the
 //! E-mu SP-1200's converter and output stage, in the spirit of Wave Tracing's SP-950).
 
 use nih_plug::prelude::*;
@@ -108,6 +109,7 @@ pub const SPEC: &Spec = &Spec {
     labels: &[(83.0, 47.0, "78"), (83.0, 63.0, "X2"), (83.0, 102.0, "45"), (83.0, 132.0, "33")],
     text,
     parse,
+    shown: Some(shown),
     sound,
     rings: false,
 };
@@ -164,6 +166,17 @@ fn parse(k: usize, s: &str) -> Option<i32> {
             let v = leading_number(s)?.round() as i32;
             Some(v.clamp(range.0, range.1))
         }
+    }
+}
+
+/// While the gains are linked the out knob shows the effective output gain: the stored out less the in, what the
+/// sound's output stage runs at while the total stays at the gain out. The offset is the in, so the knob follows the
+/// in knob, and editing it sets the effective gain (the stored total moves by the same amount). Every other setting
+/// shows its stored value.
+fn shown(v: &[i32], k: usize) -> Option<i32> {
+    match k {
+        OUT if v.get(LINK) == Some(&1) => Some(v.get(IN).copied().unwrap_or(SETTINGS[IN].start)),
+        _ => None,
     }
 }
 
@@ -565,6 +578,25 @@ mod tests {
         t.process(&mut l, &mut r);
         let peak = l.iter().fold(0.0f32, |a, x| a.max(x.abs()));
         assert!(peak > 0.7 && peak < 1.0, "{peak}");
+    }
+
+    /// While the gains are linked the out knob shows the effective output gain (the stored out less the in, what
+    /// the output stage runs at); free, it and every other setting show their stored values.
+    #[test]
+    fn the_linked_out_knob_shows_the_effective_output_gain() {
+        let v = |link: i32, i: i32, o: i32| {
+            let mut v = SPEC.start();
+            v[LINK] = link;
+            v[IN] = i;
+            v[OUT] = o;
+            v
+        };
+        assert_eq!(shown(&v(1, 60, 0), OUT), Some(60)); // the offset is the in: the knob shows 0 - 60 = -6 dB
+        assert_eq!(shown(&v(0, 60, 0), OUT), None); // free: the stored value
+        assert_eq!(shown(&v(1, 60, 0), IN), None); // the in knob is the drive, never shown otherwise
+        assert_eq!(shown(&v(1, 120, -30), OUT), Some(120)); // the shown value clamps to the knob's -12 dB...
+        let t = Twelve::new(44100, &v(1, 120, -30)); // ...as the sound's output stage clamps the same way
+        assert!((t.out_gain - 10f32.powf(-0.6)).abs() < 1e-5);
     }
 
     /// The 12 bits: round to the nearest of 4096 levels, and full scale is the ceiling.

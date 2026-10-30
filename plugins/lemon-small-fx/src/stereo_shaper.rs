@@ -98,6 +98,7 @@ pub const SPEC: &Spec = &Spec {
     labels: &[(69.0, 286.0, "LEFT OUT"), (155.0, 286.0, "RIGHT OUT")],
     text,
     parse,
+    shown: None,
     sound,
     rings: true,
 };
