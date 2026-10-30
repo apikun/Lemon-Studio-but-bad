@@ -31,7 +31,7 @@
 
 <br>
 
-<img alt="Mango Studio with the browser, channel rack, playlist and mixer open" src="docs/assets/screenshot.webp" width="900">
+<img alt="Mango Studio with the channel rack, playlist and mixer open on a populated project" src="docs/assets/screenshot-main.png" width="900">
 
 </div>
 
