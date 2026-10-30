@@ -267,7 +267,7 @@ pub fn paint(ui: &mut Ui, s: &State, f: &FrameInfo) {
     let hv = crate::high_visibility::on();
     // Frame (§1). Lemon (spec: ui/lemon-design.md §5): one rounded outlined panel.
     if lemon {
-        lk::outlined(ui.c, win, lk::r_panel(t), t.window_border, t.window_body);
+        lk::outlined(ui.c, win, lk::r_panel(t), super::MANGO_MIXER_RIM, super::MANGO_MIXER_RIM);
     } else {
         ui.c.fill_rect(win, t.window_border);
         let body = win.inset(1.0);
@@ -282,7 +282,7 @@ pub fn paint(ui: &mut Ui, s: &State, f: &FrameInfo) {
     // Rows panel (§1, §3).
     let inner = panel(win);
     if lemon {
-        lk::outlined(ui.c, inner.outset(1.0), lk::r_btn(t), t.rack_inset_border, t.rack_inset);
+        lk::outlined(ui.c, inner.outset(1.0), lk::r_btn(t), super::MANGO_MIXER_RIM, t.rack_inset);
     } else {
         ui.c.fill_rect(inner.outset(1.0), t.rack_inset_border);
         ui.c.fill_rect(inner, t.rack_inset);

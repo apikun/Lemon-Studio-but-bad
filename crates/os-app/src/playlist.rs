@@ -606,11 +606,75 @@ pub struct Wave {
     pub frames: usize,
     pub per: usize,
     pub peaks: Vec<(f32, f32)>,
+    peak_levels: Vec<Vec<(f32, f32)>>,
 }
 
 impl Wave {
+    pub(crate) fn new(rate: u32, frames: usize, per: usize, peaks: Vec<(f32, f32)>) -> Self {
+        let mut peak_levels = vec![peaks.clone()];
+        while peak_levels.last().is_some_and(|level| level.len() > 1) {
+            let previous = peak_levels.last().expect("peak level exists");
+            let next = previous
+                .chunks(2)
+                .map(|pair| {
+                    pair.iter().fold((f32::MAX, f32::MIN), |(lo, hi), &(a, b)| (lo.min(a), hi.max(b)))
+                })
+                .collect();
+            peak_levels.push(next);
+        }
+        Self { rate, frames, per, peaks, peak_levels }
+    }
+
+    /// Exact min/max over a peak interval in logarithmic time, including short transients when zoomed out.
+    pub(crate) fn peak_range(&self, start: usize, end: usize) -> Option<(f32, f32)> {
+        let (mut start, end) = (start.min(self.peaks.len()), end.min(self.peaks.len()));
+        if start >= end {
+            return None;
+        }
+        let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+        while start < end {
+            let remaining_level = (usize::BITS - 1 - (end - start).leading_zeros()) as usize;
+            let aligned_level = if start == 0 { remaining_level } else { start.trailing_zeros() as usize };
+            let level = remaining_level.min(aligned_level);
+            let &(a, b) = &self.peak_levels[level][start >> level];
+            lo = lo.min(a);
+            hi = hi.max(b);
+            start += 1 << level;
+        }
+        Some((lo, hi))
+    }
+
     pub fn secs(&self) -> f64 {
         self.frames as f64 / f64::from(self.rate.max(1))
+    }
+}
+
+#[cfg(test)]
+mod wave_tests {
+    use super::Wave;
+
+    #[test]
+    fn peak_ranges_keep_transients_at_every_interval_size() {
+        let peaks = vec![
+            (-0.1, 0.1),
+            (-0.2, 0.2),
+            (-0.95, 0.8),
+            (-0.15, 0.12),
+            (-0.3, 0.25),
+            (-0.4, 0.35),
+            (-0.12, 0.11),
+            (-0.22, 0.21),
+            (-0.55, 0.45),
+        ];
+        let wave = Wave::new(48_000, peaks.len() * 64, 64, peaks.clone());
+
+        for start in 0..peaks.len() {
+            for end in start + 1..=peaks.len() {
+                let expected = peaks[start..end].iter().fold((f32::MAX, f32::MIN), |(lo, hi), &(a, b)| (lo.min(a), hi.max(b)));
+                assert_eq!(wave.peak_range(start, end), Some(expected), "range {start}..{end}");
+            }
+        }
+        assert_eq!(wave.peak_range(peaks.len(), peaks.len()), None);
     }
 }
 
@@ -766,7 +830,7 @@ impl PlaylistState {
                     (lo, hi)
                 })
                 .collect();
-            Rc::new(Wave { rate: s.rate, frames: s.frames(), per, peaks })
+            Rc::new(Wave::new(s.rate, s.frames(), per, peaks))
         });
         self.waves.borrow_mut().insert(path.to_string(), w.clone());
         w
