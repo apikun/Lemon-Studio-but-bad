@@ -273,7 +273,7 @@ impl Logic {
                 let i = self.chosen(&st);
                 format!("Reverse slice\t{}", if st.slices.get(i).is_some_and(|s| s.reversed()) { "on" } else { "off" })
             }
-            Some(Target::Logo) => "Lemon Slicer".into(),
+            Some(Target::Logo) => "Mango Slicer".into(),
             None => String::new(),
         }
     }
@@ -482,7 +482,7 @@ impl Logic {
                 }
             }
             MenuReq::About => {
-                m.head("Lemon Slicer", Cmd::None);
+                m.head("Mango Slicer", Cmd::None);
                 m.add(MenuItem::item(&format!("Version {}", env!("CARGO_PKG_VERSION"))).enabled(false), Cmd::None);
                 m.add(MenuItem::item("Lemon Studio's recreation of Fruity Slicer").enabled(false), Cmd::None);
             }
@@ -734,7 +734,7 @@ mod win32 {
                 last_sig: 0,
                 last_raw: u64::MAX,
             });
-            let title = pw::wide("Lemon Slicer");
+            let title = pw::wide("Mango Slicer");
             let hwnd = CreateWindowExW(
                 0,
                 class.as_ptr(),

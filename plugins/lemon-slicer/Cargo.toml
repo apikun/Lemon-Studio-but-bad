@@ -1,6 +1,6 @@
 [package]
 name = "lemon-slicer"
-description = "Lemon Slicer: Lemon Studio's loop slicer instrument as a VST3 / CLAP plugin"
+description = "Mango Slicer: Lemon Studio's loop slicer instrument as a VST3 / CLAP plugin"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
