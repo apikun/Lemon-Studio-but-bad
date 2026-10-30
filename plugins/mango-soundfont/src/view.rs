@@ -1,3 +1,7 @@
+// Copyright (C) 2026 ItsAlphaNeon
+// SPDX-License-Identifier: GPL-3.0-or-later
+// This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
+
 use os_theme::design::lemon as brand;
 use os_ui::kit::lemon::plug;
 use os_ui::{Canvas, Color, Font, Rect};
