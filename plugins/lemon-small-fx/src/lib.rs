@@ -4,9 +4,9 @@
 
 //! Lemon Studio's small effects as VST3 / CLAP plugins (nih-plug): Lemon Soft Clipper, Lemon Fast Distortion, Lemon
 //! Balance, Lemon Stereo Enhancer, Lemon Transient Processor, Lemon Chorus, Lemon Stereo Shaper, Lemon Filter,
-//! Lemon Flanger and Lemon Phaser. Each is a handful
+//! Lemon Flanger, Lemon Phaser and Mango 12. Each is a handful
 //! of settings over a sound of
-//! `os_engine::effects`, so they share
+//! `os_engine::effects` (Mango 12 has its own), so they share
 //! everything but their description: the plugin, its parameters and saved state ([`params`]), the Pith editor
 //! ([`editor`], [`view`]). A description ([`Spec`]) gives the settings, their value texts, the editor's cards and
 //! controls, and the sound. The plugin modules (`plugins/lemon-soft-clipper` and the others) export one each.
@@ -30,6 +30,7 @@ pub mod phaser;
 pub mod soft_clipper;
 pub mod stereo_enhancer;
 pub mod stereo_shaper;
+pub mod twelve;
 pub mod transient_processor;
 pub mod view;
 pub mod vocoder;
@@ -327,7 +328,7 @@ impl<K: Kind> Vst3Plugin for SmallFx<K> {
 mod tests {
     use super::*;
 
-    pub const SPECS: [&Spec; 12] = [
+    pub const SPECS: [&Spec; 13] = [
         soft_clipper::SPEC,
         fast_distortion::SPEC,
         balance::SPEC,
@@ -340,6 +341,7 @@ mod tests {
         phaser::SPEC,
         crusher::SPEC,
         vocoder::SPEC,
+        twelve::SPEC,
     ];
 
     /// Every effect: ids unique, starts inside the ranges, a control per setting, the plugin ids distinct.
@@ -375,6 +377,7 @@ mod tests {
             <flanger::LemonFlanger as ClapPlugin>::CLAP_ID,
             <phaser::LemonPhaser as ClapPlugin>::CLAP_ID,
             <crusher::MangoCrusher as ClapPlugin>::CLAP_ID,
+            <twelve::MangoTwelve as ClapPlugin>::CLAP_ID,
         ];
         let classes = [
             <soft_clipper::LemonSoftClipper as Vst3Plugin>::VST3_CLASS_ID,
@@ -388,6 +391,7 @@ mod tests {
             <flanger::LemonFlanger as Vst3Plugin>::VST3_CLASS_ID,
             <phaser::LemonPhaser as Vst3Plugin>::VST3_CLASS_ID,
             <crusher::MangoCrusher as Vst3Plugin>::VST3_CLASS_ID,
+            <twelve::MangoTwelve as Vst3Plugin>::VST3_CLASS_ID,
         ];
         for i in 0..ids.len() {
             for j in i + 1..ids.len() {

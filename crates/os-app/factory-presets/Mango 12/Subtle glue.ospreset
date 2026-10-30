@@ -1,0 +1,12 @@
+OSPRESET 1
+plugin=Mango 12	id=clap:org.openstudio.mango-12	format=clap	body=params
+# A taste of the converter under the dry signal: a third of the colour, nothing pushed.
+Tune = 0
+Fine = 0
+Range = 0
+Gain In = 0
+Gain Out = 0
+Link = 0
+Filter = 99
+Route = 0
+Mix = 35
