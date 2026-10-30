@@ -284,6 +284,7 @@ pub fn builtin() -> Vec<Available> {
     static KEYS: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static MONK: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static WAVETABLE: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static SOUNDFONT: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     let mut v = linked(&LIB, &lemon_sampler::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, LEMON_SAMPLER);
     v.extend(linked(&OSC3, &lemon_3x_osc::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, crate::osc3::LEMON_TRIO));
     v.extend(linked(&CITRUS, &citrus::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, crate::citrus::CITRUS));
@@ -301,6 +302,7 @@ pub fn builtin() -> Vec<Available> {
     v.extend(linked(&KEYS, &lemon_keys::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Keys"));
     // Mango Wavetable, from battlemountain2's fork (spec: docs/lemon-wavetable.md).
     v.extend(linked(&WAVETABLE, &lemon_wavetable::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_WAVETABLE));
+    v.extend(linked(&SOUNDFONT, &mango_soundfont::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_SOUNDFONT));
     // The chanting monk (a port of MonkSynth, MIT; the third-party notices carry its notice).
     v.extend(linked(&MONK, &mango_monk::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Monk"));
     v
@@ -1522,6 +1524,7 @@ pub fn retired_count() -> usize {
 pub const LEMON_SAMPLER: &str = "Mango Sampler";
 /// Name of Mango Studio's wavetable synth, from battlemountain2's fork.
 pub const MANGO_WAVETABLE: &str = "Mango Wavetable";
+pub const MANGO_SOUNDFONT: &str = "Mango Font";
 /// Name of Lemon Studio's parametric EQ plugin.
 pub const LEMON_EQ: &str = "Mango Parametric EQ";
 /// Lemon Studio's effects compiled in besides the EQ (`builtin_effects`, in this order). They have no file plugin of

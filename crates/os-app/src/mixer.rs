@@ -1120,10 +1120,17 @@ pub fn layout_menu(s: &State, x: f32, y: f32) -> Popup {
     Popup { x, y, items, sub: None, scroll: [0; 2] }
 }
 
-/// Empty slot: the effect list (§7.1), the plugin picker for this slot (`crate::plugin_picker`).
+/// Empty slot: the large effect list, positioned like ADD > Effect rather than at the clicked slot (§7.1).
 fn pick_effect(s: &mut State, slot: u8) {
-    s.playlist.popup = None;
-    s.picker = Some(crate::plugin_picker::Picker::new(crate::plugin_menu::Target::Fx(Some(slot))));
+    let target = crate::plugin_menu::Target::Fx(Some(slot));
+    s.picker = None;
+    s.playlist.popup = Some(Popup {
+        x: s.screen.0,
+        y: crate::views::band_h(s),
+        items: crate::plugin_menu::items(s, target, true),
+        sub: None,
+        scroll: [0; 2],
+    });
 }
 
 /// Filled slot ▸ (§7.2).
@@ -1884,6 +1891,28 @@ mod tests {
         run(&mut a, MCmd::SlotDelete(1));
         assert_eq!(slot_name(&a.state, 2, 1), None);
         assert!(a.state.mixer.pending.iter().any(|r| matches!(r, FxReq::Create { track: 2, slot: 0, index: 0, .. })));
+    }
+
+    #[test]
+    fn empty_effect_slot_opens_the_large_menu_in_its_usual_position() {
+        let mut a = app();
+        a.mouse = (240.0, 360.0);
+        let screen = a.state.screen;
+        let menu_y = crate::views::band_h(&a.state);
+
+        hit(&mut a, MHit::SlotName(2));
+
+        assert!(a.state.picker.is_none());
+        let Some(popup) = a.state.playlist.popup.as_ref() else { panic!("empty slot should open the effect menu") };
+        assert_eq!((popup.x, popup.y), (screen.0, menu_y));
+        assert_eq!(popup.items[0].label.as_ref(), "(no effect plugins found)");
+
+        a.state.playlist.popup = None;
+        right(&mut a, MHit::SlotArrow(3));
+
+        assert!(a.state.picker.is_none());
+        let Some(popup) = a.state.playlist.popup.as_ref() else { panic!("right-clicking an empty slot should open the effect menu") };
+        assert_eq!((popup.x, popup.y), (screen.0, menu_y));
     }
 
     /// spec: audio/sidechain.md "Hosted plugins' input buses": Sidechain input ▸ lists None and the tracks routed into

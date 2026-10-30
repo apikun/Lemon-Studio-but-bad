@@ -36,6 +36,7 @@ lemon-autogun = { path = "../../plugins/lemon-autogun", features = ["linked"] }
 lemon-drums = { path = "../../plugins/lemon-drums", features = ["linked"] }
 lemon-keys = { path = "../../plugins/lemon-keys", features = ["linked"] }
 lemon-wavetable = { path = "../../plugins/lemon-wavetable", features = ["linked"] }
+mango-soundfont = { path = "../../plugins/mango-soundfont", features = ["linked"] }
 lemon-boom = { path = "../../plugins/lemon-boom", features = ["linked"] }
 lemon-bass = { path = "../../plugins/lemon-bass", features = ["linked"] }
 lemon-acid = { path = "../../plugins/lemon-acid", features = ["linked"] }

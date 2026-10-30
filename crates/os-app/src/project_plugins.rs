@@ -57,9 +57,10 @@ pub fn has_recreation(id: &str) -> bool {
 }
 
 /// Built-in plugins with no FL plugin of their own to be saved as: the effects (`plugins::LINKED_EFFECTS`) and Mango
-/// Wavetable. They are saved wrapped, as their CLAP bundle.
+/// Wavetable and Mango Font. They are saved wrapped, as their built-in CLAP instrument.
 fn wrapped_builtin(d: &Descriptor) -> bool {
-    crate::plugins::LINKED_EFFECTS.contains(&d.name.as_str()) || d.name == crate::plugins::MANGO_WAVETABLE
+    crate::plugins::LINKED_EFFECTS.contains(&d.name.as_str())
+        || matches!(d.name.as_str(), crate::plugins::MANGO_WAVETABLE | crate::plugins::MANGO_SOUNDFONT)
 }
 
 /// Whether a hosted plugin is saved inside the wrapper: CLAP, VST3 and VST2 plugins from plugin files, and the built-in
@@ -613,6 +614,19 @@ mod tests {
     use super::*;
     use crate::app::App;
     use crate::plugins::{fx_key, LEMON_EQ, LEMON_SAMPLER};
+
+    #[test]
+    fn mango_font_is_listed_as_a_builtin_sampler_and_wrapped_for_projects() {
+        let plugin = crate::plugins::builtin()
+            .into_iter()
+            .find(|plugin| plugin.desc.name == crate::plugins::MANGO_SOUNDFONT)
+            .expect("built-in Mango Font");
+
+        assert!(is_builtin(&plugin.desc));
+        assert!(is_wrapped(&plugin.desc));
+        assert_eq!(crate::plugin_db::category(&plugin.desc), "Sampler");
+        assert!(plugin_ref(&plugin.desc, Vec::new()).path.ends_with("Mango Font.clap"));
+    }
 
     /// A hosted plugin channel and a mixer slot plugin are saved as wrapped plugins holding their identity and state,
     /// and the reopened project hosts them again with that state; a second save keeps working on the saved file

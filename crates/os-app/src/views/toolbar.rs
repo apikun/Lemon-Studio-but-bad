@@ -9,7 +9,7 @@
 
 use std::ops::Range;
 
-use os_ui::{Font, Rect};
+use os_ui::{Color, Font, Rect};
 
 use super::{menus, sunken, tool_button, FrameInfo};
 use crate::app::{Action, Live, State, Ui, Util, Win};
@@ -476,7 +476,7 @@ fn time(ui: &mut Ui, c: &Ctx) {
         os_ui::kit::lemon::well(ui.c, t, tp, t.time_panel);
     } else {
         ui.c.fill_rect(tp, ui.t.s(0x212829));
-        ui.c.fill_rect(tp.inset(1.0), t.time_panel);
+        ui.c.fill_rect(tp.inset(1.0), Color::rgb(0x2e2e2e));
     }
     // spec: ui/time-display.md §2-3 (the bar's signature is the project's).
     ui.hit(tp, Action::Clock, s.clock.hint());
