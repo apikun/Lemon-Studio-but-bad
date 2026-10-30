@@ -118,6 +118,14 @@ pub fn row_menu(s: &State, row: &Row) -> Vec<PItem> {
     v.push(PItem::sep());
     let label = if f.favorite() { "Remove from favorites" } else { "Add to favorites" };
     v.push(PItem::new(label, Cmd::Plugin(PlugCmd::Star { effect: f.effect, index: f.entry().index })));
+    // FL's options for a plugin: where its file is, and what it is.
+    let (effect, index) = (f.effect, f.entry().index);
+    v.extend([
+        PItem::sep(),
+        PItem::new("Open file location", Cmd::Plugin(PlugCmd::Location { effect, index })),
+        PItem::new("Show plugin details", Cmd::Plugin(PlugCmd::Details { effect, index })),
+        PItem::new("Manage plugins...", Cmd::Plugin(PlugCmd::Manage)),
+    ]);
     v
 }
 
@@ -281,6 +289,21 @@ mod tests {
         assert!(list(&app.state).is_empty());
         app.state.browser_plug_filter = FAVORITES;
         assert!(list(&app.state).is_empty());
+    }
+
+    /// The row menu's options (FL's): details in the status bar, and the file's folder opened (nothing in a test).
+    #[test]
+    fn plugin_options_menu() {
+        let mut app = crate::app::App::new(None);
+        app.plugins.available.clear();
+        app.plugins.effects = ["Alpha Mono"].iter().map(|n| db::fake(n, os_host::Kind::Effect)).collect();
+        app.state.plugdb.rebuild(&app.plugins);
+        app.state.browser_tab = super::super::browser::PLUGIN_TAB;
+        let row = rows(&app.state).remove(0);
+        let labels: Vec<_> = row_menu(&app.state, &row).into_iter().map(|i| i.label.to_string()).collect();
+        assert!(labels.iter().any(|l| l == "Open file location") && labels.iter().any(|l| l == "Show plugin details") && labels.iter().any(|l| l == "Manage plugins..."), "{labels:?}");
+        let msg = crate::plugin_menu::run(&mut app, PlugCmd::Details { effect: true, index: 0 });
+        assert!(msg.is_some_and(|m| m.starts_with("Alpha Mono: ")), "the details name the plugin");
     }
 
     /// The star marks the family's variant a click adds; Recent lists the plugins added, newest first.

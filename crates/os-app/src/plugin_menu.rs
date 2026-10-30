@@ -37,6 +37,10 @@ pub enum PlugCmd {
     View(MenuView),
     /// The plugin browser's star on the family of plugin `index` (an effect when `effect`, else a generator).
     Star { effect: bool, index: usize },
+    /// The file manager opens the folder the plugin's file is in (the options menu's Open File Location).
+    Location { effect: bool, index: usize },
+    /// The status bar says what the plugin is and where its file is (the options menu's Show Plugin Details).
+    Details { effect: bool, index: usize },
 }
 
 /// Which plugins a menu lists and where a pick goes (spec §1).
@@ -241,9 +245,28 @@ pub fn run(app: &mut App, c: PlugCmd) -> Option<String> {
             star(app, effect, index);
             None
         }
+        PlugCmd::Location { effect, index } => match plugin_desc(app, effect, index) {
+            Some(d) if crate::project_plugins::is_builtin(d) => Some(format!("{} is built in: it has no file", d.name)),
+            Some(d) => {
+                let folder = d.path.parent().unwrap_or(&d.path).to_path_buf();
+                crate::browser::open_folder(&folder);
+                Some(format!("Opened folder: {}", folder.display()))
+            }
+            None => None,
+        },
+        PlugCmd::Details { effect, index } => plugin_desc(app, effect, index).map(|d| {
+            let place = if crate::project_plugins::is_builtin(d) { "built in".to_string() } else { d.path.display().to_string() };
+            format!("{}: {} · {} · {}", d.name, d.vendor, d.format.as_str(), place)
+        }),
     };
     app.invalidate();
     m
+}
+
+/// The descriptor of plugin `index` of the effects (`effect`) or the generators.
+fn plugin_desc(app: &App, effect: bool, index: usize) -> Option<&os_host::Descriptor> {
+    let list = if effect { &app.plugins.effects } else { &app.plugins.available };
+    list.get(index).map(|a| &a.desc)
 }
 
 /// Stars the family of plugin `index` (its variant a click adds), or unstars every starred variant of it.

@@ -627,7 +627,7 @@ fn remove_root(s: &mut crate::app::State, path: &std::path::Path) -> String {
 }
 
 /// Opens folder `dir` in the system's file manager (tests: nothing).
-fn open_folder(dir: &std::path::Path) {
+pub(crate) fn open_folder(dir: &std::path::Path) {
     if cfg!(test) {
         return;
     }
