@@ -4,7 +4,7 @@
 
 //! The original's saved state (an FPC channel's plugin state, event 213): a 4-byte head, then chunks of a u32 id, a
 //! u64 size and the payload. A pad (chunk 2) and a layer (chunk 0x69) hold chunks of their own; every other chunk is
-//! kept as its bytes. Writing the tree back gives the bytes it was read from, so what Lemon Drum Sampler does not change
+//! kept as its bytes. Writing the tree back gives the bytes it was read from, so what Mango Drum Sampler does not change
 //! stays as the file had it.
 //!
 // spec: plugins/fpc.md §1 – §3

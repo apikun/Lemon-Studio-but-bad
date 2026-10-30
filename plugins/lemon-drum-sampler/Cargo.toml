@@ -1,6 +1,6 @@
 [package]
 name = "lemon-drum-sampler"
-description = "Lemon Drum Sampler: Lemon Studio's pad drum sampler as a VST3 / CLAP plugin"
+description = "Mango Drum Sampler: Lemon Studio's pad drum sampler as a VST3 / CLAP plugin"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -225,7 +225,7 @@ impl Logic {
             Some(Target::Prev) => "Previous layer".into(),
             Some(Target::Next) => "Next layer".into(),
             Some(Target::Load) => "Load a sample onto the pad".into(),
-            Some(Target::Logo) => "Lemon Drum Sampler".into(),
+            Some(Target::Logo) => "Mango Drum Sampler".into(),
             None => String::new(),
         }
     }
@@ -359,7 +359,7 @@ impl Logic {
                 m.add(MenuItem::item("Clear pad").enabled(has), Cmd::Clear);
             }
             MenuReq::About => {
-                m.head("Lemon Drum Sampler", Cmd::None);
+                m.head("Mango Drum Sampler", Cmd::None);
                 m.add(MenuItem::item(&format!("Version {}", env!("CARGO_PKG_VERSION"))).enabled(false), Cmd::None);
                 m.add(MenuItem::item("Lemon Studio's recreation of FPC").enabled(false), Cmd::None);
             }
@@ -546,7 +546,7 @@ mod win32 {
                 last_raw: u64::MAX,
                 last_kit: u64::MAX,
             });
-            let title = pw::wide("Lemon Drum Sampler");
+            let title = pw::wide("Mango Drum Sampler");
             let hwnd = CreateWindowExW(
                 0,
                 class.as_ptr(),
