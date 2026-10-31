@@ -391,7 +391,7 @@ impl Instrument for Flex {
     fn set(&mut self, v: &[i32]) {
         self.base = patch(v[PRESET].clamp(0, COUNT - 1));
         for (m, k) in self.macros.iter_mut().zip([MACRO1, MACRO2, MACRO3, MACRO4]) {
-            *m = f64::from(v[k]) / 128.0;
+            *m = v[k] as f32 / 128.0;
         }
         self.gain = volume_gain(v[VOLUME]);
         self.land();
@@ -514,9 +514,10 @@ impl Instrument for Flex {
             let (echo_l, echo_r) = if !self.echo_l.is_empty() && !self.echo_r.is_empty() {
                 let pos = self.echo_pos % self.echo_l.len();
                 let tap_l = self.echo_l[pos];
-                let tap_r = self.echo_r[(pos + self.echo_r.len() / 2) % self.echo_r.len()];
+                let rlen = self.echo_r.len();
+                let tap_r = self.echo_r[(pos + rlen / 2) % rlen];
                 self.echo_l[pos] = out * p.echo + tap_l * 0.35;
-                self.echo_r[pos % self.echo_r.len()] = out * p.echo + tap_r * 0.35;
+                self.echo_r[pos % rlen] = out * p.echo + tap_r * 0.35;
                 self.echo_pos = (self.echo_pos + 1) % self.echo_l.len();
                 (tap_l, tap_r)
             } else {
