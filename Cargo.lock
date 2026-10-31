@@ -2375,6 +2375,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mango-flex"
+version = "0.6.1"
+dependencies = [
+ "lemon-small-gen",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
 name = "mango-monk"
 version = "0.6.1"
 dependencies = [
@@ -3151,6 +3160,7 @@ dependencies = [
  "libc",
  "mango-beat",
  "mango-beepmap",
+ "mango-flex",
  "mango-monk",
  "mango-soundfont",
  "mango-surface",

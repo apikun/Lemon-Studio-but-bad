@@ -137,7 +137,7 @@ impl Logic {
         d
     }
 
-    fn set_drag_value(&mut self, x: f32, y: f32) {
+    fn set_drag_value(&mut self, _x: f32, y: f32) {
         let Some(id) = self.drag_param else { return };
         if let Some(index) = CONTROL_IDS.iter().position(|candidate| *candidate == id) {
             self.vals.set(id, view::knob_norm_at(index, y));

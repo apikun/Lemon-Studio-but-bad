@@ -15,7 +15,7 @@ mod params;
 mod view;
 
 use std::num::NonZeroU32;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use nih_plug::prelude::*;

@@ -52,7 +52,7 @@ impl Grid {
         let mut px = Vec::with_capacity(tw * th);
         for ty in 0..th {
             for tx in 0..tw {
-                let p = pm.pixel(((tx * k).min(w - 1)) as u32, ((ty * k).min(h - 1)) as u32).unwrap_or_default();
+                let p = pm.pixel(((tx * k).min(w - 1)) as u32, ((ty * k).min(h - 1)) as u32).unwrap_or(tiny_skia::PremultipliedColorU8::TRANSPARENT);
                 let p = p.demultiply();
                 px.push(u32::from(p.red()) << 16 | u32::from(p.green()) << 8 | u32::from(p.blue()));
             }

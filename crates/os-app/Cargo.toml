@@ -41,6 +41,8 @@ mango-soundfont = { path = "../../plugins/mango-soundfont", features = ["linked"
 mango-surface = { path = "../../plugins/mango-surface", features = ["linked"] }
 # The image synthesizer (a recreation of FL's BeepMap), compiled in like Mango Font.
 mango-beepmap = { path = "../../plugins/mango-beepmap", features = ["linked"] }
+# The preset synthesizer (a recreation of FL's FLEX), compiled in like the other small generators.
+mango-flex = { path = "../../plugins/mango-flex", features = ["linked"] }
 lemon-boom = { path = "../../plugins/lemon-boom", features = ["linked"] }
 lemon-bass = { path = "../../plugins/lemon-bass", features = ["linked"] }
 lemon-acid = { path = "../../plugins/lemon-acid", features = ["linked"] }
