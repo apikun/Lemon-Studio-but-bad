@@ -111,6 +111,8 @@ pub const SPEC: &Spec = &Spec {
     // The crush is the byte after the settings' ints (a switch, read as Square from states without it).
     fields: &[0, 1, 2, 3, 4, 5, 6, 7, 8, BYTE],
     tail: &[0],
+    blank: None,
+    locate: None,
     size: (620, 214),
     cards: &CARDS,
     controls: &CONTROLS,
