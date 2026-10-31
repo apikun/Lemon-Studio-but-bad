@@ -4281,7 +4281,7 @@ impl App {
             // The rolling sampler's strip: the newest picture, and just its damage when the tape moved.
             if crate::prefs::check(&crate::prefs::ROLLING_SAMPLER) && !self.state.roll.collapsed {
                 let (heard, rate) = self.transport.rolling().heard(std::time::Instant::now());
-                if heard != self.state.roll.heard || rate != self.state.roll.rate {
+                if heard != self.state.roll.heard || rate != self.state.roll.rate || self.state.roll.wave.is_none() {
                     crate::views::rolling::pull(self);
                     self.damage_strip();
                 }
@@ -10106,7 +10106,10 @@ impl App {
         self.state.roll.collapsed = !self.state.roll.collapsed;
         let dy = crate::views::rolling::strip_h(&self.state) - before;
         lift_windows(&mut self.state, dy);
-        self.state.roll.wave = None;
+        // The picture is rebuilt here, not left to the tick's "the tape moved" gate: a tape that stands
+        // still (the transport stopped, the capture paused) never moves, and the wave stayed gone after
+        // re-opening the strip. Collapsed, the pull just drops the wave's rect.
+        crate::views::rolling::pull(self);
         self.invalidate();
     }
 

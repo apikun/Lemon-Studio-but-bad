@@ -213,8 +213,11 @@ impl Rolling {
                 let e1 = b / PYR as u64;
                 if e1 > e0 {
                     for e in e0..e1 {
-                        let p = d.pl[(e as usize * PYR) % d.pl.len()];
-                        let q = d.pr[(e as usize * PYR) % d.pl.len()];
+                        // Entry `e` lives in the slot its ring position says (`e % the entries' count`): the
+                        // write side stores it there, and reading any other slot scrambles the zoomed-out
+                        // wave with peaks that are not the column's own.
+                        let p = d.pl[e as usize % d.pl.len()];
+                        let q = d.pr[e as usize % d.pl.len()];
                         (lo_l, hi_l) = (lo_l.min(p.0), hi_l.max(p.1));
                         (lo_r, hi_r) = (lo_r.min(q.0), hi_r.max(q.1));
                     }
@@ -490,6 +493,65 @@ mod tests {
         let mut gone = vec![(1.0f32, 1.0f32); 10];
         r.scan(0, 10, &mut gone);
         assert!(gone.iter().all(|c| c.0 == 0.0 && c.1 == 0.0));
+    }
+
+    /// Zoomed out, the pyramid's peaks are the ring's own: each entry is read from the slot it was written
+    /// to (`e`, not `e * PYR` — the wrong slot filled the zoomed-out wave with tall lines that were not in
+    /// the audio, the more of the view the pyramid had to cover).
+    #[test]
+    fn the_pyramid_reads_what_the_ring_holds() {
+        let r = tape(3.0); // 3072 frames, 12 pyramid entries
+        // Two tapes' worth in 128-frame blocks: the ring wraps exactly once over, so every slot has been
+        // written over. Each 256-frame entry carries its own size, so a wrong slot cannot pass unnoticed.
+        let (mut f, mut b) = (0u64, 1u64);
+        while f < 2 * 3072 {
+            let n = 128usize;
+            let amp = 0.1 + 0.06 * (f / 256 % 13) as f32;
+            let stereo: Vec<f32> = (0..n)
+                .flat_map(|i| {
+                    let v = amp * (((f + i as u64) * 7) as f32 * 0.013).sin();
+                    [v, -v]
+                })
+                .collect();
+            r.push(&stereo, 2, b, Instant::now() - std::time::Duration::from_secs(2), RATE);
+            f += n as u64;
+            b += 1;
+        }
+        let (oldest, total, cap) = {
+            let d = r.data.lock().expect("tape");
+            (d.total - d.l.len() as u64, d.total, d.l.len() as u64)
+        };
+        assert_eq!((oldest, cap), (3072, 3072), "the tape wrapped once, on an entry's edge");
+        // Views whose columns land on whole pyramid entries (no ragged ends): 512 frames or more a column.
+        for (from, len, cols) in [(oldest, cap, 2), (oldest, cap, 4), (oldest, cap / 2, 1), (oldest + cap / 2, cap / 2, 1)] {
+            // The columns' truth, walked from the ring itself; the lock is dropped before scan runs.
+            let truth: Vec<(f32, f32)> = {
+                let d = r.data.lock().expect("tape");
+                (0..cols)
+                    .map(|c| {
+                        let a = (from + len * c as u64 / cols as u64).max(oldest);
+                        let b = ((from + len * (c as u64 + 1) / cols as u64).max(a + 1)).min(total);
+                        let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+                        for f in a..b {
+                            let i = (f % cap) as usize;
+                            lo = lo.min(d.l[i]).min(d.r[i]);
+                            hi = hi.max(d.l[i]).max(d.r[i]);
+                        }
+                        if lo <= hi { (lo, hi) } else { (0.0, 0.0) }
+                    })
+                    .collect()
+            };
+            let mut got = vec![(0.0f32, 0.0f32); cols];
+            r.scan(from, len, &mut got);
+            for (c, g) in got.iter().enumerate() {
+                assert!(
+                    (g.0 - truth[c].0).abs() < 1e-5 && (g.1 - truth[c].1).abs() < 1e-5,
+                    "column {c} of the view at {from} +{len}: scan {:?}, the ring holds {:?}",
+                    (g.0, g.1),
+                    truth[c]
+                );
+            }
+        }
     }
 
     /// The streams of one device block sum, as the device hears them (the monitor's `Tap` rule).
