@@ -49,6 +49,12 @@ use crate::icons::{self, Icon};
 
 pub(super) const MANGO_MIXER_RIM: Color = Color::rgb(0x2e2e2e);
 
+/// The theme's `display_edge` hairline around a display or window readout, inset half a pixel so it stays one
+/// crisp line at any scale. Shared by the toolbar readouts and every window rim.
+pub fn display_edge(c: &mut os_ui::Canvas, t: &os_theme::Palette, r: Rect, radius: f32) {
+    c.stroke_rrect(r.inset(0.5), radius, 1.0, t.display_edge);
+}
+
 /// Per-frame values that don't live in `State`.
 pub struct FrameInfo {
     pub title: String,

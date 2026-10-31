@@ -837,6 +837,7 @@ fn paint_tree(ui: &mut Ui, s: &State, r: Rect, bw: f32, top: f32) {
     if let Some(p) = &info {
         paint_info(ui, s, p, Rect::new(0.0, list.bottom(), bw, ih));
     }
+    super::display_edge(ui.c, t, Rect::new(r.x, r.y, bw, r.h), 0.0);
 }
 
 /// The splitter's width right of the browser panel.
