@@ -80,6 +80,8 @@ pub fn paint(ui: &mut Ui, s: &State, r: Rect, f: &FrameInfo) {
     ui.c.set_cover((fr.h >= 2.0 * crate::app::TITLE_H).then_some(cover));
     let (r, client) = super::framed(ui, s, Win::Playlist, r, &title, 281.0, true);
     ui.c.set_cover(None);
+    // The window's own rim, like the toolbar readouts (theme token `display_edge`).
+    super::display_edge(ui.c, t, outer, if super::lemon(ui) { os_ui::kit::lemon::r_panel(t) } else { 0.0 });
     // The arrangement name opens the arrangement menu; hovered it turns orange with a down arrow (§12, as FL).
     {
         let f = Font::new(17);

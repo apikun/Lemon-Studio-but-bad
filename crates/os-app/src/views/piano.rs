@@ -97,6 +97,8 @@ pub fn paint(ui: &mut Ui, s: &State, r: Rect, f: &FrameInfo) {
     let outer = r;
     let floating = !s.wins[Win::PianoRoll.slot().unwrap_or(0)].maxed && r.h >= 2.0 * crate::app::TITLE_H;
     let (r, _) = super::framed(ui, s, Win::PianoRoll, r, title, 365.0, true);
+    // The window's own rim, like the toolbar readouts and the Playlist (theme token `display_edge`).
+    super::display_edge(ui.c, t, outer, if super::lemon(ui) { os_ui::kit::lemon::r_panel(t) } else { 0.0 });
     // The target channel: name and arrow, orange with a ▾ while hovered (spec: ui/piano-target-channel.md §1).
     let font = Font::new(17);
     let nx = r.x + 365.0 + ui.c.text_width(font, title);

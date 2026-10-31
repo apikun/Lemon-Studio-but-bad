@@ -128,6 +128,8 @@ pub fn paint_hint_bar(ui: &mut Ui, s: &State, f: &FrameInfo) {
     for (dx, dy) in [(-3.0, -3.0), (3.0, -3.0), (-3.0, 3.0), (3.0, 3.0)] {
         ui.c.fill_circle(cx + dx, cy + dy, 1.3, t.s(0x5c6164));
     }
+    // The same rim as the toolbar readouts (theme token `display_edge`).
+    super::display_edge(ui.c, t, r, 0.0);
 }
 
 fn btn(x: f32, y: f32) -> Rect {
@@ -317,6 +319,8 @@ fn hint_panel(ui: &mut Ui, c: &Ctx) {
     let hint: &str = if !f.hint.is_empty() { &f.hint } else { s.message.as_deref().unwrap_or("") };
     ui.c.text_clip(Font::new(14), a.x(77.0), a.y(19.0), 280.0, t.text, hint);
     icons::draw(ui.c, Icon::MidiControl, a.span(360.0, 374.0, 17.0, 32.0), ui.t.s(0x515457));
+    // The same rim as the other readouts (theme token `display_edge`).
+    super::display_edge(ui.c, t, hp, 2.0);
 }
 
 /// Transport group: PAT / SONG, play, stop, record and the tempo (to the tempo box's right edge, x 570).
@@ -424,6 +428,7 @@ fn transport(ui: &mut Ui, c: &Ctx) {
         ui.c.fill_rrect(tb, 5.0, ui.t.s(0x5b5f61));
         ui.c.fill_rrect(tb.inset(1.0), 4.0, ui.t.s(0x5f6466));
     }
+    super::display_edge(ui.c, t, tb, 5.0);
     // Lemon displays showed their digits in the brand colour; Mango's tempo and time read white, as its text does.
     let digits = if lemon { t.text } else { t.glyph };
     // While playing, the tempo playback is at: tempo automation moves it (spec: audio/timing.md "Tempo that changes").
@@ -478,6 +483,7 @@ fn time(ui: &mut Ui, c: &Ctx) {
         ui.c.fill_rect(tp, ui.t.s(0x212829));
         ui.c.fill_rect(tp.inset(1.0), Color::rgb(0x2e2e2e));
     }
+    super::display_edge(ui.c, t, tp, 4.0);
     // spec: ui/time-display.md §2-3 (the bar's signature is the project's).
     ui.hit(tp, Action::Clock, s.clock.hint());
     ui.live(Live::Clock, tp);
@@ -533,6 +539,7 @@ fn monitor(ui: &mut Ui, c: &Ctx) {
         ui.c.fill_rect(scope, edge);
         ui.c.fill_rect(a.r(Rect::new(881.0, 5.0, 84.0, 31.0)), fill);
     }
+    super::display_edge(ui.c, ui.t, scope, 4.0);
     let (x0, bottom) = (a.x(881.0), a.y(36.0));
     match m.mode {
         Mode::Spectrum => {
@@ -568,6 +575,7 @@ fn monitor(ui: &mut Ui, c: &Ctx) {
         ui.c.fill_rect(peaks, edge);
         ui.c.fill_rect(a.r(Rect::new(969.0, 5.0, 75.0, 21.0)), fill);
     }
+    super::display_edge(ui.c, ui.t, peaks, 4.0);
     // Classic: both ends follow the theme's highlight key. Lemon: the displays' digit colour (like the scope's ink),
     // dimmed toward the panel at the left and full at the tip. The held peak takes the tip colour.
     let (lo, hi) = if lemon {
@@ -610,6 +618,7 @@ fn cpu(ui: &mut Ui, c: &Ctx) {
     let (t, a, s) = (ui.t, c.a, c.s);
     let cpu = a.r(crate::app::CPU_RECT);
     sunken(ui, cpu, t.sunken_dark);
+    super::display_edge(ui.c, t, cpu, 3.0);
     ui.hit(cpu, Action::CpuPanel, "");
     let r = &s.cpu.now;
     let level = |load: u32| match load {
@@ -860,6 +869,7 @@ fn pattern(ui: &mut Ui, c: &Ctx) {
     } else {
         ui.c.fill_rrect(pb, 2.0, t.tempo_box.shade(if hov { 0.16 } else { 0.08 }));
     }
+    super::display_edge(ui.c, t, pb, 4.0);
     let name = s
         .project
         .patterns

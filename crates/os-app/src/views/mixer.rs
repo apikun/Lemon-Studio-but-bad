@@ -116,6 +116,8 @@ pub fn paint(ui: &mut Ui, s: &State, r: Rect, f: &FrameInfo) {
     let inner = super::float_frame(ui, s, Win::Mixer, r);
     let r = inner.unwrap_or(r);
     let client = super::window_frame_ex(ui, Win::Mixer, Rect::new(r.x, r.y, r.w - panel_w, r.h), "", 0.0, false, inner.is_some());
+    // The window's own rim, like the toolbar readouts and the other windows (theme token `display_edge`).
+    super::display_edge(ui.c, ui.t, outer, if super::lemon(ui) { os_ui::kit::lemon::r_panel(ui.t) } else { 0.0 });
     title_tools(ui, s, r);
     if r.h < 2.0 * TITLE_H {
         // Collapsed to the title bar: only the slot panel's title with the window buttons.

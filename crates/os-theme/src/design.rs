@@ -412,6 +412,7 @@ fn skin_palette(design: Design, theme: Option<&FlTheme>) -> Palette {
         let c = classic.get(name).expect("token");
         let v = match fl::role(name) {
             fl::Role::Surface | fl::Role::StepEven | fl::Role::StepOdd | fl::Role::Fixed => map.surface(c),
+            fl::Role::Raw => c,
             fl::Role::Accent => map.accent_of(c),
             fl::Role::Highlight => map.highlight_of(c),
             fl::Role::Text => map.text_of(c),
@@ -555,6 +556,7 @@ fn retint(p: &mut Palette, th: &FlTheme) {
             fl::Role::StepEven if th.step_even.is_none() => r.surface(c),
             fl::Role::StepOdd if th.step_odd.is_none() => r.surface(c),
             fl::Role::StepEven | fl::Role::StepOdd => citrus.get(name).expect("token"),
+            fl::Role::Raw => c,
             fl::Role::Fixed => match *name {
                 "step_on" | "note_top" | "note_bottom" | "note_rim" | "note_text" | "note_sel_top" | "note_sel_bottom"
                 | "note_sel_rim" | "note_sel_text" | "key_label" | "clip" | "cat_project" | "velocity" | "velocity_dot" => r.accent(c),
@@ -603,6 +605,18 @@ mod tests {
         assert_eq!(palette(Design::Citrus, None), Palette::default());
         let th = FlTheme::parse("Hue=120\nSaturation=60\nLightness=-90\nContrast=0\nSelected=16744576\n");
         assert_eq!(palette(Design::Citrus, Some(&th)), fl::palette(&th));
+    }
+
+    /// A picked outline (`display_edge`, a `Raw` token) paints exactly the colour the palette states: neither the
+    /// skin's map nor a theme's tint moves it, so a designer's hex is what reaches the screen.
+    #[test]
+    fn picked_outline_is_not_tinted() {
+        let edge = Color::rgb(0x2a2e31);
+        let th = FlTheme::parse("Hue=120\nSaturation=60\nLightness=-90\nContrast=0\nSelected=16744576\n");
+        for d in Design::ALL {
+            assert_eq!(palette(d, None).display_edge, edge, "{d:?}");
+            assert_eq!(palette(d, Some(&th)).display_edge, edge, "{d:?}");
+        }
     }
 
     #[test]
