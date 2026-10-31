@@ -49,7 +49,7 @@ impl Grid {
                         }
                     }
                 }
-                lum[gy * GRID_W + gx] = if n > 0 { sum / f32::from(n) } else { 0.0 };
+                lum[gy * GRID_W + gx] = if n > 0 { sum / n as f32 } else { 0.0 };
             }
         }
         // The editor's picture: RGB pixels, shrunk to at most 256 on a side (the canvas stretches it).
