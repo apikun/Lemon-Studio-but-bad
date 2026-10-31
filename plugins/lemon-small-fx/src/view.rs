@@ -194,6 +194,10 @@ pub fn paint(spec: &Spec, c: &mut Canvas, t: &Palette, m: &dyn Model, st: &ViewS
                 let range = spec.index(id).map_or((0, 1), |k| spec.settings[k].range);
                 shape(&mut ui, id, cx, cy, range);
             }
+            Control::Switch { id, cx, cy } => {
+                let range = spec.index(id).map_or((0, 1), |k| spec.settings[k].range);
+                switch_box(&mut ui, id, cx, cy, range);
+            }
             Control::Tile { id, x0, y0, x1, y1, caption } => tile(&mut ui, id, Rect::span(x0, x1, y0, y1), caption),
         }
     }
@@ -324,6 +328,21 @@ fn shape(ui: &mut Ui, id: &str, cx: f32, cy: f32, (lo, hi): (i32, i32)) {
         pts.push((x1 - 9.0 + 9.0 * t, y1 + (y0 - y1) * t.powf(1.0 / p)));
     }
     ui.c.polyline(&pts, 1.5, brand::MAIN);
+    ui.hit(r, target);
+}
+
+/// A small switch box (Mango 12's crush): a raised box lit mango on the range's top with the value's name inside;
+/// a click steps between the two ends.
+fn switch_box(ui: &mut Ui, id: &str, cx: f32, cy: f32, (lo, hi): (i32, i32)) {
+    let v = ui.m.plain(id).round() as i32;
+    let next = if v >= hi || v < lo { lo } else { hi };
+    let target = Target::Choice(id.into(), next);
+    let r = Rect::new(cx - 25.0, cy - 9.0, 50.0, 18.0);
+    let st = State { on: v == hi && hi > lo, ..ui.state(r, &target) };
+    let ink = lemon::plug_button(ui.c, r, 5.0, st);
+    let text = ui.m.text(id).to_uppercase();
+    let lh = ui.c.line_height(LABEL);
+    ui.c.text_center(LABEL, Rect::new(r.x, (r.cy() - lh / 2.0).round(), r.w, lh), ink, &text);
     ui.hit(r, target);
 }
 

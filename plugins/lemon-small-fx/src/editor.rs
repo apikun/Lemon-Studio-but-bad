@@ -1178,6 +1178,7 @@ mod tests {
             (flanger::SPEC, "flanger", &[("delay", 300), ("depth", 4200), ("rate", 900), ("shape", 512), ("feed", 70), ("invert_feed", 0), ("damp", 1500), ("cross", 0)]),
             (phaser::SPEC, "phaser", &[("sweep", 4000), ("range", 1024), ("stages", 15), ("feedback", 850), ("dry_wet", 0), ("gain", 2500)]),
             (vocoder::SPEC, "vocoder", &[("car", 8000), ("noise", 6400), ("mod_input", 1), ("car_input", 0), ("rms", 1), ("order", 4), ("bands", 16), ("lr", 1)]),
+            (twelve::SPEC, "twelve", &[("tune", 30), ("in", 60), ("route", 7), ("crush", 1)]),
         ];
         for (spec, name, values) in settings {
             let mut l = logic(spec);

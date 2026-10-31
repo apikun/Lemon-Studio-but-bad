@@ -76,6 +76,9 @@ pub enum Control {
     Fader { id: &'static str, x: f32, top: f32, bot: f32, label: &'static str, col: Color, bipolar: bool, marks: &'static [f32] },
     /// A button centred at (`cx`, `cy`) that shows the value's envelope shape; a click steps to the next value.
     Shape { id: &'static str, cx: f32, cy: f32 },
+    /// A small switch box centred at (`cx`, `cy`) that steps between the range's two ends on click, lit mango on
+    /// the range's top (Mango 12's crush).
+    Switch { id: &'static str, cx: f32, cy: f32 },
     /// A tile (Lemon Chorus's grid): its own card over `x0..x1`, `y0..y1`, a small dial at the left, the caption in a
     /// field at the top right and the value text under it.
     Tile { id: &'static str, x0: f32, y0: f32, x1: f32, y1: f32, caption: &'static str },
@@ -88,6 +91,7 @@ impl Control {
             | Control::Choice { id, .. }
             | Control::Fader { id, .. }
             | Control::Shape { id, .. }
+            | Control::Switch { id, .. }
             | Control::Tile { id, .. } => id,
         }
     }
@@ -467,7 +471,9 @@ mod tests {
             }
             v.into_iter().map(|x| x.expect("every parameter listed")).collect()
         };
-        for spec in [soft_clipper::SPEC, fast_distortion::SPEC, stereo_enhancer::SPEC, transient_processor::SPEC, chorus::SPEC, stereo_shaper::SPEC, filter::SPEC] {
+        for spec in
+            [soft_clipper::SPEC, fast_distortion::SPEC, stereo_enhancer::SPEC, transient_processor::SPEC, chorus::SPEC, stereo_shaper::SPEC, filter::SPEC, twelve::SPEC]
+        {
             for name in all(spec) {
                 read(spec, &name);
             }
