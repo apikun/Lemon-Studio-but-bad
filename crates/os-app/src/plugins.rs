@@ -273,11 +273,13 @@ pub fn builtin() -> Vec<Available> {
     static CITRUS: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static SLICER: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static DRUMS: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static SOUNDFONT: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     let mut v = linked(&LIB, &lemon_sampler::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, LEMON_SAMPLER);
     v.extend(linked(&OSC3, &lemon_3x_osc::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, crate::osc3::LEMON_TRIO));
     v.extend(linked(&CITRUS, &citrus::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, crate::citrus::CITRUS));
     v.extend(linked(&SLICER, &lemon_slicer::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, crate::slicer::LEMON_SLICER));
     v.extend(linked(&DRUMS, &lemon_drum_sampler::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, crate::drums::LEMON_DRUMS));
+    v.extend(linked(&SOUNDFONT, &soundfont_player::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, SOUNDFONT_PLAYER));
     v
 }
 
@@ -1377,6 +1379,8 @@ pub fn retired_count() -> usize {
 
 /// Name of Lemon Studio's sampler plugin: it plays and edits every sampler channel (spec: plugins/lemon-sampler.md §7).
 pub const LEMON_SAMPLER: &str = "Lemon Sampler";
+/// Name of the Soundfont Player compiled in: it plays SoundFont 2 files as an instrument (spec: plugins/soundfont-player.md).
+pub const SOUNDFONT_PLAYER: &str = "Soundfont Player";
 /// Name of Lemon Studio's parametric EQ plugin.
 pub const LEMON_EQ: &str = "Lemon Parametric EQ";
 /// Lemon Studio's effects compiled in besides the EQ (`builtin_effects`, in this order). They have no file plugin of

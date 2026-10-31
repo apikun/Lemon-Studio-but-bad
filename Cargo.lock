@@ -2985,6 +2985,7 @@ dependencies = [
  "serde",
  "serde_json",
  "softbuffer",
+ "soundfont-player",
  "tesla",
  "tiny-skia",
  "vorbis_rs",
@@ -3878,6 +3879,19 @@ dependencies = [
  "web-sys",
  "windows-sys 0.61.2",
  "x11rb",
+]
+
+[[package]]
+name = "soundfont-player"
+version = "0.0.1"
+dependencies = [
+ "nih_plug",
+ "os-hostlink",
+ "os-plugkit",
+ "os-theme",
+ "os-ui",
+ "rfd",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -273,6 +273,11 @@ and Touch controller. Kept with the program's settings, not the project. Which w
 
 - Lemon Sampler, Lemon Trio (a three-oscillator synth) and Lemon Parametric EQ, also available as VST3
   and CLAP bundles for other hosts
+- Soundfont Player: plays SoundFont 2 files as an instrument, with the original player's layout — the soundfont's
+  name and patch row (the preset list, previous / next arrows), the reverb and chorus sends (BUILT-IN effects with
+  their LEVEL knobs), Envelope 2's A / D / S / R faders over the filter, LFO 2's delay, amount and speed, and the
+  Misc cutoff and modulation dials. Loading a preset moves the controls to its values; the player keeps the file's
+  zones, generators, loops and stereo pairs, and is a VST3 and CLAP plugin too
 - Citrus, a six-operator synthesizer (a recreation of Sytrus) with its editor: it plays every Sytrus channel of a
   project and Sytrus patches, keeping their state byte for byte; also a VST3 and CLAP plugin
 - Lemon Slicer (Fruity Slicer) as a VST3 and CLAP plugin with a Pith editor: it loads a loop and slices it by the
