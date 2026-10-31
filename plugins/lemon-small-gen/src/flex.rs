@@ -137,7 +137,7 @@ const SECOND: [&str; 16] = ["Lead", "Pad", "Bass", "Keys", "Pluck", "Bell", "Swe
 
 /// A preset's patch, the same every time (spec §4: the two hundred fifty-six are the factory bank).
 pub fn patch(index: i32) -> Patch {
-    let mut s = (i64::from(index) + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15) as u64 ^ 0xD1B5_4A32_D192_ED03;
+    let mut s = (u64::from(index as u32) + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0xD1B5_4A32_D192_ED03;
     let mut next = move || {
         s ^= s << 13;
         s ^= s >> 7;
@@ -248,10 +248,6 @@ impl Svf {
         let high = x - self.low - q * self.band;
         self.band += f * high;
         self.low
-    }
-
-    fn clear(&mut self) {
-        *self = Self::default();
     }
 }
 
