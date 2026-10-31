@@ -232,7 +232,7 @@ pub fn pickup_frac(v: i32) -> f32 {
 
 /// The pickup's tilt: the cutoff of the one-pole the read goes through, bright at the top, dark at the bottom.
 pub fn tilt_hz(v: i32) -> f32 {
-    12_000.0 * (1_400.0 / 12_000.0).powf(v as f32 / 128.0)
+    12_000.0f32 * (1_400.0f32 / 12_000.0).powf(v as f32 / 128.0)
 }
 
 /// The body's low boost against the strings.
@@ -252,7 +252,7 @@ pub fn shelf_mix(v: i32) -> f32 {
 
 /// The cabinet's cutoff: the speaker's top, wide open at the bottom of the knob.
 pub fn cab_hz(v: i32) -> f32 {
-    4_200.0 * (700.0 / 4_200.0).powf(v as f32 / 128.0)
+    4_200.0f32 * (700.0f32 / 4_200.0).powf(v as f32 / 128.0)
 }
 
 /// The chorus's share of the doubled voice.
