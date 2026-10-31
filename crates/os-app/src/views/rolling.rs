@@ -79,10 +79,12 @@ pub fn x_of(s: &State, frame: u64) -> f32 {
 pub fn pull(app: &mut App) {
     let w = app.state.screen.0;
     let h = strip_h(&app.state);
-    let (heard, rate) = app.transport.rolling().heard(Instant::now());
+    let (oldest, heard, rate) = app.transport.rolling().window(Instant::now());
     let s = &mut app.state;
     s.roll.heard = heard;
     s.roll.rate = rate;
+    s.roll.paused = app.transport.rolling().paused();
+    s.roll.have = (oldest, heard);
     if h <= SHORT + 0.5 {
         s.roll.wave = None;
         return;
@@ -132,14 +134,29 @@ pub fn paint(ui: &mut Ui, s: &State, _f: &FrameInfo) {
     }
 
     let Some(wv) = s.roll.wave else { return };
-    // The wave: a column a device pixel, min/max of its frames about the middle.
+    // The wave: a column a device pixel, min/max of its frames about the middle. A column of nothing outside the
+    // tape (before its oldest frame, past the newest heard) draws nothing: it is not silence, it is no tape.
     let mid = wv.y + wv.h / 2.0;
     let amp = wv.h / 2.0 - 1.0;
+    let ink = crate::prefs::rolling_wave_color().map_or_else(|| ui.t.tx(0xb9bfc3), os_ui::Color::rgb);
     for (c, &(lo, hi)) in s.roll.cols.iter().enumerate() {
+        let at = s.roll.from + (s.roll.visible as f64 * (c as f64 + 0.5) / s.roll.cols.len().max(1) as f64) as u64;
+        if (lo, hi) == (0.0, 0.0) && !(s.roll.have.0..s.roll.have.1).contains(&at) {
+            continue;
+        }
         let (lo, hi) = (lo.clamp(-1.0, 1.0), hi.clamp(-1.0, 1.0));
         let y0 = mid - hi * amp;
         let y1 = mid - lo * amp;
         ui.c.fill_cell(Rect::new(wv.x + c as f32, y0.min(y1), 1.0, (y1 - y0).max(1.0)), ink);
+    }
+
+    // Paused (a Ctrl+click on the wave): the newest audio is not taken while it stands.
+    if s.roll.paused {
+        let text = "Paused";
+        let tw = ui.c.text_width(fnt(11.0), text);
+        let b = Rect::new(wv.right() - tw - 10.0, wv.y + 3.0, tw + 8.0, 15.0);
+        ui.c.fill_rrect(b, 3.0, ui.t.accent);
+        ui.c.text(fnt(11.0), b.x + 4.0, b.y + 2.0, ui.t.s(0x101214), text);
     }
 
     // Time marks back from the newest frame, a step that keeps its labels apart.
@@ -173,10 +190,12 @@ pub fn paint(ui: &mut Ui, s: &State, _f: &FrameInfo) {
         ui.c.fill_rect(Rect::new(x1 - 1.0, wv.y, 1.0, wv.h), ui.t.accent);
     }
 
-    let hint = if s.roll.sel.is_some() {
-        "Rolling sampler — drag the selection onto a playlist track, click beside it to select again"
+    let hint = if s.roll.paused {
+        "Rolling sampler paused — Ctrl+click to keep taking the newest output"
+    } else if s.roll.sel.is_some() {
+        "Rolling sampler — drag the selection onto a playlist track, click beside it to select again, Ctrl+click to pause"
     } else {
-        "Rolling sampler — drag to select a piece of the recent output, then drag it onto a playlist track"
+        "Rolling sampler — drag to select a piece of the recent output, then drag it onto a playlist track; Ctrl+click pauses"
     };
     ui.hit(wv, Action::Rolling(Act::Wave), hint);
 }

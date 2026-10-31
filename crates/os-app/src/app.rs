@@ -983,6 +983,9 @@ pub enum Drag {
     /// The colour picker's saturation / brightness square and hue strip (their rects).
     PickSv(Rect),
     PickHue(Rect),
+    /// The wave colour picker's saturation / brightness square and hue strip (their rects).
+    WavePickSv(Rect),
+    WavePickHue(Rect),
 }
 
 pub struct State {
@@ -3423,6 +3426,10 @@ impl App {
             self.invalidate();
             return true;
         }
+        if self.state.settings.open && self.state.settings.wave_picker.is_some() {
+            self.wave_picker_close();
+            return true;
+        }
         if self.state.settings.folder_edit.is_some() {
             self.state.settings.folder_edit = None;
             self.invalidate();
@@ -5292,9 +5299,12 @@ impl App {
 
     fn settings_act(&mut self, a: views::settings::SAct) {
         use views::settings::SAct;
-        // A click anywhere but the colour picker and the colour circles closes the picker.
+        // A click anywhere but the colour pickers and the colour circles closes them.
         if !matches!(a, SAct::Swatch(..) | SAct::PickBody | SAct::PickPart(_) | SAct::PickSv | SAct::PickHue | SAct::PickRevert) {
             self.picker_close();
+        }
+        if !matches!(a, SAct::WaveColourMenu(..) | SAct::WavePickBody | SAct::WavePickClose | SAct::WavePickSv | SAct::WavePickHue | SAct::WavePickTheme) {
+            self.wave_picker_close();
         }
         // A click off the name panel cancels it.
         if !matches!(a, SAct::NameBody | SAct::NameOk | SAct::NameCancel) {
@@ -5302,7 +5312,7 @@ impl App {
         }
         let st = &mut self.state.settings;
         match a {
-            SAct::Body | SAct::PickBody | SAct::PickClose | SAct::NameBody => {}
+            SAct::Body | SAct::PickBody | SAct::PickClose | SAct::WavePickBody | SAct::NameBody => {}
             // The name panel (`crate::theme_library`).
             SAct::NameOk => return self.name_ok(),
             SAct::NameCancel => return self.name_close(),
@@ -5338,10 +5348,35 @@ impl App {
                 return;
             }
             SAct::PickRevert => return self.picker_revert(),
+            // The rolling sampler's wave colour (Audio ▸ Rolling sampler): its menu, then its picker.
+            SAct::WaveColourMenu(x, y) => return self.wave_colour_menu(x, y),
+            SAct::WavePickClose => return self.wave_picker_close(),
+            SAct::WavePickSv | SAct::WavePickHue => {
+                let r = self.hits.iter().rev().find(|h| h.action == Action::Settings(a.clone())).map(|h| h.rect);
+                let Some(r) = r else { return };
+                let (x, y) = self.mouse;
+                if a == SAct::WavePickSv {
+                    self.wave_picker_sv(r, x, y);
+                    self.drag = Some(Drag::WavePickSv(r));
+                } else {
+                    self.wave_picker_hue(r, y);
+                    self.drag = Some(Drag::WavePickHue(r));
+                }
+                return;
+            }
+            SAct::WavePickTheme => {
+                crate::prefs::set_rolling_wave_color(None);
+                self.state.settings.wave_picker = None;
+                self.state.message = Some("Wave colour: the theme's".into());
+                self.invalidate();
+                return;
+            }
             SAct::Close => st.open = false,
             // The program settings declared in `crate::prefs`.
             SAct::Combo(views::settings::DEFAULT_TEMPLATE, x, y) => return self.template_menu(x, y),
             SAct::Combo(crate::data_folder::COMBO, x, y) => return self.data_folder_menu(x, y),
+            // The rolling sampler's wave colour: its own menu (Theme, or the colour picker).
+            SAct::Combo(views::settings::WAVE_COLOUR, x, y) => return self.wave_colour_menu(x, y),
             // Recording ▸ Precount duration: the same menu the Recording precount button's right-click opens.
             SAct::Combo(views::settings::PRECOUNT_DURATION, x, y) => {
                 return self.record_option_menu(crate::record::Opt::Precount, x, y)
@@ -5907,6 +5942,8 @@ impl App {
                 Drag::ThemeKnob { i, y0, p0 } => self.theme_knob_drag(i, y0, p0, y),
                 Drag::PickSv(r) => self.picker_sv(r, x, y),
                 Drag::PickHue(r) => self.picker_hue(r, y),
+                Drag::WavePickSv(r) => self.wave_picker_sv(r, x, y),
+                Drag::WavePickHue(r) => self.wave_picker_hue(r, y),
                 Drag::Tempo { y0, t0, step } => {
                     // Rounded to the box's thousandths, so repeated steps don't drift.
                     let t = self.set_tempo(((t0 + f64::from(y0 - y).round() * step) * 1000.0).round() / 1000.0);
@@ -9904,12 +9941,22 @@ impl App {
         self.invalidate();
     }
 
-    /// A press on the strip's wave: on a selection it begins the drag out to the playlist (the selection rendered);
-    /// off it, a new selection starts being drawn, the scroll standing still while it is.
+    /// A press on the strip's wave: Ctrl+click pauses or resumes the capture; on a selection it begins the drag out
+    /// to the playlist (the selection rendered); off it, a new selection starts being drawn, the scroll standing
+    /// still while it is.
     fn rolling_press(&mut self) {
         let (x, y) = self.mouse;
         let Some(wv) = self.state.roll.wave else { return };
         if !wv.contains(x, y) {
+            return;
+        }
+        if self.ctrl {
+            let paused = !self.transport.rolling().paused();
+            self.transport.rolling().set_paused(paused);
+            self.state.roll.paused = paused;
+            self.state.message = Some(if paused { "Rolling sampler paused: the tape stands still".into() } else { "Rolling sampler resumed".into() });
+            crate::views::rolling::pull(self);
+            self.damage_strip();
             return;
         }
         let f = crate::views::rolling::frame_at(&self.state, x);
@@ -9956,7 +10003,11 @@ impl App {
         let _ = std::fs::create_dir_all(&dir);
         let name = format!("{}_ROLL.wav", chrono::Local::now().format("%Y-%m-%d %H-%M-%S"));
         let path = dir.join(&name);
-        match self.transport.rolling().render(a, b.saturating_sub(a) + 1, &path) {
+        // The settings' side of the drag-out (Audio ▸ Rolling sampler): the silence at either end cut, the edges
+        // faded in and out over the knob's milliseconds.
+        let trim = crate::prefs::check(&crate::prefs::ROLLING_TRIM);
+        let fade = crate::prefs::slider(&crate::prefs::ROLLING_FADE) as f32;
+        match self.transport.rolling().render_clip(a, b.saturating_sub(a) + 1, &path, trim, fade) {
             Ok(n) if n > 0 => {
                 let item = crate::views::browser::Item::Sample(path.to_string_lossy().to_string());
                 self.drag = Some(Drag::Browser { item, label: name.clone(), m0: self.mouse, started: false });
@@ -9969,6 +10020,84 @@ impl App {
             Err(e) => self.state.message = Some(format!("Could not render the selection: {e}")),
         }
         self.invalidate();
+    }
+
+    /// The wave colour's menu (Audio ▸ Rolling sampler's Wave colour combo): the theme's, or the colour picker.
+    pub(crate) fn wave_colour_menu(&mut self, x: f32, y: f32) {
+        use crate::playlist::{Cmd, Mark, PItem, Popup};
+        let now = crate::prefs::rolling_wave_color();
+        let items = vec![
+            PItem::new("Theme", Cmd::WaveColour(0)).mark(Mark::Radio(now.is_none())),
+            PItem::new("Pick a colour...", Cmd::WaveColour(1)),
+        ];
+        self.state.playlist.popup = Some(Popup { x, y: y + 1.0, items, sub: None, scroll: [0; 2] });
+        self.invalidate();
+    }
+
+    /// The wave colour's menu chose: 0 back to the theme's, 1 opens the colour picker where the combo stands.
+    pub(crate) fn wave_colour_choose(&mut self, i: usize) {
+        if i == 0 {
+            crate::prefs::set_rolling_wave_color(None);
+            self.state.settings.wave_picker = None;
+            self.state.message = Some("Wave colour: the theme's".into());
+            self.invalidate();
+            return;
+        }
+        // The picker opens under the combo that opened the menu, else at the mouse.
+        use views::settings::SAct;
+        let at = self
+            .hits
+            .iter()
+            .rev()
+            .find(|h| matches!(h.action, Action::Settings(SAct::WaveColourMenu(..))))
+            .map(|h| (h.rect.cx(), h.rect.cy(), h.rect.h / 2.0))
+            .unwrap_or((self.mouse.0, self.mouse.1, 0.0));
+        self.wave_picker_open(at);
+    }
+
+    /// Opens the wave colour's picker at `at` (the swatch's centre and radius): it starts at the colour now.
+    pub(crate) fn wave_picker_open(&mut self, at: (f32, f32, f32)) {
+        let before = crate::prefs::rolling_wave_color();
+        let hsv = crate::theme_adjust::hsv(os_ui::Color::rgb(before.unwrap_or(0xb9bfc3)));
+        self.state.settings.wave_picker = Some(views::settings::WavePicker { hsv, before, at });
+        self.state.message = Some("Wave colour: pick one".into());
+        self.invalidate();
+    }
+
+    /// Sets the picked wave colour from the picker's HSV and keeps it.
+    fn wave_picker_apply(&mut self) {
+        let Some(p) = self.state.settings.wave_picker.clone() else { return };
+        let c = crate::theme_adjust::from_hsv(p.hsv);
+        let rgb = u32::from(c.r) << 16 | u32::from(c.g) << 8 | u32::from(c.b);
+        crate::prefs::set_rolling_wave_color(Some(rgb));
+        self.hint = Cow::Owned(format!("Wave colour #{rgb:06x}"));
+        self.invalidate();
+    }
+
+    /// The wave colour picker's saturation / brightness square `r` was pressed or dragged to (`x`, `y`):
+    /// saturation left to right, brightness bottom to top.
+    pub(crate) fn wave_picker_sv(&mut self, r: os_ui::Rect, x: f32, y: f32) {
+        if let Some(p) = &mut self.state.settings.wave_picker {
+            p.hsv[1] = ((x - r.x) / r.w).clamp(0.0, 1.0);
+            p.hsv[2] = (1.0 - (y - r.y) / r.h).clamp(0.0, 1.0);
+        }
+        self.wave_picker_apply();
+    }
+
+    /// The wave colour picker's hue strip `r` was pressed or dragged to height `y`: 0° at the top round to 360° at
+    /// the bottom.
+    pub(crate) fn wave_picker_hue(&mut self, r: os_ui::Rect, y: f32) {
+        if let Some(p) = &mut self.state.settings.wave_picker {
+            p.hsv[0] = ((y - r.y) / r.h).clamp(0.0, 1.0) * 360.0;
+        }
+        self.wave_picker_apply();
+    }
+
+    /// Closes the wave colour's picker, if open.
+    pub(crate) fn wave_picker_close(&mut self) {
+        if self.state.settings.wave_picker.take().is_some() {
+            self.invalidate();
+        }
     }
 
     /// The collapse arrow: the strip folds to a row, the windows move with `work_y`.

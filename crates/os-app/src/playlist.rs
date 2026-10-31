@@ -482,6 +482,8 @@ pub enum Cmd {
     TimeSig(bool, u8),
     /// A settings page combo declared in `crate::prefs`: that entry of its choices.
     Pref(&'static crate::prefs::Combo, usize),
+    /// The rolling sampler's wave colour menu chose: 0 = the theme's, 1 = the colour picker (`App::wave_colour_choose`).
+    WaveColour(usize),
     /// Settings > Info ▸ the genre menu: a genre, None for "(none)" (spec: ui/settings-choices.md "Info").
     Genre(Option<&'static str>),
     /// Settings > Theme ▸ a Themes tile's right-click menu (`crate::theme_library`).
@@ -4385,6 +4387,10 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
         }
         Cmd::Cpu(c) => return app.cpu_cmd(c),
         Cmd::Pref(c, i) => return app.pref_choose(c, i),
+        Cmd::WaveColour(i) => {
+            app.wave_colour_choose(i);
+            return None;
+        }
         Cmd::Genre(g) => return app.set_genre(g),
         Cmd::Theme(c) => return app.theme_cmd(c),
         Cmd::Template(t) => return app.set_template(&t),
@@ -5069,6 +5075,7 @@ pub fn run(app: &mut App, cmd: Cmd) -> Option<String> {
         }
         // Run above.
         Cmd::Pref(..) => None,
+        Cmd::WaveColour(..) => None,
         Cmd::Genre(_) => None,
         Cmd::Theme(_) => None,
         Cmd::Template(_) | Cmd::NewTemplate(_) => None,
