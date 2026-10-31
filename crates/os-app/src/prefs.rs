@@ -81,6 +81,8 @@ pub struct Slider {
     pub default: u16,
     /// What one wheel notch over it adds or takes.
     pub step: u16,
+    /// The unit its value shows in ("ms"); empty shows none.
+    pub unit: &'static str,
 }
 
 /// General ▸ Display: the UI's scale. Auto = the monitor's, smaller on monitors over 1080 px tall (`crate::gui_scale`);
@@ -510,6 +512,43 @@ pub const OMNI_CHANNEL: Number = Number { key: "midi_omni_channel", label: "Omni
 pub const MARKER_CHANNEL: Number = Number { key: "midi_marker_channel", label: "Song marker jump MIDI channel", min: 0, max: 16, default: 0 };
 pub const MUTING_CHANNEL: Number = Number { key: "midi_muting_channel", label: "Generator muting MIDI channel", min: 0, max: 16, default: 0 };
 
+/// Audio ▸ Rolling sampler: keeps the newest master output in a rolling buffer in memory, shown in the strip between
+/// the toolbar and the playlist (issue #82); a selection on the strip drops onto the playlist as an audio clip. Off
+/// by default: nothing is captured, the strip is gone, nothing is allocated until it is on.
+pub const ROLLING_SAMPLER: Check = Check { key: "rolling_sampler", label: "Rolling sampler", default: false };
+
+/// Audio ▸ Rolling sampler: how much of the past the buffer keeps (a change empties it).
+pub const ROLLING_BUFFER: Combo =
+    Combo { key: "rolling_buffer", label: "Rolling buffer", choices: &["30 s", "1 min", "2 min", "5 min", "10 min"], default: 2 };
+
+/// Audio ▸ Rolling sampler: a dragged-out clip's leading and trailing silence is cut (issue #82).
+pub const ROLLING_TRIM: Check = Check { key: "rolling_trim", label: "Remove silence", default: false };
+
+/// The rolling strip's wave colour (`rolling_wave_color` in `settings.txt`): empty, the theme's; else the RGB as
+/// `rrggbb` hex (`crate::views::rolling`'s paint, the settings' picker).
+pub fn rolling_wave_color() -> Option<u32> {
+    read(|st| st.get("rolling_wave_color").map(|v| v.to_owned())).and_then(|v| u32::from_str_radix(&v, 16).ok())
+}
+
+/// Sets the rolling strip's wave colour; `None` back to the theme's.
+pub fn set_rolling_wave_color(c: Option<u32>) {
+    match c {
+        Some(c) => write("rolling_wave_color", &format!("{c:06x}")),
+        None => write("rolling_wave_color", ""),
+    }
+}
+
+/// The rolling buffer's seconds the `ROLLING_BUFFER` combo asks for.
+pub fn rolling_secs() -> f32 {
+    match index(&ROLLING_BUFFER) {
+        0 => 30.0,
+        1 => 60.0,
+        3 => 300.0,
+        4 => 600.0,
+        _ => 120.0,
+    }
+}
+
 /// The declared checks.
 pub const CHECKS: &[&Check] = &[
     &RESTORE_AFTER_SOLO,
@@ -560,9 +599,11 @@ pub const CHECKS: &[&Check] = &[
     &AUTO_ACCEPT,
     &FOOT_PEDAL,
     &TOGGLE_ON_RELEASE,
+    &ROLLING_SAMPLER,
+    &ROLLING_TRIM,
 ];
 /// The declared combos.
-pub const COMBOS: &[&Combo] = &[&MAIN_GUI_SCALING, &POPUPS_SCALING, &NOTE_NAMES, &BLACK_NOTES, &AUTOSAVE, &BACKUP_LOCATION, &STARTUP_PROJECT, &COLORFUL_WAVEFORMS, &ANIMATION_REFRESH_RATE, &TRANSPARENT_WINDOWS, &CURSORS_SCALING, &LEGACY_SCALING, &OPTIMIZE_FOR, &RESAMPLING_QUALITY, &PROJECT_DATA_SIZE_WARNING, &TOOLBARS_SCALING, &ASK_DATA_FOLDER, &VELOCITY_LINK, &RELEASE_LINK, &CONTROLLER_TYPE, &SYNC_TYPE];
+pub const COMBOS: &[&Combo] = &[&MAIN_GUI_SCALING, &POPUPS_SCALING, &NOTE_NAMES, &BLACK_NOTES, &AUTOSAVE, &BACKUP_LOCATION, &STARTUP_PROJECT, &COLORFUL_WAVEFORMS, &ANIMATION_REFRESH_RATE, &TRANSPARENT_WINDOWS, &CURSORS_SCALING, &LEGACY_SCALING, &OPTIMIZE_FOR, &RESAMPLING_QUALITY, &PROJECT_DATA_SIZE_WARNING, &TOOLBARS_SCALING, &ASK_DATA_FOLDER, &VELOCITY_LINK, &RELEASE_LINK, &CONTROLLER_TYPE, &SYNC_TYPE, &ROLLING_BUFFER];
 /// The declared combos no settings page shows (a window of their own does): General ▸ Input ▸ Manage shortcuts' rows
 /// (`crate::shortcuts`). Read by the declaration tests.
 #[cfg_attr(not(test), allow(dead_code))]
@@ -574,19 +615,23 @@ pub const NUMBERS: &[&Number] = &[&MAX_UNDO_LEVELS, &BACKUP_MAXIMUM, &BROWSER_PR
 /// General ▸ Input: the editors scroll by the vertical wheel's steps times value / 256 (`crate::scroll_speed`);
 /// Shift+wheel keeps its own step. Spec: ui/settings-choices.md "Input: Vertical and Horizontal scrolling speed".
 pub const VERTICAL_SCROLLING_SPEED: Slider =
-    Slider { key: "vertical_scrolling_speed", label: "Vertical scrolling speed", max: 512, default: 256, step: 32 };
+    Slider { key: "vertical_scrolling_speed", label: "Vertical scrolling speed", max: 512, default: 256, step: 32, unit: "" };
 
 /// General ▸ Input: the same for the sideways wheel (a tilt wheel, a touchpad's sideways swipe).
 pub const HORIZONTAL_SCROLLING_SPEED: Slider =
-    Slider { key: "horizontal_scrolling_speed", label: "Horizontal scrolling speed", max: 512, default: 256, step: 32 };
+    Slider { key: "horizontal_scrolling_speed", label: "Horizontal scrolling speed", max: 512, default: 256, step: 32, unit: "" };
 
 /// General ▸ Display: how slowly the editors' scrolls ease to where the wheel or a scroll arrow sends them, 0 (they
 /// jump) to 512 (`crate::smooth`). Spec: ui/settings-choices.md "Display: Smoothing, Animation refresh rate,
 /// Transparent menus and windows (2026-10-16)".
-pub const SMOOTHING: Slider = Slider { key: "smoothing", label: "Smoothing", max: 512, default: 128, step: 16 };
+pub const SMOOTHING: Slider = Slider { key: "smoothing", label: "Smoothing", max: 512, default: 128, step: 16, unit: "" };
+
+/// Audio ▸ Rolling sampler: the fade in and out a dragged-out clip's edges get, 0 (none) to 10 ms, aligned to the
+/// nearest zero crossing so a clip that starts mid-waveform does not click (issue #82).
+pub const ROLLING_FADE: Slider = Slider { key: "rolling_fade", label: "Fade in/out", max: 10, default: 3, step: 1, unit: "ms" };
 
 /// The declared sliders.
-pub const SLIDERS: &[&Slider] = &[&SMOOTHING, &VERTICAL_SCROLLING_SPEED, &HORIZONTAL_SCROLLING_SPEED];
+pub const SLIDERS: &[&Slider] = &[&SMOOTHING, &VERTICAL_SCROLLING_SPEED, &HORIZONTAL_SCROLLING_SPEED, &ROLLING_FADE];
 
 /// Audio ▸ Mixer: the insert track the browser's previews enter the mixer at; 0, shown "---", plays them straight into
 /// the master (`crate::preview_track`). The wheel offers the open project's insert tracks (`App::settings_number`), up
@@ -738,6 +783,10 @@ impl App {
         let Some(c) = find_check(label) else { return };
         let on = toggle(c);
         self.state.message = Some(format!("{}: {}", c.label, if on { "on" } else { "off" }));
+        // The rolling sampler's strip appears or goes with the setting (and the tape with it).
+        if c.key == ROLLING_SAMPLER.key {
+            self.rolling_sync();
+        }
         self.invalidate();
     }
 
@@ -766,6 +815,10 @@ impl App {
         if c.key == TOOLBARS_SCALING.key && !self.state.toolbar.hidden {
             let dy = crate::views::band_h(&self.state) - band;
             crate::app::lift_windows(&mut self.state, dy);
+        }
+        // The rolling sampler's tape: a new length empties it (`App::rolling_sync`).
+        if c.key == ROLLING_BUFFER.key {
+            self.rolling_sync();
         }
         self.invalidate();
         Some(format!("{}: {}", c.label, choice(c)))

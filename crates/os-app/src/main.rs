@@ -14,6 +14,7 @@ mod app;
 mod audio_cfg;
 mod audiolog;
 mod auto_close;
+mod rolling;
 mod auto_tools;
 mod autoscroll;
 mod backup;
