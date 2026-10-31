@@ -667,7 +667,7 @@ mod tests {
         let mut sorted = names.clone();
         sorted.sort();
         sorted.dedup();
-        assert!(sorted.len() >= COUNT / 2, "most names are their own ({})", sorted.len());
+        assert!(sorted.len() >= (COUNT / 2) as usize, "most names are their own ({})", sorted.len());
     }
 
     /// The macros land where the preset says: a full macro swings the sound, zero-middle holds the patch.
