@@ -288,6 +288,7 @@ pub fn builtin() -> Vec<Available> {
     static FLEX: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static SLAYER: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static DASHBOARD: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static DIRECTWAVE: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static WAVETABLE: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static SOUNDFONT: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     let mut v = linked(&LIB, &lemon_sampler::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, LEMON_SAMPLER);
@@ -320,6 +321,8 @@ pub fn builtin() -> Vec<Available> {
     v.extend(linked(&BEEPMAP, &mango_beepmap::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_BEEPMAP));
     // The preset synthesizer (a recreation of FL's FLEX): named presets and the macros over them.
     v.extend(linked(&FLEX, &mango_flex::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_FLEX));
+    // The sampler (a recreation of FL's DirectWave): a program of zones, each one sample and where it plays.
+    v.extend(linked(&DIRECTWAVE, &mango_directwave::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango DirectWave"));
     v
 }
 

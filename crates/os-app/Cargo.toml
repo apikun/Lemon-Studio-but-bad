@@ -47,6 +47,8 @@ mango-flex = { path = "../../plugins/mango-flex", features = ["linked"] }
 mango-slayer = { path = "../../plugins/mango-slayer", features = ["linked"] }
 # The hardware panel (a recreation of FL's Dashboard), compiled in like the other small generators.
 mango-dashboard = { path = "../../plugins/mango-dashboard", features = ["linked"] }
+# The sampler (a recreation of FL's DirectWave), compiled in like the drum sampler.
+mango-directwave = { path = "../../plugins/mango-directwave", features = ["linked"] }
 lemon-boom = { path = "../../plugins/lemon-boom", features = ["linked"] }
 lemon-bass = { path = "../../plugins/lemon-bass", features = ["linked"] }
 lemon-acid = { path = "../../plugins/lemon-acid", features = ["linked"] }

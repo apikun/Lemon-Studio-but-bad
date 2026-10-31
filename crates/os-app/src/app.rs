@@ -15876,6 +15876,9 @@ mod tests {
         click(&mut app, &mut c, r0);
         // The Plugin database tab is a plugin browser: the generators are listed at once, no folder to open.
         let gi = rows(&app.state).iter().position(|r| matches!(r.item, Item::Generator(_)) && r.label == crate::osc3::LEMON_TRIO).expect("a generator row");
+        // The generators long outgrew the window: scroll the row on (the render clamps the offset).
+        app.state.browser_scroll = (gi as f32 - 4.0).max(0.0) * crate::views::browser::ROW_H;
+        frame(&mut app, &mut c, None);
         let ch0 = app.state.project.channels.len();
         let src = hit_rect(&app, &Action::BrowserRow(gi));
         let dst = hit_rect(&app, &Action::PlHeader(2));
