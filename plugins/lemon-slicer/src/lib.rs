@@ -18,7 +18,7 @@ pub mod view;
 
 use std::num::NonZeroU32;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use nih_plug::prelude::*;
@@ -294,6 +294,9 @@ pub(crate) mod tests {
 
     /// A loop file: 2 s of 44.1 kHz stereo 16-bit clicks every half second, with `extra` chunks.
     pub(crate) fn loop_file(name: &str, extra: &[Vec<u8>]) -> std::path::PathBuf {
+        // A file each call: the tests run in parallel, and one's cleanup must not delete another's loop.
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
         let frames = 88200usize;
         let mut data = Vec::with_capacity(frames * 4);
         for i in 0..frames {
@@ -320,7 +323,7 @@ pub(crate) mod tests {
         let mut file = b"RIFF".to_vec();
         file.extend((body.len() as u32).to_le_bytes());
         file.extend(body);
-        let p = std::env::temp_dir().join(format!("lemon-slicer-{}-{name}.wav", std::process::id()));
+        let p = std::env::temp_dir().join(format!("lemon-slicer-{}-{name}-{n}.wav", std::process::id()));
         std::fs::write(&p, file).unwrap();
         p
     }
