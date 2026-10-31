@@ -75,6 +75,7 @@ pub const SPEC: &Spec = &Spec {
     labels: &[],
     text,
     parse,
+    shown: None,
     sound,
     rings: false,
 };

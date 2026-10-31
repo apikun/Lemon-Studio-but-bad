@@ -946,6 +946,49 @@ mod tests {
         assert!(checked > 0 || FACTORY.is_empty());
     }
 
+    /// Mango 12's factory presets land their gains where they mean to: a preset's value is a step count from the
+    /// parameter's reported minimum (nih-plug reports stepped parameters as 0..steps, not raw), so for the ±12 dB
+    /// gains 120 is 0 dB and 0 is -12 dB — the values 0 that first shipped put both knobs at the bottom.
+    #[test]
+    fn mango_12s_factory_presets_land_their_gains() {
+        let mut pl = crate::plugins::Plugins::default();
+        pl.available = crate::plugins::builtin();
+        pl.effects = crate::plugins::builtin_effects();
+        let mut key = None;
+        for i in 0..pl.effects.len() {
+            let k = crate::plugins::fx_key(1, i as u8);
+            pl.create_effect(1, i as u8, i, None).unwrap();
+            if pl.descriptor(k).unwrap().name == "Mango 12" {
+                key = Some(k);
+                break;
+            }
+        }
+        let key = key.expect("Mango 12 is built in");
+        let d = pl.descriptor(key).unwrap();
+        let wanted: &[(&str, &[(&str, &str)])] = &[
+            ("Default", &[("Gain In", "0.0dB"), ("Gain Out", "0.0dB")]),
+            ("Drum crunch", &[("Gain In", "6.0dB"), ("Gain Out", "0.0dB")]),
+            ("Radio filter", &[("Gain In", "0.0dB"), ("Gain Out", "0.0dB")]),
+            ("Pitch down", &[("Gain In", "0.0dB"), ("Gain Out", "0.0dB")]),
+            ("Deep detune", &[("Gain In", "0.0dB"), ("Gain Out", "0.0dB")]),
+            ("Subtle glue", &[("Gain In", "0.0dB"), ("Gain Out", "0.0dB")]),
+            ("Side crunch", &[("Gain In", "3.0dB"), ("Gain Out", "0.0dB")]),
+        ];
+        for p in factory_in(FACTORY, &d.name) {
+            let (_, want) = wanted.iter().find(|(n, _)| *n == p.name).unwrap_or_else(|| panic!("{}: not covered", p.name));
+            let Ok((_, body)) = load(&p.path, &d.uid()) else { panic!("{} does not load", p.name) };
+            let Body::Params(list) = body else { panic!("{}: not a parameter list", p.name) };
+            pl.apply_params(key, &list).unwrap();
+            let infos = pl.param_infos(key);
+            let plugin = pl.hosted.get(&key).unwrap().plugin.lock().unwrap();
+            for (name, text) in *want {
+                let i = infos.iter().find(|i| &i.name == name).unwrap_or_else(|| panic!("{}: no {name}", p.name));
+                let v = plugin.param_value(i.id).unwrap();
+                assert_eq!(plugin.param_text(i.id, v).unwrap(), *text, "{}/{}", p.name, name);
+            }
+        }
+    }
+
     // spec: plugins/presets.md "Import": VST 3 and VST 2 files are taken by a plugin of their format and id only.
     #[test]
     fn foreign_preset_files() {

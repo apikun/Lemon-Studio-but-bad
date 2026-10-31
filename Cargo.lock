@@ -2219,6 +2219,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lemon-twelve"
+version = "0.6.1"
+dependencies = [
+ "lemon-small-fx",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
 name = "lemon-vocoder"
 version = "0.6.1"
 dependencies = [
@@ -3122,6 +3131,7 @@ dependencies = [
  "lemon-stereo-enhancer",
  "lemon-stereo-shaper",
  "lemon-transient-processor",
+ "lemon-twelve",
  "lemon-vocoder",
  "lemon-wavetable",
  "libc",
