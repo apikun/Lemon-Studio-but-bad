@@ -2231,7 +2231,7 @@ mod win32 {
                     self.run(acts);
                     1
                 }
-                Cmd::Changed | Cmd::Note | Cmd::Automate | Cmd::Audio => 0,
+                Cmd::Changed | Cmd::Note | Cmd::Automate | Cmd::Audio | Cmd::Notes => 0,
             }
         }
 

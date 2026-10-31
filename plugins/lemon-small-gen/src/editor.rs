@@ -809,7 +809,8 @@ mod win32 {
                 | Cmd::Automate
                 | Cmd::Audio
                 | Cmd::Resizable
-                | Cmd::SetSize => 0,
+                | Cmd::SetSize
+                | Cmd::Notes => 0,
             }
         }
 
