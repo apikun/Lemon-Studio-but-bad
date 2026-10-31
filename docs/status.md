@@ -40,6 +40,9 @@ clicking it does nothing. The full, item-by-item roadmap lives on the
 ## ✅ Song arrangement
 
 - Playlist with pattern, audio and automation clips
+- FILE ▸ Import ▸ Audio file... (WAV, MP3, FLAC, Ogg, AIFF, M4A / AAC — the kinds the samplers decode): the audio
+  clip channel and clip at the playhead on the first track free over it, from the selected track down, one undo step.
+  Audio files also drop on the playlist, the rack and plugin windows
 - Clip groups, markers and several arrangements
 - Time markers with FL's actions (right-click a marker): Start, Loop, Marker loop, Marker skip and Marker pause
   play in SONG mode; exports start at the Start marker and jump at skips. Move content left / right, Place loop
