@@ -1,3 +1,4 @@
+// Copyright (C) 2026 mikobuntu
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The rolling sampler's strip (issue #82), docked between the toolbar and the playlist: the newest master output as

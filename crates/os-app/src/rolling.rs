@@ -1,3 +1,4 @@
+// Copyright (C) 2026 mikobuntu
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The rolling sampler (issue #82): a background ring of the master's newest output, a strip of it between the
