@@ -141,6 +141,37 @@ pub fn paint(ui: &mut Ui, s: &State, _f: &FrameInfo) {
     let mid = wv.y + wv.h / 2.0;
     let amp = wv.h / 2.0 - 1.0;
     let ink = crate::prefs::rolling_wave_color().map_or_else(|| ui.t.tx(0xb9bfc3), os_ui::Color::rgb);
+
+    // Time marks back from the newest frame, a step that keeps its labels apart. The lines go down behind
+    // the wave — a ruler on the strip's back wall, not a dark hairline cut through it — and only marks
+    // inside the view are taken: they used to pile up clamped on the left edge (`x_of` clamps, so the old
+    // off-view break could not fire).
+    let mut marks: Vec<(f32, String)> = Vec::new();
+    if s.roll.rate > 0 && s.roll.visible > 0 {
+        let per_px = shown(s) / wv.w.max(1.0);
+        let step = [1.0f64, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0]
+            .into_iter()
+            .find(|&t| t / f64::from(per_px) >= 70.0)
+            .unwrap_or(600.0);
+        let tape_secs = s.roll.heard as f64 / f64::from(s.roll.rate.max(1));
+        let mut t = step;
+        while t < tape_secs {
+            let frame = s.roll.heard.saturating_sub((t * f64::from(s.roll.rate)) as u64);
+            if frame < s.roll.from {
+                break; // past the view's left edge, and the rest only older
+            }
+            let x = x_of(s, frame);
+            if x < wv.x + wv.w {
+                let label = if t >= 60.0 && t % 60.0 == 0.0 { format!("-{}:00", t as u64 / 60) } else { format!("-0:{:02}", t as u64) };
+                marks.push((x, label));
+            }
+            t += step;
+        }
+    }
+    for &(x, _) in &marks {
+        ui.c.fill_rect(Rect::new(x, wv.y, 1.0, wv.h), edge);
+    }
+
     for (c, &(lo, hi)) in s.roll.cols.iter().enumerate() {
         let at = s.roll.from + (s.roll.visible as f64 * (c as f64 + 0.5) / s.roll.cols.len().max(1) as f64) as u64;
         if (lo, hi) == (0.0, 0.0) && !(s.roll.have.0..s.roll.have.1).contains(&at) {
@@ -161,26 +192,10 @@ pub fn paint(ui: &mut Ui, s: &State, _f: &FrameInfo) {
         ui.c.text(fnt(11.0), b.x + 4.0, b.y + 2.0, ui.t.s(0x101214), text);
     }
 
-    // Time marks back from the newest frame, a step that keeps its labels apart.
-    if s.roll.rate > 0 && s.roll.visible > 0 {
-        let per_px = shown(s) / wv.w.max(1.0);
-        let step = [1.0f64, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0]
-            .into_iter()
-            .find(|&t| t / f64::from(per_px) >= 70.0)
-            .unwrap_or(600.0);
-        let tape_secs = s.roll.heard as f64 / f64::from(s.roll.rate.max(1));
-        let mut t = step;
-        while t < tape_secs {
-            let x = x_of(s, s.roll.heard - (t * f64::from(s.roll.rate)) as u64);
-            if x < wv.x - 1.0 {
-                break;
-            }
-            ui.c.fill_rect(Rect::new(x, wv.y, 1.0, wv.h), edge);
-            let label = if t >= 60.0 && t % 60.0 == 0.0 { format!("-{}:00", t as u64 / 60) } else { format!("-0:{:02}", t as u64) };
-            let lw = ui.c.text_width(fnt(11.0), &label);
-            ui.c.text(fnt(11.0), (x + 2.0).min(wv.x + wv.w - lw - 2.0), wv.y + 2.0, ink, &label);
-            t += step;
-        }
+    // The marks' labels, over the wave.
+    for (x, label) in &marks {
+        let lw = ui.c.text_width(fnt(11.0), label);
+        ui.c.text(fnt(11.0), (x + 2.0).min(wv.x + wv.w - lw - 2.0), wv.y + 2.0, ink, label);
     }
 
     // The selection, its edges accented.
