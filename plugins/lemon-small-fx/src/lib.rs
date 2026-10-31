@@ -32,6 +32,7 @@ pub mod stereo_enhancer;
 pub mod stereo_shaper;
 pub mod transient_processor;
 pub mod view;
+pub mod vocoder;
 
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
@@ -44,7 +45,7 @@ use os_ui::{Canvas, Color, Rect};
 use params::FxParams;
 
 /// The most settings an effect here has.
-pub const MAX: usize = 12;
+pub const MAX: usize = 20;
 
 /// One setting: the original's saved state holds it as int `k` (its place in [`Spec::settings`], unless
 /// [`Spec::fields`] maps it).
@@ -146,6 +147,12 @@ pub struct Spec {
     pub fields: &'static [usize],
     /// The bytes a new instance's saved state has after the settings (kept as stored otherwise).
     pub tail: &'static [u8],
+    /// A new instance's whole saved state, when the description makes it (Vocodex's, with its curves and the ints no
+    /// setting covers); `None`: the version, the settings' starts and the tail.
+    pub blank: Option<fn() -> Vec<u8>>,
+    /// Where the settings' ints start in a stored state, for a state whose part before them varies in length
+    /// (Vocodex's curves): `None` from it when the state cannot be read. `None` here: right after the version.
+    pub locate: Option<fn(&[u8]) -> Option<usize>>,
     /// Editor size in logical pixels.
     pub size: (u32, u32),
     pub cards: &'static [Card],
@@ -320,7 +327,7 @@ impl<K: Kind> Vst3Plugin for SmallFx<K> {
 mod tests {
     use super::*;
 
-    pub const SPECS: [&Spec; 11] = [
+    pub const SPECS: [&Spec; 12] = [
         soft_clipper::SPEC,
         fast_distortion::SPEC,
         balance::SPEC,
@@ -332,6 +339,7 @@ mod tests {
         flanger::SPEC,
         phaser::SPEC,
         crusher::SPEC,
+        vocoder::SPEC,
     ];
 
     /// Every effect: ids unique, starts inside the ranges, a control per setting, the plugin ids distinct.

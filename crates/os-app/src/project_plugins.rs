@@ -214,6 +214,11 @@ pub fn slot_ports(project: &Project, track: usize, slot: usize) -> (usize, usize
     let Some(s) = project.mixer.iter().find(|m| usize::from(m.index) == track).and_then(|m| m.slots.get(slot)?.as_ref()) else {
         return (0, 0);
     };
+    // A Vocodex slot (played by Mango Vocoder) feeds its sidechain bus the input its carrier selector names.
+    if s.name.eq_ignore_ascii_case(crate::plugins::VOCODEX_FILE_NAME) {
+        let routing = os_engine::effects::vocoder::Settings::from_state(&s.state).unwrap_or_default().routing();
+        return (0, routing.key_input());
+    }
     if s.name != WRAPPER {
         return (0, 0);
     }
