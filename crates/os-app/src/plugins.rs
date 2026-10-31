@@ -286,6 +286,7 @@ pub fn builtin() -> Vec<Available> {
     static SURFACE: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static BEEPMAP: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static FLEX: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static SLAYER: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static WAVETABLE: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static SOUNDFONT: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     let mut v = linked(&LIB, &lemon_sampler::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, LEMON_SAMPLER);
@@ -303,6 +304,8 @@ pub fn builtin() -> Vec<Available> {
     v.extend(linked(&AUTOGUN, &lemon_autogun::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Autogun"));
     v.extend(linked(&DRUMS, &lemon_drums::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Drums"));
     v.extend(linked(&KEYS, &lemon_keys::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Keys"));
+    // The electric guitar (a recreation of FL's Slayer): strings a pickup reads, an amp behind them.
+    v.extend(linked(&SLAYER, &mango_slayer::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, "Mango Slayer"));
     // Mango Wavetable, from battlemountain2's fork (spec: docs/lemon-wavetable.md).
     v.extend(linked(&WAVETABLE, &lemon_wavetable::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_WAVETABLE));
     v.extend(linked(&SOUNDFONT, &mango_soundfont::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_SOUNDFONT));

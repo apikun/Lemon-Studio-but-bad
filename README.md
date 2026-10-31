@@ -105,7 +105,7 @@ Where Mango Studio stands against what a complete DAW offers:
 | Automation | 🚧 | Clips for channel, mixer and plugin parameters with every curve shape, their range and their LFO; channel volume and pan moves record into a pattern; not yet recording into automation clips |
 | Project files | 🚧 | Opens and saves projects from FL Studio 24.2 and later; projects from FL 20 to 24.1 open converted (Save asks for a new file); older ones are not read yet. Keep backups |
 | Built-in instruments and effects | 🚧 | Instruments: Mango Sampler (long samples can play straight from disk), Mango Trio (three oscillators), Mango Font (SF2 bank and preset player with automatable envelope, LFO, cutoff, modulation and effect sends), Citrus (a six-operator synth that plays Sytrus patches), Mango Kick (a kick drum), Mango Boom (a bass drum), Mango Bass (a bass guitar), Mango Acid (an acid bass), Mango
-Monk (a singing vocal synthesizer), Mango Pluck (a plucked string), Mango Mini (a two-oscillator synth), Mango DX (a small FM synth), Mango Autogun (a seed-grown patch synth), Mango Drums (a synthesized drum voice), Mango Surface (a control surface: eight faders a performance links, records and automates), Mango BeepMap (an image synthesizer: a loaded PNG sings), Mango Flex (a preset synthesizer with four macros) and Mango Keys (an electric piano). Effects: Mango Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion, Transient Processor, Filter, Flanger, Phaser, Mango Beat (FL's Gross Beat: time and gate envelopes per beat), Press (FL's Maximus) and Pulp Filter (FL's Fruity Love Philter). All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Mango Limiter's sound, sidechain included |
+Monk (a singing vocal synthesizer), Mango Pluck (a plucked string), Mango Mini (a two-oscillator synth), Mango DX (a small FM synth), Mango Autogun (a seed-grown patch synth), Mango Drums (a synthesized drum voice), Mango Surface (a control surface: eight faders a performance links, records and automates), Mango BeepMap (an image synthesizer: a loaded PNG sings), Mango Flex (a preset synthesizer with four macros), Mango Keys (an electric piano) and Mango Slayer (an electric guitar). Effects: Mango Parametric EQ (all of FL's quality modes: HQ+, HQ Enhanced, linear phase), Limiter, Reverb, Delay, Chorus, Stereo Shaper, Stereo Enhancer, Balance, Soft Clipper, Fast Distortion, Transient Processor, Filter, Flanger, Phaser, Mango Beat (FL's Gross Beat: time and gate envelopes per beat), Press (FL's Maximus) and Pulp Filter (FL's Fruity Love Philter). All built in, and also VST3 and CLAP plugins for other DAWs; a project's Fruity Limiter slots play Mango Limiter's sound, sidechain included |
 | Exporting audio | ✅ | Song, pattern or selection to WAV, FLAC, MP3 and OGG at once; bit depth, sample rate, interpolation, dither, mono, tails, stems and WAV markers; a pattern rendered as an audio clip (Quick render, Render and replace) |
 | MIDI file import / export | ✅ | Import into a new project, the open one or a piano roll channel (tracks, channels, tempo changes, time signatures, markers), the channels playing the Trio, Citrus, the Sampler, the chanting Monk (every part sings) or an 8-bit square patch; export a pattern or the song's patterns |
 | Note input | 🚧 | Mouse, computer keyboard, MIDI controllers (velocity curves, sustain pedal, pitch bend, aftertouch) and the touch controller; note recording into patterns with loop record, precount and Start on input; step edit |
@@ -495,6 +495,7 @@ Mango Studio is a Cargo workspace of focused crates:
 | [`lemon-autogun`](plugins/lemon-autogun) | Mango Autogun, a seed-grown patch synthesizer (VST3 + CLAP) |
 | [`lemon-drums`](plugins/lemon-drums) | Mango Drums, a synthesized drum voice (VST3 + CLAP) |
 | [`lemon-keys`](plugins/lemon-keys) | Mango Keys, an electric piano (VST3 + CLAP) |
+| [`mango-slayer`](plugins/mango-slayer) | Mango Slayer, an electric guitar: six Karplus-Strong strings a pickup reads, an amp behind them (VST3 + CLAP) |
 | [`mango-soundfont`](plugins/mango-soundfont) | Mango Font, an SF2 bank and preset player with automatable envelope, LFO, cutoff, modulation and effect sends (VST3 + CLAP; built into the app) |
 
 ## Roadmap
@@ -666,15 +667,15 @@ every feature marked as done, in progress or not started.
 
 - ✅ 3x Osc (Mango Trio: built into the app, also VST3 and CLAP)
 - ✅ Autogun (Mango Autogun: built into the app, also VST3 and CLAP)
-- ⬜ BeepMap
+- ✅ BeepMap (Mango BeepMap: built into the app, also VST3 and CLAP)
 - ✅ BooBass (Mango Bass: built into the app, also VST3 and CLAP)
 - ⬜ Dashboard
 - ⬜ Drumaxx
 - ⬜ Drumpad
 - ✅ FL Keys (Mango Keys: built into the app, also VST3 and CLAP)
-- ⬜ FL Slayer
-- ⬜ FLEX
-- ⬜ FPC
+- ✅ FL Slayer (Mango Slayer: built into the app, also VST3 and CLAP)
+- ✅ FLEX (Mango Flex: built into the app, also VST3 and CLAP)
+- ✅ FPC (Mango Drum Sampler: built into the app, also VST3 and CLAP)
 - ✅ Fruit Kick (Mango Kick: built into the app, also VST3 and CLAP)
 - ✅ Fruity DrumSynth (Mango Drums: built into the app, also VST3 and CLAP)
 - ⬜ Fruity DrumSynth Live
@@ -705,9 +706,9 @@ every feature marked as done, in progress or not started.
 
 - ✅ Sampler (Mango Sampler: built into the app, also VST3 and CLAP)
 - ⬜ DirectWave
-- ⬜ Fruity Slicer
+- ✅ Fruity Slicer (Mango Slicer: built into the app, also VST3 and CLAP)
 - ⬜ Fruity Slicer 2
-- ⬜ Soundfont Player
+- ✅ Soundfont Player (Mango Font: built into the app, also VST3 and CLAP)
 
 #### Drum tools
 
