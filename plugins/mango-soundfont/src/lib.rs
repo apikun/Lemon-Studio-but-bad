@@ -1,3 +1,7 @@
+// Copyright (C) 2026 ItsAlphaNeon
+// SPDX-License-Identifier: GPL-3.0-or-later
+// This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
+
 #![allow(semicolon_in_expressions_from_non_local_macros)]
 
 mod editor;

@@ -34,6 +34,18 @@ pub fn file_name(name: &str) -> &str {
     }
 }
 
+/// The Trio's saved state with every oscillator a square: the MIDI file import's 8-bit patch, which a channel takes as
+/// its state when it is made (the squares replace the sine and the two sub oscillators' sines an octave and two down).
+pub fn squares_state() -> Vec<u8> {
+    use lemon_3x_osc::params::{default_state, osc, to_fl, values_of, SHAPE};
+    let fl = default_state();
+    let mut vals = values_of(&fl);
+    for n in 0..3 {
+        vals[osc(n) + SHAPE] = 2; // Square
+    }
+    to_fl(&vals, &fl)
+}
+
 /// What the UI calls a channel's plugin `name` (the file id of a built-in recreation shows as the built-in plugin).
 pub fn label(name: &str) -> &str {
     match name {
