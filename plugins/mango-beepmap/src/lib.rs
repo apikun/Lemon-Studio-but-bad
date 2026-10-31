@@ -49,10 +49,20 @@ impl Default for Shared {
 
 impl Shared {
     /// Loads image `path` (UI or initialize thread): the decode happens off the audio thread's locks, then the
-    /// grid and the picture swap in together.
+    /// grid and the picture swap in together. A failure is the status's news, what was loaded stays.
     fn load(&self, path: &str, params: &BeepMapParams) -> Result<(), String> {
-        let bytes = std::fs::read(path).map_err(|e| format!("Could not open image: {e}"))?;
-        let (grid, picture) = dsp::Grid::decode(&bytes).ok_or_else(|| format!("{path}: not a PNG image"))?;
+        let failed = |e: String| {
+            self.set_status(e.clone());
+            Err(e)
+        };
+        let bytes = match std::fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(e) => return failed(format!("Could not open image: {e}")),
+        };
+        let (grid, picture) = match dsp::Grid::decode(&bytes) {
+            Some(decoded) => decoded,
+            None => return failed(format!("{path}: not a PNG image")),
+        };
         *self.grid.write().map_err(|_| "BeepMap image lock is poisoned.".to_string())? = Some(Arc::new(grid));
         *self.picture.write().map_err(|_| "BeepMap picture lock is poisoned.".to_string())? = Some((picture.0, picture.1, Arc::new(picture.2)));
         *self.path.write().map_err(|_| "BeepMap path lock is poisoned.".to_string())? = path.to_string();

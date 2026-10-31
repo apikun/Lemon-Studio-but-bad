@@ -30,20 +30,26 @@ impl Grid {
     pub fn decode(bytes: &[u8]) -> Option<(Grid, (usize, usize, Vec<u32>))> {
         let pm = tiny_skia::Pixmap::decode_png(bytes).ok()?;
         let (w, h) = (pm.width() as usize, pm.height() as usize);
-        // Luminance straight to the grid: each cell averages the pixels it covers.
+        // Luminance straight to the grid: each cell averages the source pixels it covers, whatever their size.
         let mut lum = vec![0.0f32; GRID_W * GRID_H];
-        let mut counts = vec![0u32; GRID_W * GRID_H];
-        for (i, p) in pm.pixels().iter().enumerate() {
-            let p = p.demultiply();
-            let gx = (i % w) * GRID_W / w;
-            let gy = (i / w) * GRID_H / h;
-            let cell = gy.min(GRID_H - 1) * GRID_W + gx.min(GRID_W - 1);
-            lum[cell] += (0.2126 * f32::from(p.red()) + 0.7152 * f32::from(p.green()) + 0.0722 * f32::from(p.blue())) / 255.0;
-            counts[cell] += 1;
-        }
-        for (l, n) in lum.iter_mut().zip(&counts) {
-            if *n > 0 {
-                *l /= *n as f32;
+        for gy in 0..GRID_H {
+            for gx in 0..GRID_W {
+                let x0 = gx * w / GRID_W;
+                let x1 = ((gx + 1) * w / GRID_W).max(x0 + 1).min(w);
+                let y0 = gy * h / GRID_H;
+                let y1 = ((gy + 1) * h / GRID_H).max(y0 + 1).min(h);
+                let mut sum = 0.0f32;
+                let mut n = 0u32;
+                for y in y0..y1 {
+                    for x in x0..x1 {
+                        if let Some(p) = pm.pixel(x as u32, y as u32) {
+                            let p = p.demultiply();
+                            sum += (0.2126 * f32::from(p.red()) + 0.7152 * f32::from(p.green()) + 0.0722 * f32::from(p.blue())) / 255.0;
+                            n += 1;
+                        }
+                    }
+                }
+                lum[gy * GRID_W + gx] = if n > 0 { sum / f32::from(n) } else { 0.0 };
             }
         }
         // The editor's picture: RGB pixels, shrunk to at most 256 on a side (the canvas stretches it).
