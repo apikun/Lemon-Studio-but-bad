@@ -39,6 +39,8 @@ lemon-wavetable = { path = "../../plugins/lemon-wavetable", features = ["linked"
 mango-soundfont = { path = "../../plugins/mango-soundfont", features = ["linked"] }
 # The control surface (a recreation of FL's Control Surface), compiled in like the other small generators.
 mango-surface = { path = "../../plugins/mango-surface", features = ["linked"] }
+# The image synthesizer (a recreation of FL's BeepMap), compiled in like Mango Font.
+mango-beepmap = { path = "../../plugins/mango-beepmap", features = ["linked"] }
 lemon-boom = { path = "../../plugins/lemon-boom", features = ["linked"] }
 lemon-bass = { path = "../../plugins/lemon-bass", features = ["linked"] }
 lemon-acid = { path = "../../plugins/lemon-acid", features = ["linked"] }

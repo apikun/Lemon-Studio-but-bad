@@ -284,6 +284,7 @@ pub fn builtin() -> Vec<Available> {
     static KEYS: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static MONK: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static SURFACE: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
+    static BEEPMAP: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static WAVETABLE: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     static SOUNDFONT: OnceLock<Option<Arc<os_clap::Library>>> = OnceLock::new();
     let mut v = linked(&LIB, &lemon_sampler::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, LEMON_SAMPLER);
@@ -308,6 +309,8 @@ pub fn builtin() -> Vec<Available> {
     v.extend(linked(&MONK, &mango_monk::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_MONK));
     // The control surface (a recreation of FL's Control Surface): eight faders a performance links to anything.
     v.extend(linked(&SURFACE, &mango_surface::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_SURFACE));
+    // The image synthesizer (a recreation of FL's BeepMap): a picture sings, its columns the time, its rows the pitch.
+    v.extend(linked(&BEEPMAP, &mango_beepmap::LINKED_CLAP_ENTRY as *const _ as *const std::ffi::c_void, MANGO_BEEPMAP));
     v
 }
 
@@ -1540,6 +1543,9 @@ pub const MANGO_MONK: &str = "Mango Monk";
 /// Name of the control surface (a recreation of FL's Control Surface): eight faders that sound nothing, linked to
 /// anything (spec: plugins/lemon-small-generators.md).
 pub const MANGO_SURFACE: &str = "Mango Surface";
+/// Name of the image synthesizer (a recreation of FL's BeepMap): a loaded picture sings (spec:
+/// plugins/lemon-beepmap.md).
+pub const MANGO_BEEPMAP: &str = "Mango BeepMap";
 /// Name of Lemon Studio's parametric EQ plugin.
 pub const LEMON_EQ: &str = "Mango Parametric EQ";
 /// Lemon Studio's effects compiled in besides the EQ (`builtin_effects`, in this order). They have no file plugin of
