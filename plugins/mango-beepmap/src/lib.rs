@@ -256,7 +256,7 @@ mod tests {
     fn an_image_loads_and_garbage_does_not() {
         let mut pm = tiny_skia::Pixmap::new(16, 16).unwrap();
         for p in pm.pixels_mut() {
-            *p = tiny_skia::Color::from_rgba8(255, 163, 58, 255).premultiply();
+            *p = tiny_skia::PremultipliedColorU8::from_rgba(255, 163, 58, 255).unwrap();
         }
         let dir = std::env::temp_dir().join(format!("mango-beepmap-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -284,7 +284,7 @@ mod tests {
     fn a_loaded_image_sings() {
         let mut pm = tiny_skia::Pixmap::new(16, 16).unwrap();
         for p in pm.pixels_mut() {
-            *p = tiny_skia::Color::from_rgba8(255, 255, 255, 255).premultiply();
+            *p = tiny_skia::PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap();
         }
         let dir = std::env::temp_dir().join(format!("mango-beepmap-sing-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

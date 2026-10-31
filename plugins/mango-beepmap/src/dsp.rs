@@ -222,7 +222,7 @@ mod tests {
         for y in 0..8u32 {
             for x in 0..8u32 {
                 let v = if y < 4 { 255u8 } else { 0u8 };
-                pm.pixel_mut(x, y).copy_from(&tiny_skia::Color::from_rgba8(v, v, v, 255)).unwrap();
+                pm.pixels_mut()[(y * 8 + x) as usize] = tiny_skia::PremultipliedColorU8::from_rgba(v, v, v, 255).unwrap();
             }
         }
         let bytes = pm.encode_png().unwrap();
