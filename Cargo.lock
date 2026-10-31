@@ -3097,7 +3097,6 @@ dependencies = [
  "lemon-pluck",
  "lemon-reverb",
  "lemon-sampler",
- "lemon-slicer",
  "lemon-small-fx",
  "lemon-soft-clipper",
  "lemon-stereo-enhancer",
