@@ -1,4 +1,6 @@
+// Copyright (C) 2026 mikobuntu
 // SPDX-License-Identifier: GPL-3.0-or-later
+// This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
 //! The rolling sampler's strip (issue #82), docked between the toolbar and the playlist: the newest master output as
 //! a scrolling wave; a selection on it drops onto the playlist as an audio clip. Audio ▸ Rolling sampler turns the

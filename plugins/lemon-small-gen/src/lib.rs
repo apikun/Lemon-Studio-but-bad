@@ -8,7 +8,8 @@
 //! state ([`params`]), the Pith editor ([`editor`], [`view`]). A description ([`GenSpec`]) gives the settings, their
 //! value texts, the editor's cards and controls, and the sound. The plugin modules (`plugins/lemon-kick` and the
 //! others) export one each, the way the small effects do. Mango Surface is here too: eight faders that sound
-//! nothing, a performance links them to anything.
+//! nothing, a performance links them to anything. And Mango Flex: two hundred fifty-six named presets with four
+//! macros over each, and the echo and space of the preset behind them.
 //!
 // spec: plugins/lemon-small-generators.md, plugins/plugin-formats.md
 #![allow(semicolon_in_expressions_from_non_local_macros)]
@@ -20,6 +21,7 @@ pub mod view;
 pub mod acid;
 pub mod monk;
 pub mod surface;
+pub mod flex;
 pub mod boobass;
 pub mod fruit_kick;
 pub mod lemon_boom;
