@@ -2393,6 +2393,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mango-slayer"
+version = "0.6.1"
+dependencies = [
+ "lemon-small-gen",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
 name = "mango-soundfont"
 version = "0.6.1"
 dependencies = [
@@ -3162,6 +3171,7 @@ dependencies = [
  "mango-beepmap",
  "mango-flex",
  "mango-monk",
+ "mango-slayer",
  "mango-soundfont",
  "mango-surface",
  "midir",
