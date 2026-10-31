@@ -45,6 +45,8 @@ mango-beepmap = { path = "../../plugins/mango-beepmap", features = ["linked"] }
 mango-flex = { path = "../../plugins/mango-flex", features = ["linked"] }
 # The electric guitar (a recreation of FL's Slayer), compiled in like the other small generators.
 mango-slayer = { path = "../../plugins/mango-slayer", features = ["linked"] }
+# The hardware panel (a recreation of FL's Dashboard), compiled in like the other small generators.
+mango-dashboard = { path = "../../plugins/mango-dashboard", features = ["linked"] }
 lemon-boom = { path = "../../plugins/lemon-boom", features = ["linked"] }
 lemon-bass = { path = "../../plugins/lemon-bass", features = ["linked"] }
 lemon-acid = { path = "../../plugins/lemon-acid", features = ["linked"] }

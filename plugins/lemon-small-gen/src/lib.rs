@@ -3,7 +3,7 @@
 // This file is part of Lemon Studio: https://github.com/ItsAlphaNeon/Lemon-Studio
 
 //! Lemon Studio's small generators as VST3 / CLAP plugins (nih-plug): Lemon Kick, Lemon Boom, Lemon Bass, Lemon
-//! Acid, Mango Pluck, Mango Mini, Mango DX, Mango Autogun, Mango Drums, Mango Keys and Mango Slayer. Each is a
+//! Acid, Mango Pluck, Mango Mini, Mango DX, Mango Autogun, Mango Drums, Mango Keys, Mango Slayer and Mango Dashboard. Each is a
 //! handful of settings over a small synthesizer, so they share everything but their description: the plugin, its
 //! parameters and saved state ([`params`]), the Pith editor ([`editor`], [`view`]). A description ([`GenSpec`])
 //! gives the settings, their value texts, the editor's cards and controls, and the sound. The plugin modules
@@ -32,6 +32,7 @@ pub mod keys;
 pub mod mini;
 pub mod pluck;
 pub mod slayer;
+pub mod dashboard;
 
 use std::marker::PhantomData;
 use std::num::NonZeroU32;

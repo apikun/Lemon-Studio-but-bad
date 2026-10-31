@@ -2375,6 +2375,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mango-dashboard"
+version = "0.6.1"
+dependencies = [
+ "lemon-small-gen",
+ "nih_plug",
+ "os-plugkit",
+]
+
+[[package]]
 name = "mango-flex"
 version = "0.6.1"
 dependencies = [
@@ -3169,6 +3178,7 @@ dependencies = [
  "libc",
  "mango-beat",
  "mango-beepmap",
+ "mango-dashboard",
  "mango-flex",
  "mango-monk",
  "mango-slayer",
